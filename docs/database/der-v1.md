@@ -1,28 +1,26 @@
-# DER v1
+# DER v1 — Mo² LOG
 
-## Tabela atual
+Entidade central futura: `training_sessions`.
 
-```text
-users
-├── id PK
-├── name
-├── email UNIQUE
-├── password_hash
-├── avatar_url
-├── created_at
-└── updated_at
-```
+Nesta release foram implementadas as entidades base de usuário e biblioteca de exercícios.
 
-## Modelo planejado
+## Implementado até v0.4.0
 
 ```text
 users
-├── training_plans
-│   └── training_sessions
-│       ├── strength_workout_exercises
-│       ├── running_activities
-│       └── exercise_swap_logs
-├── user_gym_equipment
-├── goals
-└── personal_records
+
+exercises
+├── exercise_muscles
+│   └── muscle_groups
+├── exercise_equipment
+│   └── equipment
+└── exercise_alternatives
+
+users
+└── user_gym_equipment
+    └── equipment
 ```
+
+## Regra de equipamento indisponível
+
+`user_gym_equipment.status = unavailable` remove exercícios dependentes daquele equipamento das sugestões padrão, mas eles continuam visíveis quando o usuário escolhe ver todas as opções.

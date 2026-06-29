@@ -1,64 +1,56 @@
 # Mo² LOG
 
-Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
+Mo² LOG é um app de treino híbrido para musculação e corrida.
 
-O objetivo do projeto é centralizar planejamento, execução, adaptação e evolução dos treinos, com foco em:
+O objetivo é centralizar planejamento, execução, adaptação e evolução dos treinos.
 
-- treinos de musculação;
-- troca inteligente de exercícios;
-- configuração dos equipamentos disponíveis na academia;
-- integração futura com Strava como fonte oficial das corridas;
-- dashboard de evolução semanal.
+## Status atual
 
-## Stack inicial
+Release: `v0.4.0`
 
-- Python 3.13
+Inclui:
+
 - FastAPI
-- SQLAlchemy 2
+- PostgreSQL
+- SQLAlchemy
 - Alembic
-- PostgreSQL 16
 - Docker Compose
+- Health Check
+- Model `User`
+- Biblioteca inicial de exercícios
+- Equipamentos e grupos musculares
+- Alternativas de exercícios
+- Regra de equipamento indisponível por usuário
 
-## Como executar
+## Rodar localmente
 
 ```bash
 docker compose up --build
 ```
 
-A API ficará disponível em:
-
-```text
-http://localhost:8000
-```
-
-Health check:
-
-```text
-http://localhost:8000/api/v1/health
-```
-
-## Rodar migrations
-
-Com os containers ativos:
+Em outro terminal:
 
 ```bash
 docker compose exec backend alembic upgrade head
 ```
 
-## Testar endpoint de usuários
+## Testes manuais
 
 ```text
+http://localhost:8000/api/v1/health
 http://localhost:8000/api/v1/users
+http://localhost:8000/api/v1/exercises
+http://localhost:8000/api/v1/equipment
+http://localhost:8000/api/v1/muscle-groups
+http://localhost:8000/api/v1/exercises/1/alternatives
 ```
 
-Retorno esperado após migration:
+## Regra de equipamento indisponível
 
-```json
-[]
-```
+Quando um equipamento é marcado como `unavailable`, os exercícios dependentes dele deixam de aparecer nas sugestões padrão, mas continuam disponíveis em `mode=all`.
 
-## Documentação interativa
+Exemplo:
 
 ```text
-http://localhost:8000/docs
+GET /api/v1/exercises/1/alternatives?mode=all&user_id=1
 ```
