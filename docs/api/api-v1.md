@@ -2,12 +2,13 @@
 
 Base path:
 
-```http
+```text
 /api/v1
 ```
 
-Endpoint inicial:
+Endpoints atuais:
 
 ```http
-GET /health
+GET /api/v1/health
+GET /api/v1/users
 ```

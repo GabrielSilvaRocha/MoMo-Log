@@ -1,7 +1,13 @@
 # User Stories
 
-- Como usuário, quero ver o treino de hoje para saber o que executar.
-- Como usuário, quero trocar um exercício quando a máquina estiver ocupada.
-- Como usuário, quero marcar uma máquina como inexistente na minha academia.
-- Como usuário, quero sincronizar minhas corridas pelo Strava.
-- Como usuário, quero acompanhar os próximos treinos da semana.
+## Musculação
+
+Como usuário, quero visualizar meu treino do dia para saber o que executar.
+
+Como usuário, quero trocar um exercício quando a máquina estiver ocupada para não interromper meu treino.
+
+Como usuário, quero marcar que uma máquina não existe na minha academia para que ela não seja sugerida por padrão.
+
+## Corrida
+
+Como usuário, quero sincronizar minhas corridas do Strava para acompanhar minha evolução junto com a musculação.

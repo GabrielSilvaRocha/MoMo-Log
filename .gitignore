@@ -1,12 +1,13 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 .pytest_cache/
 .mypy_cache/
-.coverage
-htmlcov/
+.ruff_cache/
 
-# Virtual environments
+# Virtual Environment
 .venv/
 venv/
 env/
@@ -20,16 +21,21 @@ env/
 .vscode/
 .idea/
 
+# Logs
+*.log
+
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
+# Coverage
+.coverage
+htmlcov/
 
-# Node frontend future
+# Node / Frontend futuro
 node_modules/
 dist/
+build/
 
-# Docker volumes
+# Docker / local data
 postgres_data/

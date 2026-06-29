@@ -1,9 +1,13 @@
 # Componentes
 
+Componentes planejados:
+
 - Button
 - Card
-- Stat Card
-- Weekly Schedule
-- Exercise Swap Modal
-- Progress Bar
-- Chart Card
+- StatCard
+- TrainingSessionCard
+- WeeklyCalendar
+- ExerciseSwapModal
+- Badge
+- Table
+- ProgressBar

@@ -1,11 +1,22 @@
 # Backend
 
-Backend em FastAPI com SQLAlchemy, Alembic e PostgreSQL.
+## Stack
 
-Camadas principais:
+- FastAPI
+- SQLAlchemy 2
+- Alembic
+- PostgreSQL
+- Pydantic Settings
 
-- API routes
-- Schemas
-- Services
-- Models
-- Database
+## Estrutura
+
+```text
+backend/app
+├── api
+├── core
+├── database
+├── models
+├── schemas
+├── services
+└── repositories
+```

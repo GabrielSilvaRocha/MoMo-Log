@@ -1,17 +1,13 @@
 # Visão do Produto
 
-Mo² LOG é um app de treino híbrido para musculação e corrida.
+O Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
-Ele ajuda o usuário a planejar, executar, adaptar e acompanhar a evolução dos treinos. O diferencial é o foco no plano de treino, não apenas no registro de dados.
+A proposta é ajudar o usuário a planejar, executar, adaptar e acompanhar seus treinos em um só lugar.
 
-## Pilares
+## Diferenciais
 
-- Planejamento
-- Execução
-- Adaptação
-- Evolução
-
-## Fontes de dados
-
-- Musculação: registro próprio no Mo² LOG.
-- Corrida: integração oficial com Strava.
+- Treino de musculação com registro de carga, séries e repetições.
+- Troca inteligente de exercícios quando a academia está cheia.
+- Configuração de equipamentos que não existem na academia do usuário.
+- Integração futura com Strava como fonte oficial dos dados de corrida.
+- Dashboard com treinos concluídos, próximos treinos da semana e indicadores de evolução.

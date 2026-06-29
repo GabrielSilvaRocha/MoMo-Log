@@ -7,4 +7,5 @@ Telas planejadas:
 - Trocar exercício
 - Corridas
 - Estatísticas
+- Minha academia
 - Perfil

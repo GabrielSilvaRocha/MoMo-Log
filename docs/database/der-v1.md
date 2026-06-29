@@ -1,14 +1,28 @@
 # DER v1
 
-Entidade central: `training_sessions`.
+## Tabela atual
 
-Principais áreas:
+```text
+users
+├── id PK
+├── name
+├── email UNIQUE
+├── password_hash
+├── avatar_url
+├── created_at
+└── updated_at
+```
 
-- users
-- training_plans
-- training_sessions
-- exercises
-- equipment
-- muscle_groups
-- strength_set_logs
-- running_activities
+## Modelo planejado
+
+```text
+users
+├── training_plans
+│   └── training_sessions
+│       ├── strength_workout_exercises
+│       ├── running_activities
+│       └── exercise_swap_logs
+├── user_gym_equipment
+├── goals
+└── personal_records
+```

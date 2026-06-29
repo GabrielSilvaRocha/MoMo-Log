@@ -1,9 +1,11 @@
 # Arquitetura Geral
 
-O Mo² LOG segue abordagem API First e arquitetura em camadas.
+O backend do Mo² LOG segue uma arquitetura em camadas:
 
 ```text
-Frontend -> API -> Services -> Repositories -> Database
+API Routes -> Services -> Repositories -> Database
 ```
 
-A entidade central do domínio é `TrainingSession`.
+A primeira fundação utiliza FastAPI, SQLAlchemy 2, Alembic e PostgreSQL.
+
+A entidade central do domínio será `TrainingSession`, mas a versão atual inclui apenas a fundação técnica e o model inicial `User`.

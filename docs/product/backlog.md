@@ -1,12 +1,22 @@
-# Backlog Inicial
+# Backlog
 
-## MVP
+## Foundation
 
-- Backend Foundation
-- Biblioteca de exercícios
-- Minha Academia
-- Planejamento semanal
-- Execução de musculação
-- Troca de exercícios
-- Integração Strava
-- Dashboard semanal
+- [x] FastAPI
+- [x] Docker Compose
+- [x] PostgreSQL
+- [x] SQLAlchemy
+- [x] Alembic
+- [x] Health check
+- [x] Model inicial de usuário
+
+## Próximas entregas
+
+- [ ] Biblioteca de exercícios
+- [ ] Equipamentos
+- [ ] Grupos musculares
+- [ ] Alternativas de exercícios
+- [ ] Configuração de equipamentos da academia
+- [ ] Planejamento semanal
+- [ ] Sessões de treino
+- [ ] Integração Strava

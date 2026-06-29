@@ -1,3 +1,3 @@
 # Documentação Mo² LOG
 
-Este diretório concentra a documentação de produto, arquitetura, API, banco de dados, UI e decisões técnicas.
+Esta pasta concentra a documentação de produto, arquitetura, API, banco de dados e decisões técnicas do Mo² LOG.

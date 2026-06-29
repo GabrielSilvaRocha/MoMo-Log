@@ -1,9 +1,9 @@
-# ADR-003: TrainingSession como Entidade Central
+# ADR-003: Training Session como entidade central
+
+## Status
+
+Aceito
 
 ## Decisão
 
-A entidade central do domínio será `TrainingSession`.
-
-## Motivo
-
-Ela conecta musculação, corrida, planejamento, adaptação e estatísticas.
+A entidade central do domínio será `TrainingSession`, conectando musculação, corrida, planejamento e estatísticas.

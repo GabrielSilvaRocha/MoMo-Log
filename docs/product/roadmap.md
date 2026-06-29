@@ -1,16 +1,21 @@
 # Roadmap
 
-## v0.1.0
-Backend foundation.
-
-## v0.2.0
-Usuários, exercícios, equipamentos e musculaturas.
-
 ## v0.3.0
-Planejamento e sessões de treino.
+
+Fundação técnica corrigida com FastAPI, SQLAlchemy, Alembic e model `User`.
 
 ## v0.4.0
-Execução de musculação e troca de exercícios.
+
+Biblioteca de exercícios, equipamentos e grupos musculares.
 
 ## v0.5.0
-Integração Strava.
+
+Motor inicial de substituição de exercícios.
+
+## v0.6.0
+
+Planejamento semanal e sessões de treino.
+
+## v0.7.0
+
+Integração inicial com Strava.

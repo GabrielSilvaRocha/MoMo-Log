@@ -1,9 +1,9 @@
-# ADR-002: Arquitetura em Camadas
+# ADR-002: Clean Architecture leve
+
+## Status
+
+Aceito
 
 ## Decisão
 
-Separar API, services, models e database.
-
-## Motivo
-
-Facilitar manutenção, testes e evolução do domínio.
+O backend será organizado em camadas, separando API, services, repositories, models e schemas.

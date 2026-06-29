@@ -1,9 +1,15 @@
 # ADR-001: API First
 
+## Status
+
+Aceito
+
 ## Decisão
 
-O Mo² LOG será desenvolvido com abordagem API First.
+O Mo² LOG será desenvolvido seguindo uma abordagem API First.
 
-## Motivo
+## Consequências
 
-Permitir frontend, backend e futuras integrações evoluírem com contratos claros.
+- O backend expõe contratos claros.
+- O frontend pode evoluir com mocks.
+- Integrações futuras poderão consumir a mesma API.

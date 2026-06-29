@@ -1,11 +1,20 @@
 # Changelog
 
-## v0.1.0
+## v0.3.0 - Foundation corrigida
 
-- Backend foundation com FastAPI.
-- Docker Compose com PostgreSQL.
+### Adicionado
+
+- Estrutura backend com FastAPI.
 - Configuração centralizada com Pydantic Settings.
-- Endpoint `/api/v1/health`.
-- Estrutura inicial de Alembic.
-- Teste inicial do health check.
-- GitHub Actions para CI do backend.
+- SQLAlchemy 2 configurado.
+- Alembic configurado.
+- Primeiro model `User`.
+- Migration inicial da tabela `users`.
+- Endpoint `GET /api/v1/users`.
+- Endpoint `GET /api/v1/health`.
+- Estrutura de documentação.
+- GitHub Actions básico.
+
+### Corrigido
+
+- Removida importação circular entre `Base`, `User` e `app.models`.
