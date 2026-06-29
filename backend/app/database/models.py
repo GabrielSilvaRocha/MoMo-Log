@@ -12,4 +12,11 @@ from app.models.exercise import (  # noqa: F401
     MuscleGroup,
     UserGymEquipment,
 )
+from app.models.training import (  # noqa: F401
+    ExerciseSwapLog,
+    StrengthSetLog,
+    StrengthWorkoutExercise,
+    TrainingPlan,
+    TrainingSession,
+)
 from app.models.user import User  # noqa: F401

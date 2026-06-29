@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.5.0 - Training Core
+
+### Added
+- Training Plan model.
+- Training Session model as the central entity of the app.
+- Strength workout exercise model.
+- Strength set log model.
+- Exercise swap log model.
+- Alembic migration `20260629_0003_create_training_core`.
+- Demo hybrid training plan seed data.
+- Endpoints:
+  - `GET /api/v1/training-plans/current`
+  - `GET /api/v1/training-sessions/week`
+  - `GET /api/v1/training-sessions/{id}`
+  - `POST /api/v1/training-sessions`
+  - `POST /api/v1/training-sessions/{id}/start`
+  - `POST /api/v1/training-sessions/{id}/finish`
+  - `POST /api/v1/training-sessions/{id}/reschedule`
+  - `POST /api/v1/training-sessions/{id}/swap-exercise`
+  - `POST /api/v1/strength/set-logs`
+  - `GET /api/v1/dashboard/week`
+
+### Business Rules
+- `TrainingSession` is now the central entity for planned and executed workouts.
+- Strength training execution stores sets, reps, load, RIR and RPE.
+- Exercise swaps update the planned exercise and register the reason and equivalence score.
+- Weekly dashboard returns completed sessions, today's sessions and upcoming sessions.
+
+### Changed
+- API version updated to `0.5.0`.
+
 ## v0.4.0 - Exercise Library Core
 
 ### Added

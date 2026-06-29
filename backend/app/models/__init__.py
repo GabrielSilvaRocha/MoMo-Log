@@ -7,6 +7,13 @@ from app.models.exercise import (
     MuscleGroup,
     UserGymEquipment,
 )
+from app.models.training import (
+    ExerciseSwapLog,
+    StrengthSetLog,
+    StrengthWorkoutExercise,
+    TrainingPlan,
+    TrainingSession,
+)
 from app.models.user import User
 
 __all__ = [
@@ -18,4 +25,9 @@ __all__ = [
     "ExerciseEquipment",
     "ExerciseAlternative",
     "UserGymEquipment",
+    "TrainingPlan",
+    "TrainingSession",
+    "StrengthWorkoutExercise",
+    "StrengthSetLog",
+    "ExerciseSwapLog",
 ]
