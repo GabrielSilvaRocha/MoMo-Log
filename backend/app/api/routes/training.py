@@ -40,6 +40,7 @@ def _session_query():
     return select(TrainingSession).options(
         selectinload(TrainingSession.strength_exercises).selectinload(StrengthWorkoutExercise.set_logs),
         selectinload(TrainingSession.strength_exercises).joinedload(StrengthWorkoutExercise.exercise),
+        selectinload(TrainingSession.running_activity),
     )
 
 

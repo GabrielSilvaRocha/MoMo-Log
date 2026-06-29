@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.6.0 - Running Core
+
+### Added
+- Running Activity model.
+- Strava Account model.
+- Strava Sync Log model.
+- Alembic migration `20260629_0004_create_running_core`.
+- Demo Strava account and running activity seed data.
+- Endpoints:
+  - `GET /api/v1/running-activities`
+  - `GET /api/v1/running-activities/{id}`
+  - `POST /api/v1/running-activities`
+  - `GET /api/v1/strava/status`
+  - `POST /api/v1/strava/sync`
+
+### Business Rules
+- Running activities can be linked to planned `TrainingSession` records.
+- When a running activity is created for a planned running session, the session is marked as completed.
+- Strava sync is currently mocked for local development and preserves the future API contract.
+- Weekly dashboard now calculates running distance from `running_activities`.
+
+### Changed
+- API version updated to `0.6.0`.
+- Training session response now includes linked running activity when available.
+
 ## v0.5.0 - Training Core
 
 ### Added

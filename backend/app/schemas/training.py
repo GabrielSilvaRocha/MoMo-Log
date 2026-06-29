@@ -4,6 +4,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.exercise import ExerciseRead
+from app.schemas.running import RunningActivityRead
 
 
 class TrainingPlanRead(BaseModel):
@@ -75,6 +76,7 @@ class TrainingSessionRead(BaseModel):
     source: str
     notes: str | None = None
     strength_exercises: list[StrengthWorkoutExerciseRead] = Field(default_factory=list)
+    running_activity: RunningActivityRead | None = None
     created_at: datetime
     updated_at: datetime
 

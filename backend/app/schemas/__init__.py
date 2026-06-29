@@ -6,6 +6,13 @@ from app.schemas.exercise import (
     UserGymEquipmentRead,
     UserGymEquipmentUpsert,
 )
+from app.schemas.running import (
+    RunningActivityCreate,
+    RunningActivityRead,
+    StravaAccountRead,
+    StravaStatusRead,
+    StravaSyncResponse,
+)
 from app.schemas.user import UserRead
 
 __all__ = [
@@ -16,4 +23,9 @@ __all__ = [
     "ExerciseAlternativeRead",
     "UserGymEquipmentRead",
     "UserGymEquipmentUpsert",
+    "StravaSyncResponse",
+    "StravaStatusRead",
+    "StravaAccountRead",
+    "RunningActivityCreate",
+    "RunningActivityRead",
 ]

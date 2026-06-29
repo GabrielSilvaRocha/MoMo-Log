@@ -71,6 +71,11 @@ class TrainingSession(Base):
         back_populates="training_session",
         cascade="all, delete-orphan",
     )
+    running_activity = relationship(
+        "RunningActivity",
+        back_populates="training_session",
+        uselist=False,
+    )
 
 
 class StrengthWorkoutExercise(Base):

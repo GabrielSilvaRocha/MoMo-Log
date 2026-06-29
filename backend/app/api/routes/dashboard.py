@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database.dependencies import get_db
+from app.models.running import RunningActivity
 from app.models.training import StrengthSetLog, StrengthWorkoutExercise, TrainingSession
 from app.schemas.training import WeekDashboardRead
 
@@ -34,6 +35,7 @@ def get_week_dashboard(
             .options(
                 selectinload(TrainingSession.strength_exercises).selectinload(StrengthWorkoutExercise.set_logs),
                 selectinload(TrainingSession.strength_exercises).joinedload(StrengthWorkoutExercise.exercise),
+                selectinload(TrainingSession.running_activity),
             )
             .where(
                 TrainingSession.user_id == user_id,
@@ -63,12 +65,27 @@ def get_week_dashboard(
     if trainable_sessions:
         completion_rate = round((len(completed_sessions) / len(trainable_sessions)) * 100, 2)
 
+    week_start_dt = datetime.combine(week_start, time.min, tzinfo=timezone.utc)
+    week_end_dt = datetime.combine(week_end + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    running_activities = list(
+        db.execute(
+            select(RunningActivity).where(
+                RunningActivity.user_id == user_id,
+                RunningActivity.start_date >= week_start_dt,
+                RunningActivity.start_date < week_end_dt,
+            )
+        ).scalars().all()
+    )
+    weekly_running_distance_km = sum(
+        (activity.distance_m for activity in running_activities), Decimal("0")
+    ) / Decimal("1000")
+
     return {
         "user_id": user_id,
         "completed_sessions": completed_sessions,
         "today_sessions": today_sessions,
         "upcoming_sessions": upcoming_sessions,
         "weekly_strength_volume": weekly_strength_volume,
-        "weekly_running_distance_km": Decimal("0"),
+        "weekly_running_distance_km": weekly_running_distance_km,
         "completion_rate": completion_rate,
     }

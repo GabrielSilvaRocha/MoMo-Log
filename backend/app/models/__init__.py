@@ -14,6 +14,11 @@ from app.models.training import (
     TrainingPlan,
     TrainingSession,
 )
+from app.models.running import (
+    RunningActivity,
+    StravaAccount,
+    StravaSyncLog,
+)
 from app.models.user import User
 
 __all__ = [
@@ -30,4 +35,7 @@ __all__ = [
     "StrengthWorkoutExercise",
     "StrengthSetLog",
     "ExerciseSwapLog",
+    "StravaSyncLog",
+    "RunningActivity",
+    "StravaAccount",
 ]
