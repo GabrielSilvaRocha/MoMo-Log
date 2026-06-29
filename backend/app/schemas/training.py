@@ -93,6 +93,24 @@ class TrainingSessionCreate(BaseModel):
     notes: str | None = None
 
 
+class TrainingSessionUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=2, max_length=160)
+    scheduled_date: date | None = None
+    status: str | None = Field(default=None, pattern="^(planned|in_progress|completed|skipped|rescheduled|adapted)$")
+    source: str | None = None
+    notes: str | None = None
+
+
+class StrengthWorkoutExerciseCreate(BaseModel):
+    exercise_id: int = Field(..., ge=1)
+    order_index: int | None = Field(default=None, ge=1)
+    planned_sets: int = Field(default=3, ge=1, le=12)
+    planned_reps: str = Field(default="8-12", min_length=1, max_length=40)
+    planned_load: Decimal | None = Field(default=None, ge=0)
+    rest_seconds: int | None = Field(default=90, ge=0, le=600)
+    notes: str | None = None
+
+
 class TrainingSessionReschedule(BaseModel):
     new_date: date
     reason: str | None = None

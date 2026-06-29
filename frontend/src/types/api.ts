@@ -192,3 +192,32 @@ export type ManualRunningActivityPayload = {
   start_date: string
   total_elevation_gain?: number | null
 }
+
+
+export type TrainingSessionCreatePayload = {
+  user_id: number
+  training_plan_id?: number | null
+  session_type: 'strength' | 'running' | 'mobility' | 'rest'
+  title: string
+  scheduled_date: string
+  source?: string
+  notes?: string | null
+}
+
+export type TrainingSessionUpdatePayload = {
+  title?: string
+  scheduled_date?: string
+  status?: 'planned' | 'in_progress' | 'completed' | 'skipped' | 'rescheduled' | 'adapted'
+  source?: string
+  notes?: string | null
+}
+
+export type StrengthWorkoutExerciseCreatePayload = {
+  exercise_id: number
+  order_index?: number | null
+  planned_sets: number
+  planned_reps: string
+  planned_load?: number | null
+  rest_seconds?: number | null
+  notes?: string | null
+}

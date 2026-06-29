@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from './client'
+import { apiDelete, apiGet, apiPatch, apiPost } from './client'
 import type {
   ApiStatus,
   Equipment,
@@ -13,7 +13,11 @@ import type {
   StravaSyncResult,
   StravaAuthorizeResponse,
   StrengthSetLog,
+  StrengthWorkoutExercise,
   TrainingSession,
+  TrainingSessionCreatePayload,
+  TrainingSessionUpdatePayload,
+  StrengthWorkoutExerciseCreatePayload,
   UserGymEquipment,
   WeekDashboard,
   WeeklyStatistics,
@@ -38,6 +42,15 @@ export const mo2logApi = {
   userGymEquipment: (userId = 1) => apiGet<UserGymEquipment[]>(`/user-gym-equipment?user_id=${userId}`),
   updateEquipmentStatus: (payload: { user_id: number; equipment_id: number; status: string; notes?: string }) =>
     apiPost<UserGymEquipment>('/user-gym-equipment', payload),
+  weekTrainingSessions: (userId = 1, referenceDate = '2026-06-29') =>
+    apiGet<TrainingSession[]>(`/training-sessions/week?user_id=${userId}&reference_date=${referenceDate}`),
+  createTrainingSession: (payload: TrainingSessionCreatePayload) =>
+    apiPost<TrainingSession>('/training-sessions', payload),
+  updateTrainingSession: (sessionId: number, payload: TrainingSessionUpdatePayload) =>
+    apiPatch<TrainingSession>(`/training-sessions/${sessionId}`, payload),
+  deleteTrainingSession: (sessionId: number) => apiDelete(`/training-sessions/${sessionId}`),
+  addStrengthExerciseToSession: (sessionId: number, payload: StrengthWorkoutExerciseCreatePayload) =>
+    apiPost<StrengthWorkoutExercise>(`/training-sessions/${sessionId}/strength-exercises`, payload),
   trainingSession: (sessionId: number) => apiGet<TrainingSession>(`/training-sessions/${sessionId}`),
   startTrainingSession: (sessionId: number) => apiPost<TrainingSession>(`/training-sessions/${sessionId}/start`),
   finishTrainingSession: (sessionId: number) => apiPost<TrainingSession>(`/training-sessions/${sessionId}/finish`),

@@ -20,10 +20,13 @@ from app.schemas.training import (
     ExerciseSwapRead,
     StrengthSetLogCreate,
     StrengthSetLogRead,
+    StrengthWorkoutExerciseCreate,
+    StrengthWorkoutExerciseRead,
     TrainingPlanRead,
     TrainingSessionCreate,
     TrainingSessionRead,
     TrainingSessionReschedule,
+    TrainingSessionUpdate,
 )
 
 router = APIRouter(tags=["training"])
@@ -101,6 +104,79 @@ def get_training_session(session_id: int, db: Session = Depends(get_db)) -> Trai
     if session is None:
         raise HTTPException(status_code=404, detail="Training session not found")
     return session
+
+
+@router.patch("/training-sessions/{session_id}", response_model=TrainingSessionRead)
+def update_training_session(
+    session_id: int,
+    payload: TrainingSessionUpdate,
+    db: Session = Depends(get_db),
+) -> TrainingSession:
+    session = db.get(TrainingSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        setattr(session, field, value)
+
+    db.commit()
+    return get_training_session(session_id, db)
+
+
+@router.delete("/training-sessions/{session_id}", status_code=204)
+def delete_training_session(session_id: int, db: Session = Depends(get_db)) -> None:
+    session = db.get(TrainingSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    db.delete(session)
+    db.commit()
+
+
+@router.post(
+    "/training-sessions/{session_id}/strength-exercises",
+    response_model=StrengthWorkoutExerciseRead,
+    status_code=201,
+)
+def add_strength_exercise_to_session(
+    session_id: int,
+    payload: StrengthWorkoutExerciseCreate,
+    db: Session = Depends(get_db),
+) -> StrengthWorkoutExercise:
+    session = db.get(TrainingSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Training session not found")
+
+    if session.session_type != "strength":
+        raise HTTPException(status_code=400, detail="Strength exercises can only be added to strength sessions")
+
+    if db.get(Exercise, payload.exercise_id) is None:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+
+    order_index = payload.order_index
+    if order_index is None:
+        current_max = db.execute(
+            select(func.max(StrengthWorkoutExercise.order_index)).where(
+                StrengthWorkoutExercise.training_session_id == session_id
+            )
+        ).scalar_one()
+        order_index = (current_max or 0) + 1
+
+    workout_exercise = StrengthWorkoutExercise(
+        training_session_id=session_id,
+        exercise_id=payload.exercise_id,
+        order_index=order_index,
+        planned_sets=payload.planned_sets,
+        planned_reps=payload.planned_reps,
+        planned_load=payload.planned_load,
+        rest_seconds=payload.rest_seconds,
+        notes=payload.notes,
+    )
+    db.add(workout_exercise)
+    db.commit()
+    db.refresh(workout_exercise)
+    return workout_exercise
 
 
 @router.post("/training-sessions/{session_id}/start", response_model=TrainingSessionRead)

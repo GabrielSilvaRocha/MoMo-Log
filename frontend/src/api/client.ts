@@ -34,6 +34,17 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return parseResponse<T>(response)
 }
 
+export async function apiDelete(path: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`API error ${response.status}: ${body || response.statusText}`)
+  }
+}
+
 export function getApiBaseUrl(): string {
   return API_BASE_URL
 }

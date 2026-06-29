@@ -1,12 +1,23 @@
 # Mo² LOG
 
-Mo² LOG é um app de treino híbrido para musculação e corrida.
+Mo² LOG é um app de treino híbrido para musculação e corrida. Ele centraliza planejamento, execução, adaptação e evolução do treino.
 
-## Versão atual
+## v1.3.0
 
-`v1.2.0`
+Esta versão adiciona o módulo de Planejamento semanal editável.
 
-## Rodando localmente
+### Principais módulos
+
+- Dashboard semanal
+- Treino do dia
+- Planejamento semanal
+- Corridas com múltiplas fontes
+- Cadastro manual de corrida na esteira
+- Biblioteca de exercícios
+- Troca de exercícios por disponibilidade da academia
+- Metas, recordes e estatísticas
+
+## Executar localmente
 
 ```bash
 docker compose down
@@ -19,46 +30,14 @@ Em outro terminal:
 docker compose exec backend alembic upgrade head
 ```
 
+Backend:
+
+```text
+http://localhost:8000/api/v1/health
+```
+
 Frontend:
 
 ```text
 http://localhost:5173
 ```
-
-Backend:
-
-```text
-http://localhost:8000/api/v1/health
-http://localhost:8000/docs
-```
-
-## Strava OAuth
-
-Para usar a integração real com Strava, configure no `backend/.env`:
-
-```env
-STRAVA_CLIENT_ID=
-STRAVA_CLIENT_SECRET=
-STRAVA_REDIRECT_URI=http://localhost:8000/api/v1/auth/strava/callback
-STRAVA_SCOPE=read,activity:read
-```
-
-Sem essas credenciais, o endpoint de sincronização mantém o modo mock para desenvolvimento local.
-
-
-## v1.2.0 - Running Sources
-
-O Mo² LOG deixa de depender exclusivamente do Strava para corridas.
-
-Fontes suportadas no MVP:
-
-- Cadastro manual de corrida na esteira.
-- Cadastro manual de corrida externa via API.
-- Sincronização Strava opcional.
-- Mock Strava para desenvolvimento local.
-
-Fontes planejadas:
-
-- Samsung Health por exportação de dados.
-- Health Connect em versão mobile futura.
-- Importação GPX/CSV/FIT.

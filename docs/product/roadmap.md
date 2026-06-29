@@ -1,21 +1,15 @@
-# Roadmap
+# Roadmap Mo² LOG
 
-## v0.3.0
+## v1.3.0 - Planejamento semanal editável
 
-Fundação técnica corrigida com FastAPI, SQLAlchemy, Alembic e model `User`.
+- Criar sessões de musculação, corrida, mobilidade e descanso.
+- Editar título, data e observações de sessões.
+- Alterar status de sessões.
+- Adicionar exercícios planejados em sessões de musculação.
 
-## v0.4.0
+## Próximos passos
 
-Biblioteca de exercícios, equipamentos e grupos musculares.
-
-## v0.5.0
-
-Motor inicial de substituição de exercícios.
-
-## v0.6.0
-
-Planejamento semanal e sessões de treino.
-
-## v0.7.0
-
-Integração inicial com Strava.
+- Templates de treino recorrentes.
+- Duplicar semana.
+- Ajuste automático de semanas quando um treino for perdido.
+- Health Connect / Samsung Health em versão mobile futura.
