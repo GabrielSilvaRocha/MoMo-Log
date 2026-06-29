@@ -6,13 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Mo² LOG"
     app_env: str = "development"
-    app_version: str = "1.0.0"
-
+    app_version: str = "0.1.0"
     database_url: str = "postgresql://postgres:postgres@db:5432/mo2log"
-
-    strava_client_id: str | None = None
-    strava_client_secret: str | None = None
-    strava_redirect_uri: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
