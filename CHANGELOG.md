@@ -1,22 +1,21 @@
 # Changelog
 
+## v0.8.0 - Frontend Foundation
+
+### Added
+- React + Vite + TypeScript frontend.
+- TailwindCSS design system using the Mo² LOG dark/neon identity.
+- Docker service for the frontend on port 5173.
+- Dashboard connected to the backend API.
+- Cards for weekly strength volume, running distance, consistency and upcoming sessions.
+- Sections for today's sessions, completed sessions, upcoming weekly sessions, goals and insights.
+- CORS support in the backend for local frontend development.
+
 ## v0.7.0 - Analytics Core
 
 ### Added
-- Model `Goal`.
-- Model `PersonalRecord`.
-- Migration Alembic `0005`.
-- Endpoints de metas.
-- Endpoint de recordes pessoais.
-- Endpoint de estatísticas semanais.
-- Insights semanais iniciais combinando musculação, corrida, metas e consistência.
-
-## v0.6.0 - Running Core
-
-### Added
-- `RunningActivity`.
-- `StravaAccount`.
-- `StravaSyncLog`.
-- Migration Alembic `0004`.
-- Endpoint de sincronização Strava mock.
-- Dashboard semanal com distância de corrida.
+- Goal model.
+- PersonalRecord model.
+- Weekly statistics endpoint.
+- Goal progress update endpoint.
+- Initial insights combining strength, running and consistency.
