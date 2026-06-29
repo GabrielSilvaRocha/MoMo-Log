@@ -66,6 +66,8 @@ export type RunningActivity = {
   average_pace: string
   max_speed: string | null
   total_elevation_gain: string | null
+  activity_type?: string
+  source?: string
   start_date: string
 }
 
@@ -140,6 +142,14 @@ export type StravaStatus = {
   user_id: number
   strava_athlete_id?: string
   token_expires_at?: string
+}
+
+export type StravaSyncResult = {
+  imported: number
+  updated: number
+  ignored: number
+  status: string
+  message: string
 }
 
 export type Equipment = {

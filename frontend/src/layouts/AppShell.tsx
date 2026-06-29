@@ -10,6 +10,9 @@ type AppShellProps = {
 const navItems: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'workout', label: 'Treino do dia', icon: '🏋️' },
+  { id: 'running', label: 'Corridas', icon: '🏃' },
+  { id: 'analytics', label: 'Estatísticas', icon: '📈' },
+  { id: 'goals', label: 'Metas', icon: '🎯' },
   { id: 'exercises', label: 'Exercícios', icon: '🔁' },
 ]
 

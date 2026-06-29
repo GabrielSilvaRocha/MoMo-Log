@@ -1,31 +1,38 @@
 # Mo² LOG
 
-Mo² LOG é um app de treino híbrido para musculação e corrida.
+Mo² LOG é um aplicativo de treino híbrido para musculação e corrida.
 
-Ele nasceu para ajudar o usuário a executar o plano de treino, adaptar exercícios quando a academia está cheia ou não possui determinado equipamento, e registrar corridas usando o Strava como fonte oficial.
+O produto nasceu com dois objetivos principais:
 
-## Versão atual
+1. Mostrar e registrar treinos de musculação, permitindo trocar exercícios quando a academia estiver cheia ou quando a máquina não existir.
+2. Registrar corridas usando o Strava como fonte oficial dos dados de corrida.
 
-`v0.9.1` — Workout Execution UI
+## Status atual
 
-## Stack
+Versão: `1.0.0`
 
-### Backend
+Esta versão entrega o primeiro MVP navegável:
 
-- FastAPI
+- Backend FastAPI
+- PostgreSQL
 - SQLAlchemy
 - Alembic
-- PostgreSQL
-- Docker
+- Docker Compose
+- Biblioteca de exercícios
+- Training Core
+- Running Core mock
+- Analytics Core
+- Frontend React + Vite + TypeScript + TailwindCSS
+- Dashboard
+- Tela de treino do dia
+- Tela de corridas
+- Tela de estatísticas
+- Tela de metas
+- Tela de exercícios e equipamentos da academia
 
-### Frontend
+## Como executar
 
-- React
-- Vite
-- TypeScript
-- TailwindCSS
-
-## Como rodar
+Na raiz do projeto:
 
 ```bash
 docker compose down
@@ -38,41 +45,29 @@ Em outro terminal:
 docker compose exec backend alembic upgrade head
 ```
 
-## URLs
+Acesse:
 
-Backend:
+- API: http://localhost:8000/api/v1/health
+- Swagger: http://localhost:8000/docs
+- Frontend: http://localhost:5173
 
-```text
-http://localhost:8000/api/v1/health
-http://localhost:8000/docs
-```
-
-Frontend:
-
-```text
-http://localhost:5173
-```
-
-## Funcionalidades disponíveis
-
-- Dashboard semanal.
-- Treinos de hoje, concluídos e próximos.
-- Registro de volume de musculação.
-- Corridas mock via Strava.
-- Metas e estatísticas semanais.
-- Execução de treino de musculação.
-- Registro de séries.
-- Troca de exercícios.
-- Configuração dos equipamentos da academia.
-
-## Comandos úteis
+## Testes do backend
 
 ```bash
-docker compose exec backend alembic upgrade head
-docker compose exec backend pytest
+docker compose exec backend python -m pytest -q -vv
 ```
 
+## Fluxo principal do MVP
 
-## v0.9.1 Hotfix
+1. Abrir o Dashboard.
+2. Ver o treino do dia, próximos treinos e metas.
+3. Acessar Treino do dia.
+4. Registrar séries.
+5. Trocar exercício quando necessário.
+6. Acessar Exercícios e marcar equipamento como indisponível, favorito ou frequentemente ocupado.
+7. Acessar Corridas e sincronizar Strava mock.
+8. Acessar Estatísticas para ver consistência, volume, quilometragem, metas e insights.
 
-Corrige CI do backend e e-mail seed inválido para validação Pydantic.
+## Observação sobre Strava
+
+A integração com Strava nesta versão ainda é simulada. A próxima etapa será preparar o OAuth real usando credenciais de uma aplicação Strava.
