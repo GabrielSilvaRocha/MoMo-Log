@@ -127,7 +127,7 @@ def seed_demo_training_data() -> None:
     op.execute(
         """
         INSERT INTO users (id, name, email, password_hash, avatar_url)
-        VALUES (1, 'Gabriel Rocha', 'gabriel.demo@mo2log.local', NULL, NULL)
+        VALUES (1, 'Gabriel Rocha', 'gabriel.demo@mo2log.com.br', NULL, NULL)
         ON CONFLICT (email) DO NOTHING;
         """
     )
