@@ -1,16 +1,17 @@
 # Mo² LOG
 
-Mo² LOG is a hybrid training platform for strength training and running.
+Mo² LOG é um app de treino híbrido para musculação e corrida.
 
-The product helps the user plan, execute, adapt and analyze workouts. Strength training is handled directly inside Mo² LOG, including exercise swaps when the gym is crowded. Running data is imported through Strava and analyzed together with the weekly plan.
+Ele nasceu para ajudar o usuário a executar o plano de treino, adaptar exercícios quando a academia está cheia ou não possui determinado equipamento, e registrar corridas usando o Strava como fonte oficial.
 
-## Current version
+## Versão atual
 
-`v0.8.0 - Frontend Foundation`
+`v0.9.1` — Workout Execution UI
 
 ## Stack
 
 ### Backend
+
 - FastAPI
 - SQLAlchemy
 - Alembic
@@ -18,20 +19,20 @@ The product helps the user plan, execute, adapt and analyze workouts. Strength t
 - Docker
 
 ### Frontend
+
 - React
 - Vite
 - TypeScript
 - TailwindCSS
-- Docker
 
-## Running locally
+## Como rodar
 
 ```bash
 docker compose down
 docker compose up --build
 ```
 
-In another terminal, apply migrations:
+Em outro terminal:
 
 ```bash
 docker compose exec backend alembic upgrade head
@@ -39,15 +40,10 @@ docker compose exec backend alembic upgrade head
 
 ## URLs
 
-Backend health check:
+Backend:
 
 ```text
 http://localhost:8000/api/v1/health
-```
-
-Backend docs:
-
-```text
 http://localhost:8000/docs
 ```
 
@@ -57,23 +53,26 @@ Frontend:
 http://localhost:5173
 ```
 
-## Main test endpoints
+## Funcionalidades disponíveis
 
-```text
-http://localhost:8000/api/v1/dashboard/week?user_id=1&reference_date=2026-06-29
-http://localhost:8000/api/v1/statistics/week?user_id=1&reference_date=2026-06-29
-http://localhost:8000/api/v1/goals?user_id=1
-http://localhost:8000/api/v1/strava/status?user_id=1
+- Dashboard semanal.
+- Treinos de hoje, concluídos e próximos.
+- Registro de volume de musculação.
+- Corridas mock via Strava.
+- Metas e estatísticas semanais.
+- Execução de treino de musculação.
+- Registro de séries.
+- Troca de exercícios.
+- Configuração dos equipamentos da academia.
+
+## Comandos úteis
+
+```bash
+docker compose exec backend alembic upgrade head
+docker compose exec backend pytest
 ```
 
-## Product direction
 
-Mo² LOG is not just a running tracker. It is a hybrid training operating system:
+## v0.9.1 Hotfix
 
-- Strength workout planning
-- Exercise execution logging
-- Exercise substitution when equipment is busy or unavailable
-- User gym equipment preferences
-- Running import through Strava
-- Weekly dashboard with completed and upcoming sessions
-- Goals, personal records and insights
+Corrige CI do backend e e-mail seed inválido para validação Pydantic.

@@ -12,13 +12,30 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mo2log
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d mo2log"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     defaults:
       run:
         working-directory: backend
 
     env:
-      DATABASE_URL: sqlite:///./test.db
       APP_ENV: test
+      APP_VERSION: 0.9.1
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mo2log
+      FRONTEND_ORIGIN: http://localhost:5173
       PYTHONPATH: ${{ github.workspace }}/backend
 
     steps:
@@ -35,6 +52,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run migrations
+        run: alembic upgrade head
+
       - name: Run tests
-        run: |
-          python -m pytest -q
+        run: python -m pytest -q

@@ -5,6 +5,70 @@ export type ApiStatus = {
   version: string
 }
 
+export type Exercise = {
+  id: number
+  name: string
+  slug: string
+  description: string | null
+  execution_instructions: string | null
+  difficulty: string
+  exercise_type: string
+  is_unilateral: boolean
+  is_compound: boolean
+}
+
+export type ExerciseAlternative = {
+  id: number
+  exercise_id: number
+  alternative_exercise_id: number
+  alternative_exercise: Exercise
+  equivalence_score: number
+  reason: string | null
+  equipment_status: 'unavailable' | 'frequently_busy' | 'favorite' | null
+  is_default_suggestion: boolean
+}
+
+export type StrengthSetLog = {
+  id: number
+  strength_workout_exercise_id: number
+  set_number: number
+  reps: number
+  load: string
+  rir: number | null
+  rpe: number | null
+  completed_at: string
+}
+
+export type StrengthWorkoutExercise = {
+  id: number
+  training_session_id: number
+  exercise_id: number
+  order_index: number
+  planned_sets: number
+  planned_reps: string
+  planned_load: string | null
+  rest_seconds: number | null
+  notes: string | null
+  exercise: Exercise | null
+  set_logs: StrengthSetLog[]
+}
+
+export type RunningActivity = {
+  id: number
+  user_id: number
+  training_session_id: number | null
+  strava_activity_id: string
+  name: string
+  distance_m: string
+  moving_time_s: number
+  elapsed_time_s: number
+  average_speed: string
+  average_pace: string
+  max_speed: string | null
+  total_elevation_gain: string | null
+  start_date: string
+}
+
 export type TrainingSession = {
   id: number
   user_id: number
@@ -12,9 +76,13 @@ export type TrainingSession = {
   session_type: 'strength' | 'running' | 'mobility' | 'rest'
   title: string
   scheduled_date: string
+  started_at?: string | null
+  finished_at?: string | null
   status: string
   source: string
   notes: string | null
+  strength_exercises?: StrengthWorkoutExercise[]
+  running_activity?: RunningActivity | null
 }
 
 export type WeekDashboard = {
@@ -72,4 +140,24 @@ export type StravaStatus = {
   user_id: number
   strava_athlete_id?: string
   token_expires_at?: string
+}
+
+export type Equipment = {
+  id: number
+  name: string
+  category: string
+}
+
+export type UserGymEquipment = {
+  id: number
+  user_id: number
+  equipment_id: number
+  status: string
+  notes: string | null
+}
+
+export type ExerciseSwapResult = {
+  status: string
+  equivalence_score: number | null
+  message: string
 }

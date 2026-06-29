@@ -1,21 +1,16 @@
 # Changelog
 
-## v0.8.0 - Frontend Foundation
+## v0.9.1
+
+### Fixed
+- Corrige e-mail seed inválido (`.local`) para domínio aceito pelo `EmailStr`.
+- Corrige Backend CI adicionando serviço PostgreSQL, variáveis de ambiente e execução das migrations antes dos testes.
+- Estabiliza testes `health` e `users`.
+
+## v0.9.0
 
 ### Added
-- React + Vite + TypeScript frontend.
-- TailwindCSS design system using the Mo² LOG dark/neon identity.
-- Docker service for the frontend on port 5173.
-- Dashboard connected to the backend API.
-- Cards for weekly strength volume, running distance, consistency and upcoming sessions.
-- Sections for today's sessions, completed sessions, upcoming weekly sessions, goals and insights.
-- CORS support in the backend for local frontend development.
-
-## v0.7.0 - Analytics Core
-
-### Added
-- Goal model.
-- PersonalRecord model.
-- Weekly statistics endpoint.
-- Goal progress update endpoint.
-- Initial insights combining strength, running and consistency.
+- Tela de execução de treino no frontend.
+- Registro de séries.
+- Troca de exercícios.
+- Tela de exercícios e configuração da academia.

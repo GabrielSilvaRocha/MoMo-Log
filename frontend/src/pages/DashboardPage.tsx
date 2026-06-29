@@ -15,7 +15,11 @@ type DashboardState = {
   strava: StravaStatus | null
 }
 
-export function DashboardPage() {
+type DashboardPageProps = {
+  onStartWorkout: () => void
+}
+
+export function DashboardPage({ onStartWorkout }: DashboardPageProps) {
   const [state, setState] = useState<DashboardState>({
     health: null,
     dashboard: null,
@@ -97,10 +101,10 @@ export function DashboardPage() {
             O Mo² LOG mostra o plano do dia, o que já foi concluído e os próximos treinos da semana.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <button className="rounded-2xl bg-mo-primary px-5 py-3 font-semibold text-black shadow-glow">
+            <button onClick={onStartWorkout} className="rounded-2xl bg-mo-primary px-5 py-3 font-semibold text-black shadow-glow">
               Iniciar treino
             </button>
-            <button className="rounded-2xl border border-mo-border px-5 py-3 font-semibold text-white">
+            <button onClick={onStartWorkout} className="rounded-2xl border border-mo-border px-5 py-3 font-semibold text-white">
               Trocar exercício
             </button>
           </div>

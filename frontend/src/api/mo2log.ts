@@ -1,5 +1,19 @@
-import { apiGet } from './client'
-import type { ApiStatus, Goal, PersonalRecord, StravaStatus, WeekDashboard, WeeklyStatistics } from '../types/api'
+import { apiGet, apiPatch, apiPost } from './client'
+import type {
+  ApiStatus,
+  Equipment,
+  Exercise,
+  ExerciseAlternative,
+  ExerciseSwapResult,
+  Goal,
+  PersonalRecord,
+  StravaStatus,
+  StrengthSetLog,
+  TrainingSession,
+  UserGymEquipment,
+  WeekDashboard,
+  WeeklyStatistics,
+} from '../types/api'
 
 export const mo2logApi = {
   health: () => apiGet<ApiStatus>('/health'),
@@ -10,4 +24,33 @@ export const mo2logApi = {
   goals: (userId = 1) => apiGet<Goal[]>(`/goals?user_id=${userId}`),
   personalRecords: (userId = 1) => apiGet<PersonalRecord[]>(`/personal-records?user_id=${userId}`),
   stravaStatus: (userId = 1) => apiGet<StravaStatus>(`/strava/status?user_id=${userId}`),
+  exercises: () => apiGet<Exercise[]>('/exercises'),
+  equipment: () => apiGet<Equipment[]>('/equipment'),
+  userGymEquipment: (userId = 1) => apiGet<UserGymEquipment[]>(`/user-gym-equipment?user_id=${userId}`),
+  updateEquipmentStatus: (payload: { user_id: number; equipment_id: number; status: string; notes?: string }) =>
+    apiPost<UserGymEquipment>('/user-gym-equipment', payload),
+  trainingSession: (sessionId: number) => apiGet<TrainingSession>(`/training-sessions/${sessionId}`),
+  startTrainingSession: (sessionId: number) => apiPost<TrainingSession>(`/training-sessions/${sessionId}/start`),
+  finishTrainingSession: (sessionId: number) => apiPost<TrainingSession>(`/training-sessions/${sessionId}/finish`),
+  createSetLog: (payload: {
+    strength_workout_exercise_id: number
+    set_number: number
+    reps: number
+    load: number
+    rir?: number | null
+    rpe?: number | null
+  }) => apiPost<StrengthSetLog>('/strength/set-logs', payload),
+  exerciseAlternatives: (exerciseId: number, userId = 1, mode: 'default' | 'all' = 'default') =>
+    apiGet<ExerciseAlternative[]>(`/exercises/${exerciseId}/alternatives?user_id=${userId}&mode=${mode}`),
+  swapExercise: (
+    sessionId: number,
+    payload: {
+      strength_workout_exercise_id: number
+      original_exercise_id: number
+      new_exercise_id: number
+      reason: 'equipment_busy' | 'equipment_unavailable' | 'pain_discomfort' | 'preference' | 'manual_adjustment'
+    },
+  ) => apiPost<ExerciseSwapResult>(`/training-sessions/${sessionId}/swap-exercise`, payload),
+  updateGoalProgress: (goalId: number, currentValue: number) =>
+    apiPatch<Goal>(`/goals/${goalId}/progress`, { current_value: currentValue }),
 }
