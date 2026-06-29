@@ -57,7 +57,7 @@ export type RunningActivity = {
   id: number
   user_id: number
   training_session_id: number | null
-  strava_activity_id: string
+  strava_activity_id: string | null
   name: string
   distance_m: string
   moving_time_s: number
@@ -170,4 +170,25 @@ export type ExerciseSwapResult = {
   status: string
   equivalence_score: number | null
   message: string
+}
+
+export type StravaAuthorizeResponse = {
+  authorization_url: string
+  configured: boolean
+  scope: string
+  redirect_uri: string
+}
+
+
+export type ManualRunningActivityPayload = {
+  user_id: number
+  training_session_id?: number | null
+  name: string
+  distance_m: number
+  moving_time_s: number
+  elapsed_time_s: number
+  activity_type?: string
+  source?: string
+  start_date: string
+  total_elevation_gain?: number | null
 }

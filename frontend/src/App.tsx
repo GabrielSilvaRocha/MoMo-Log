@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { AppShell } from './layouts/AppShell'
 import { AnalyticsPage } from './pages/AnalyticsPage'
@@ -12,6 +12,14 @@ export type AppView = 'dashboard' | 'workout' | 'running' | 'analytics' | 'goals
 
 export default function App() {
   const [view, setView] = useState<AppView>('dashboard')
+
+  useEffect(() => {
+    const queryView = new URLSearchParams(window.location.search).get('view')
+    if (queryView && ['dashboard', 'workout', 'running', 'analytics', 'goals', 'exercises'].includes(queryView)) {
+      setView(queryView as AppView)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   return (
     <AppShell currentView={view} onNavigate={setView}>

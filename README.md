@@ -1,38 +1,12 @@
 # Mo² LOG
 
-Mo² LOG é um aplicativo de treino híbrido para musculação e corrida.
+Mo² LOG é um app de treino híbrido para musculação e corrida.
 
-O produto nasceu com dois objetivos principais:
+## Versão atual
 
-1. Mostrar e registrar treinos de musculação, permitindo trocar exercícios quando a academia estiver cheia ou quando a máquina não existir.
-2. Registrar corridas usando o Strava como fonte oficial dos dados de corrida.
+`v1.2.0`
 
-## Status atual
-
-Versão: `1.0.0`
-
-Esta versão entrega o primeiro MVP navegável:
-
-- Backend FastAPI
-- PostgreSQL
-- SQLAlchemy
-- Alembic
-- Docker Compose
-- Biblioteca de exercícios
-- Training Core
-- Running Core mock
-- Analytics Core
-- Frontend React + Vite + TypeScript + TailwindCSS
-- Dashboard
-- Tela de treino do dia
-- Tela de corridas
-- Tela de estatísticas
-- Tela de metas
-- Tela de exercícios e equipamentos da academia
-
-## Como executar
-
-Na raiz do projeto:
+## Rodando localmente
 
 ```bash
 docker compose down
@@ -45,29 +19,46 @@ Em outro terminal:
 docker compose exec backend alembic upgrade head
 ```
 
-Acesse:
+Frontend:
 
-- API: http://localhost:8000/api/v1/health
-- Swagger: http://localhost:8000/docs
-- Frontend: http://localhost:5173
-
-## Testes do backend
-
-```bash
-docker compose exec backend python -m pytest -q -vv
+```text
+http://localhost:5173
 ```
 
-## Fluxo principal do MVP
+Backend:
 
-1. Abrir o Dashboard.
-2. Ver o treino do dia, próximos treinos e metas.
-3. Acessar Treino do dia.
-4. Registrar séries.
-5. Trocar exercício quando necessário.
-6. Acessar Exercícios e marcar equipamento como indisponível, favorito ou frequentemente ocupado.
-7. Acessar Corridas e sincronizar Strava mock.
-8. Acessar Estatísticas para ver consistência, volume, quilometragem, metas e insights.
+```text
+http://localhost:8000/api/v1/health
+http://localhost:8000/docs
+```
 
-## Observação sobre Strava
+## Strava OAuth
 
-A integração com Strava nesta versão ainda é simulada. A próxima etapa será preparar o OAuth real usando credenciais de uma aplicação Strava.
+Para usar a integração real com Strava, configure no `backend/.env`:
+
+```env
+STRAVA_CLIENT_ID=
+STRAVA_CLIENT_SECRET=
+STRAVA_REDIRECT_URI=http://localhost:8000/api/v1/auth/strava/callback
+STRAVA_SCOPE=read,activity:read
+```
+
+Sem essas credenciais, o endpoint de sincronização mantém o modo mock para desenvolvimento local.
+
+
+## v1.2.0 - Running Sources
+
+O Mo² LOG deixa de depender exclusivamente do Strava para corridas.
+
+Fontes suportadas no MVP:
+
+- Cadastro manual de corrida na esteira.
+- Cadastro manual de corrida externa via API.
+- Sincronização Strava opcional.
+- Mock Strava para desenvolvimento local.
+
+Fontes planejadas:
+
+- Samsung Health por exportação de dados.
+- Health Connect em versão mobile futura.
+- Importação GPX/CSV/FIT.

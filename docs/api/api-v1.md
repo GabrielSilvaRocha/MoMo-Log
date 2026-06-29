@@ -41,3 +41,15 @@ PATCH /api/v1/goals/{goal_id}/progress
 GET /api/v1/personal-records?user_id=1
 GET /api/v1/statistics/week?user_id=1&reference_date=2026-06-29
 ```
+
+
+## Strava OAuth
+
+```http
+GET /api/v1/auth/strava/authorize?user_id=1
+GET /api/v1/auth/strava/callback
+POST /api/v1/strava/sync?user_id=1
+```
+
+Sem credenciais configuradas, `/strava/sync` executa o modo mock.
+Com OAuth configurado, ele importa atividades reais.
