@@ -30,3 +30,14 @@ GET /exercises/1/alternatives?mode=all
 `mode=default` remove sugestões que dependem de equipamentos marcados como indisponíveis para o usuário.
 
 `mode=all` retorna todas as opções, incluindo as indisponíveis, com aviso em `equipment_status`.
+
+
+## Analytics
+
+```http
+GET /api/v1/goals?user_id=1
+POST /api/v1/goals
+PATCH /api/v1/goals/{goal_id}/progress
+GET /api/v1/personal-records?user_id=1
+GET /api/v1/statistics/week?user_id=1&reference_date=2026-06-29
+```

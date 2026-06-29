@@ -25,3 +25,5 @@ from app.models.running import (
     StravaSyncLog,
 )
 from app.models.user import User  # noqa: F401
+
+from app.models.analytics import Goal, PersonalRecord  # noqa: F401

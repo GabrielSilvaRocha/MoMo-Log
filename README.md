@@ -6,7 +6,7 @@ O objetivo é centralizar planejamento, execução, adaptação e evolução dos
 
 ## Status atual
 
-Release: `v0.6.0`
+Release: `v0.7.0`
 
 Inclui:
 
@@ -31,6 +31,11 @@ Inclui:
 - Atividades de corrida vinculadas a sessões planejadas
 - Conta Strava simulada
 - Sincronização Strava mock para desenvolvimento local
+
+- Metas do usuário
+- Recordes pessoais
+- Estatísticas semanais consolidadas
+- Insights iniciais de consistência, volume e corrida
 
 ## Rodar localmente
 
@@ -60,6 +65,9 @@ http://localhost:8000/api/v1/running-activities?user_id=1
 http://localhost:8000/api/v1/running-activities/1
 http://localhost:8000/api/v1/strava/status?user_id=1
 http://localhost:8000/api/v1/dashboard/week?user_id=1&reference_date=2026-06-29
+http://localhost:8000/api/v1/goals?user_id=1
+http://localhost:8000/api/v1/personal-records?user_id=1
+http://localhost:8000/api/v1/statistics/week?user_id=1&reference_date=2026-06-29
 ```
 
 ## Sincronização Strava mock
@@ -116,4 +124,26 @@ Exemplo:
 
 ```text
 GET /api/v1/exercises/1/alternatives?mode=all&user_id=1
+```
+
+## Metas e estatísticas
+
+Listar metas:
+
+```text
+GET /api/v1/goals?user_id=1
+```
+
+Atualizar progresso de uma meta:
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/goals/1/progress \
+  -H "Content-Type: application/json" \
+  -d '{"current_value":12}'
+```
+
+Resumo semanal:
+
+```text
+GET /api/v1/statistics/week?user_id=1&reference_date=2026-06-29
 ```

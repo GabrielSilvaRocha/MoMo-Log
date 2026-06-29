@@ -24,3 +24,13 @@ users
 ## Regra de equipamento indisponível
 
 `user_gym_equipment.status = unavailable` remove exercícios dependentes daquele equipamento das sugestões padrão, mas eles continuam visíveis quando o usuário escolhe ver todas as opções.
+
+
+## Analytics Core
+
+```text
+users 1 ─── N goals
+users 1 ─── N personal_records
+training_sessions 0..1 ─── N personal_records
+running_activities 0..1 ─── N personal_records
+```

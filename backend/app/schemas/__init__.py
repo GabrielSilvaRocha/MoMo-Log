@@ -13,6 +13,13 @@ from app.schemas.running import (
     StravaStatusRead,
     StravaSyncResponse,
 )
+from app.schemas.analytics import (
+    GoalCreate,
+    GoalProgressUpdate,
+    GoalRead,
+    PersonalRecordRead,
+    WeeklyStatisticsRead,
+)
 from app.schemas.user import UserRead
 
 __all__ = [
@@ -28,4 +35,9 @@ __all__ = [
     "StravaAccountRead",
     "RunningActivityCreate",
     "RunningActivityRead",
+    "GoalCreate",
+    "GoalProgressUpdate",
+    "GoalRead",
+    "PersonalRecordRead",
+    "WeeklyStatisticsRead",
 ]

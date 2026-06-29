@@ -19,6 +19,7 @@ from app.models.running import (
     StravaAccount,
     StravaSyncLog,
 )
+from app.models.analytics import Goal, PersonalRecord
 from app.models.user import User
 
 __all__ = [
@@ -38,4 +39,6 @@ __all__ = [
     "StravaSyncLog",
     "RunningActivity",
     "StravaAccount",
+    "Goal",
+    "PersonalRecord",
 ]
