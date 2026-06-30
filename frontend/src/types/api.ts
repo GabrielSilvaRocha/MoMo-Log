@@ -304,6 +304,74 @@ export type ProductReleaseNotes = {
   highlights: string[]
 }
 
+
+export type IntelligenceInsight = {
+  type: string
+  severity: 'positive' | 'attention' | 'info' | string
+  title: string
+  message: string
+}
+
+export type IntelligenceRecommendation = {
+  title: string
+  action: string
+}
+
+export type WeeklyIntelligence = {
+  user_id: number
+  reference_date: string
+  week_start: string
+  week_end: string
+  hybrid_score: number
+  summary: {
+    planned_sessions: number
+    completed_sessions: number
+    completion_rate: number
+    adapted_sessions: number
+    skipped_sessions: number
+    strength_sessions: number
+    running_sessions: number
+    strength_volume: string
+    running_distance_km: string
+    running_activities: number
+    average_pace: string | null
+    average_pace_label: string | null
+    average_rpe: number | null
+  }
+  insights: IntelligenceInsight[]
+  recommendations: IntelligenceRecommendation[]
+}
+
+export type PlannedVsDone = {
+  user_id: number
+  week_start: string
+  week_end: string
+  by_type: Record<string, { planned: number; completed: number; adapted: number; skipped: number }>
+  running_registered_km: string
+  days: Array<{
+    date: string
+    sessions: Array<{ id: number; title: string; session_type: string; status: string }>
+  }>
+}
+
+export type FiveKForecast = {
+  user_id: number
+  confidence: string
+  predicted_5k_time_s: number
+  predicted_5k_time_label: string | null
+  predicted_pace_label: string | null
+  based_on_runs: number
+  notes: string[]
+  samples: Array<{
+    activity_id: number
+    name: string
+    source: string
+    distance_km: number
+    pace_label: string | null
+    relevance: string
+  }>
+}
+
 export type User = {
   id: number
   name: string

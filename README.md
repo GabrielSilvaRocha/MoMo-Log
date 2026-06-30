@@ -4,7 +4,7 @@ Mo² LOG é um aplicativo de treino híbrido para musculação e corrida. O prod
 
 ## Release atual
 
-**v3.0.0 — Usuários, autenticação e preferências**
+**v4.0.0 — Usuários, autenticação e preferências**
 
 Esta versão consolida o MVP com uma camada inicial de usuário real:
 
@@ -66,3 +66,8 @@ Health:   http://localhost:8000/api/v1/health
 - v4.0.0 — Importação GPX/CSV/FIT e melhoria de fontes de corrida.
 - v5.0.0 — Intelligence Core: planejado vs realizado, tendências e insights.
 - v6.0.0 — Deploy, portfólio e documentação final.
+
+
+## v4.0.0 — Intelligence Core
+
+Esta versão adiciona a primeira camada de inteligência do Mo² LOG: score híbrido semanal, insights acionáveis, comparação planejado vs realizado e previsão simples de 5 km.

@@ -13,3 +13,4 @@ def test_openapi_contains_core_routes() -> None:
     assert "/api/v1/health" in paths
     assert "/api/v1/running-activities" in paths
     assert "/api/v1/product/mvp-status" in paths
+    assert "/api/v1/intelligence/weekly-insights" in paths

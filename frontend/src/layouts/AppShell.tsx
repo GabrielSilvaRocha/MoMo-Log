@@ -16,6 +16,7 @@ const navItems: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'workout', label: 'Treino do dia', icon: '🏋️' },
   { id: 'running', label: 'Corridas', icon: '🏃' },
   { id: 'analytics', label: 'Estatísticas', icon: '📈' },
+  { id: 'intelligence', label: 'Inteligência', icon: '🧠' },
   { id: 'history', label: 'Histórico', icon: '🗂️' },
   { id: 'reports', label: 'Relatórios', icon: '📄' },
   { id: 'goals', label: 'Metas', icon: '🎯' },
@@ -34,12 +35,12 @@ export function AppShell({ children, currentView, onNavigate, user, onLogout }: 
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
               <p className="text-sm uppercase tracking-[0.4em] text-mo-primary">Mo² LOG</p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight">Mo² LOG com usuário e preferências</h1>
-              <p className="mt-2 text-mo-muted">Sessão autenticada, treino híbrido, esteira manual, adaptação, relatórios e evolução.</p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight">Mo² LOG com inteligência híbrida</h1>
+              <p className="mt-2 text-mo-muted">Treino híbrido, esteira manual, adaptação, relatórios e inteligência de evolução.</p>
             </div>
             <div className="flex flex-col gap-2 rounded-2xl border border-mo-border bg-black/20 px-4 py-3 text-sm text-mo-muted sm:items-end">
               <span>Usuário: <strong className="text-white">{user.name}</strong></span>
-              <span>Versão: <span className="text-mo-primary">v3.0.0</span></span>
+              <span>Versão: <span className="text-mo-primary">v4.0.0</span></span>
               <button onClick={onLogout} className="text-left text-xs font-semibold text-mo-primary hover:text-white sm:text-right">Sair</button>
             </div>
           </div>

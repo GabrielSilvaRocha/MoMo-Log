@@ -17,6 +17,7 @@ def get_mvp_status() -> dict:
         {"key": "history", "label": "Histórico", "status": "stable", "description": "Consulta de sessões por período, status e tipo."},
         {"key": "reports", "label": "Relatórios", "status": "stable", "description": "Resumo por período e exportação CSV."},
         {"key": "analytics", "label": "Estatísticas", "status": "stable", "description": "Metas, recordes pessoais e insights iniciais."},
+        {"key": "intelligence", "label": "Inteligência", "status": "beta", "description": "Insights semanais, comparação planejado vs realizado e previsão simples de 5 km."},
         {"key": "auth", "label": "Autenticação", "status": "stable", "description": "Cadastro, login, sessão local, perfil e preferências do usuário."},
     ]
 
@@ -35,15 +36,16 @@ def get_mvp_status() -> dict:
 
     next_priorities = [
         "Importação GPX/CSV/FIT",
+        "Evolução de carga por exercício",
+        "Previsões por distância e prova-alvo",
         "Health Connect / Samsung Health no app mobile",
-        "Importação GPX/CSV/FIT",
         "Deploy demonstrável para portfólio",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Usuários e Preferências",
+        "milestone": "Inteligência e Evolução",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -54,12 +56,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "3.0.0",
-        "title": "Usuários, autenticação e preferências",
+        "version": "4.0.0",
+        "title": "Inteligência, insights e evolução",
         "highlights": [
-            "Cadastro, login e login demo com token assinado.",
-            "Tela de Perfil com dados pessoais e preferências de treino.",
-            "Fonte padrão de corrida configurável, com esteira manual como preferência inicial.",
-            "Preferências persistentes para metas semanais e observações da academia.",
+            "Nova tela Inteligência com leitura semanal do treino híbrido.",
+            "Comparação planejado vs realizado para musculação, corrida, mobilidade e descanso.",
+            "Previsão simples de tempo para 5 km com base nas corridas registradas.",
+            "Recomendações acionáveis para consistência, volume, esteira e adaptação de exercícios.",
         ],
     }

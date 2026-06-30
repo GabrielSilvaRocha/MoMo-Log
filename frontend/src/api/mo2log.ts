@@ -12,6 +12,9 @@ import type {
   Goal,
   LoginPayload,
   HistorySummary,
+  WeeklyIntelligence,
+  PlannedVsDone,
+  FiveKForecast,
   ReportOverview,
   ProductMvpStatus,
   ProductReleaseNotes,
@@ -52,6 +55,12 @@ export const mo2logApi = {
     apiGet<WeekDashboard>(`/dashboard/week?user_id=${userId}&reference_date=${referenceDate}`),
   weekStatistics: (userId = getCurrentUserId(), referenceDate = '2026-06-29') =>
     apiGet<WeeklyStatistics>(`/statistics/week?user_id=${userId}&reference_date=${referenceDate}`),
+  weeklyIntelligence: (userId = getCurrentUserId(), referenceDate = '2026-06-29') =>
+    apiGet<WeeklyIntelligence>(`/intelligence/weekly-insights?user_id=${userId}&reference_date=${referenceDate}`),
+  plannedVsDone: (userId = getCurrentUserId(), referenceDate = '2026-06-29') =>
+    apiGet<PlannedVsDone>(`/intelligence/planned-vs-done?user_id=${userId}&reference_date=${referenceDate}`),
+  forecast5k: (userId = getCurrentUserId()) =>
+    apiGet<FiveKForecast>(`/intelligence/forecast-5k?user_id=${userId}`),
   reportOverview: (userId = getCurrentUserId(), dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams({ user_id: String(userId) })
     if (dateFrom) params.set('date_from', dateFrom)

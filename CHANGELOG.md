@@ -1,5 +1,15 @@
 # Changelog
 
+## v4.0.0 - Intelligence Core
+
+- Adicionada tela **Inteligência** no frontend.
+- Adicionados endpoints `/intelligence/weekly-insights`, `/intelligence/planned-vs-done` e `/intelligence/forecast-5k`.
+- Adicionado score híbrido semanal.
+- Adicionados insights e recomendações acionáveis.
+- Adicionada previsão simples para 5 km.
+- Atualizada documentação da API e produto.
+
+
 ## v3.0.0 — Usuários, autenticação e preferências
 
 ### Adicionado
