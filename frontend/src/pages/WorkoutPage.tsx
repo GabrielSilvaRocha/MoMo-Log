@@ -18,6 +18,13 @@ type AlternativesState = {
   mode: 'default' | 'all'
 } | null
 
+type ActiveRestTimer = {
+  workoutExerciseId: number
+  exerciseName: string
+  remaining: number
+  total: number
+} | null
+
 const defaultSetForm: SetForm = {
   reps: '10',
   load: '0',
@@ -32,6 +39,17 @@ const statusStyle: Record<string, string> = {
   adapted: 'border-amber-400/40 bg-amber-950/20 text-amber-100',
 }
 
+function formatTimer(seconds: number) {
+  const safeSeconds = Math.max(0, seconds)
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainingSeconds = safeSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
+function getRestSeconds(workoutExercise: StrengthWorkoutExercise) {
+  return workoutExercise.rest_seconds && workoutExercise.rest_seconds > 0 ? workoutExercise.rest_seconds : 90
+}
+
 export function WorkoutPage() {
   const [sessionId, setSessionId] = useState(1)
   const [session, setSession] = useState<TrainingSession | null>(null)
@@ -41,6 +59,8 @@ export function WorkoutPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [forms, setForms] = useState<Record<number, SetForm>>({})
   const [alternativesState, setAlternativesState] = useState<AlternativesState>(null)
+  const [activeRestTimer, setActiveRestTimer] = useState<ActiveRestTimer>(null)
+  const [autoStartRestTimer, setAutoStartRestTimer] = useState(true)
 
   async function loadSession(id = sessionId) {
     try {
@@ -60,6 +80,19 @@ export function WorkoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
+  useEffect(() => {
+    if (!activeRestTimer || activeRestTimer.remaining <= 0) return
+
+    const intervalId = window.setInterval(() => {
+      setActiveRestTimer((current) => {
+        if (!current) return current
+        return { ...current, remaining: Math.max(0, current.remaining - 1) }
+      })
+    }, 1000)
+
+    return () => window.clearInterval(intervalId)
+  }, [activeRestTimer])
+
   const strengthExercises = session?.strength_exercises ?? []
   const completedSets = useMemo(
     () => strengthExercises.reduce((total, item) => total + (item.set_logs?.length ?? 0), 0),
@@ -70,6 +103,31 @@ export function WorkoutPage() {
     [strengthExercises],
   )
   const progress = plannedSets ? Math.round((completedSets / plannedSets) * 100) : 0
+  const totalVolume = useMemo(
+    () =>
+      strengthExercises.reduce(
+        (total, item) =>
+          total +
+          (item.set_logs ?? []).reduce((exerciseTotal, setLog) => exerciseTotal + Number(setLog.load) * setLog.reps, 0),
+        0,
+      ),
+    [strengthExercises],
+  )
+  const averageRpe = useMemo(() => {
+    const rpeValues = strengthExercises.flatMap((item) => (item.set_logs ?? []).map((setLog) => setLog.rpe)).filter((value): value is number => value !== null)
+    if (!rpeValues.length) return null
+    return rpeValues.reduce((total, value) => total + value, 0) / rpeValues.length
+  }, [strengthExercises])
+
+  function startRestTimer(workoutExercise: StrengthWorkoutExercise) {
+    const total = getRestSeconds(workoutExercise)
+    setActiveRestTimer({
+      workoutExerciseId: workoutExercise.id,
+      exerciseName: workoutExercise.exercise?.name ?? `Exercício ${workoutExercise.exercise_id}`,
+      remaining: total,
+      total,
+    })
+  }
 
   async function startSession() {
     if (!session) return
@@ -114,6 +172,9 @@ export function WorkoutPage() {
         rpe: form.rpe === '' ? null : Number(form.rpe),
       })
       setMessage(`Série ${nextSetNumber} registrada para ${workoutExercise.exercise?.name ?? 'exercício'}.`)
+      if (autoStartRestTimer) {
+        startRestTimer(workoutExercise)
+      }
       await loadSession(session?.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao registrar série')
@@ -214,6 +275,26 @@ export function WorkoutPage() {
             Status atual: <strong>{translateStatus(session?.status ?? 'planned')}</strong>
           </div>
         </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-mo-border bg-black/20 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-mo-muted">Volume registrado</p>
+            <p className="mt-2 text-2xl font-bold text-white">{totalVolume.toLocaleString('pt-BR')} kg</p>
+          </div>
+          <div className="rounded-2xl border border-mo-border bg-black/20 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-mo-muted">RPE médio</p>
+            <p className="mt-2 text-2xl font-bold text-white">{averageRpe ? averageRpe.toFixed(1) : '-'}</p>
+          </div>
+          <label className="flex items-center justify-between gap-3 rounded-2xl border border-mo-border bg-black/20 p-4 text-sm text-mo-muted">
+            Iniciar descanso automático
+            <input
+              checked={autoStartRestTimer}
+              onChange={(event) => setAutoStartRestTimer(event.target.checked)}
+              type="checkbox"
+              className="h-5 w-5 accent-mo-primary"
+            />
+          </label>
+        </div>
       </section>
 
       {error && (
@@ -221,6 +302,42 @@ export function WorkoutPage() {
       )}
       {message && (
         <div className="rounded-3xl border border-mo-primary/40 bg-mo-primary/10 p-5 text-mo-primary">{message}</div>
+      )}
+
+      {activeRestTimer && (
+        <section className="rounded-3xl border border-mo-primary/40 bg-mo-primary/10 p-5 shadow-glow">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <p className="text-sm uppercase tracking-[0.25em] text-mo-primary">Cronômetro de descanso</p>
+              <h3 className="mt-2 text-3xl font-bold text-white">{formatTimer(activeRestTimer.remaining)}</h3>
+              <p className="mt-1 text-sm text-mo-muted">
+                {activeRestTimer.remaining === 0
+                  ? `Descanso concluído para ${activeRestTimer.exerciseName}.`
+                  : `Descansando após ${activeRestTimer.exerciseName}.`}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setActiveRestTimer((current) => current ? { ...current, remaining: current.total } : current)}
+                className="rounded-2xl border border-mo-border px-4 py-2 text-sm font-semibold text-white"
+              >
+                Reiniciar
+              </button>
+              <button
+                onClick={() => setActiveRestTimer(null)}
+                className="rounded-2xl bg-mo-primary px-4 py-2 text-sm font-semibold text-black"
+              >
+                Encerrar
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 h-3 overflow-hidden rounded-full bg-black/40">
+            <div
+              className="h-full rounded-full bg-mo-primary transition-all"
+              style={{ width: `${activeRestTimer.total ? ((activeRestTimer.total - activeRestTimer.remaining) / activeRestTimer.total) * 100 : 0}%` }}
+            />
+          </div>
+        </section>
       )}
 
       {loading ? (
@@ -257,6 +374,43 @@ export function WorkoutPage() {
                   >
                     Trocar exercício
                   </button>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-mo-border bg-black/20 p-4">
+                  <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                    <div>
+                      <p className="text-sm font-semibold text-white">Checklist de séries</p>
+                      <p className="mt-1 text-xs text-mo-muted">Marcação automática conforme as séries são registradas.</p>
+                    </div>
+                    <button
+                      onClick={() => startRestTimer(item)}
+                      className="rounded-2xl border border-mo-border px-4 py-2 text-sm font-semibold text-white hover:border-mo-primary"
+                    >
+                      Iniciar descanso {formatTimer(getRestSeconds(item))}
+                    </button>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {Array.from({ length: item.planned_sets }).map((_, index) => {
+                      const setLog = item.set_logs?.[index]
+                      const isNext = !setLog && index === (item.set_logs?.length ?? 0)
+                      return (
+                        <label
+                          key={index}
+                          className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm ${
+                            setLog
+                              ? 'border-mo-primary/50 bg-mo-primary/10 text-mo-primary'
+                              : isNext
+                                ? 'border-amber-400/40 bg-amber-950/20 text-amber-100'
+                                : 'border-mo-border bg-white/[0.03] text-mo-muted'
+                          }`}
+                        >
+                          <input checked={Boolean(setLog)} readOnly type="checkbox" className="h-4 w-4 accent-mo-primary" />
+                          Série {index + 1}
+                          {isNext && <span className="text-xs">atual</span>}
+                        </label>
+                      )
+                    })}
+                  </div>
                 </div>
 
                 <div className="mt-5 grid gap-3 md:grid-cols-4">
@@ -311,7 +465,13 @@ export function WorkoutPage() {
                     disabled={saving}
                     className="rounded-2xl bg-mo-primary px-5 py-3 font-semibold text-black shadow-glow disabled:opacity-50"
                   >
-                    Registrar próxima série
+                    Registrar série
+                  </button>
+                  <button
+                    onClick={() => startRestTimer(item)}
+                    className="rounded-2xl border border-mo-border px-5 py-3 font-semibold text-white hover:border-mo-primary"
+                  >
+                    Descanso
                   </button>
                   <span className="text-sm text-mo-muted">
                     Registradas: {item.set_logs?.length ?? 0}/{item.planned_sets}

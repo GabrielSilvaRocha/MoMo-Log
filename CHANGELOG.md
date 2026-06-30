@@ -1,17 +1,13 @@
 # Changelog
 
-## v1.4.0 - Adaptation Engine
+## v1.5.0 - Workout Execution UX
 
-- Added backend Adaptation Engine service.
-- Added ranked exercise replacement suggestions.
-- Added penalties for unavailable/frequently busy equipment.
-- Added bonus for favorite equipment.
-- Added `/api/v1/adaptation/exercises/{exercise_id}/suggestions`.
-- Added frontend Adaptation page.
-- Updated workout swap flow to use recommendation score.
+### Added
+- Visual checklist for planned strength sets.
+- Automatic rest timer after set logging.
+- Manual rest timer action for each exercise.
+- Workout execution summary with total volume and average RPE.
+- Toggle to enable or disable automatic rest timer.
 
-## v1.3.0 - Editable Planning
-
-- Added weekly planning screen.
-- Added create/edit/delete training sessions.
-- Added strength exercises to sessions.
+### Changed
+- Workout page now better supports real gym execution, especially when following planned sets and rest intervals.

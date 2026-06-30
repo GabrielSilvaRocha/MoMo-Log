@@ -1,42 +1,31 @@
-# Mo² LOG
+# Mo² LOG — Release v1.5.0
 
-Mo² LOG is a hybrid training app for strength training and running.
+Hybrid training app for strength training and running.
 
-## v1.4.0
+This release improves the workout execution experience with a set checklist, automatic rest timer, workout summary cards and a more practical flow for gym sessions.
 
-This release introduces the first version of the Adaptation Engine.
+## Highlights
 
-### Highlights
+- Visual checklist for planned strength sets.
+- Automatic rest timer after logging a set.
+- Manual rest timer per exercise.
+- Registered volume summary during the workout.
+- Average RPE summary during the workout.
+- Adaptation Engine preserved for exercise swaps when equipment is busy or unavailable.
 
-- Smart exercise replacement ranking.
-- Context-aware suggestions based on user gym equipment.
-- Unavailable equipment is hidden from default suggestions but remains visible in "show all" mode.
-- Frequently busy equipment receives a score penalty.
-- Favorite equipment receives a score bonus.
-- New frontend page: **Adaptação**.
-
-## Running locally
+## Run
 
 ```bash
 docker compose down
 docker compose up --build
 ```
 
-In another terminal:
+Then run migrations and tests:
 
 ```bash
 docker compose exec backend alembic upgrade head
 docker compose exec backend python -m pytest -q -vv
 ```
 
-Frontend:
-
-```text
-http://localhost:5173
-```
-
-API docs:
-
-```text
-http://localhost:8000/docs
-```
+Frontend: http://localhost:5173
+Backend health: http://localhost:8000/api/v1/health
