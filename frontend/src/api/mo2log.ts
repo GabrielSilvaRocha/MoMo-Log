@@ -9,6 +9,8 @@ import type {
   Goal,
   HistorySummary,
   ReportOverview,
+  ProductMvpStatus,
+  ProductReleaseNotes,
   PersonalRecord,
   ManualRunningActivityPayload,
   RunningActivity,
@@ -28,6 +30,8 @@ import type {
 
 export const mo2logApi = {
   health: () => apiGet<ApiStatus>('/health'),
+  productStatus: () => apiGet<ProductMvpStatus>('/product/mvp-status'),
+  releaseNotes: () => apiGet<ProductReleaseNotes>('/product/release-notes'),
   weekDashboard: (userId = 1, referenceDate = '2026-06-29') =>
     apiGet<WeekDashboard>(`/dashboard/week?user_id=${userId}&reference_date=${referenceDate}`),
   weekStatistics: (userId = 1, referenceDate = '2026-06-29') =>

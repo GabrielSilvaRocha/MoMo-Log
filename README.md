@@ -1,25 +1,43 @@
 # Mo² LOG
 
-Mo² LOG é um aplicativo de treino híbrido para musculação e corrida.
+**Mo² LOG** é um aplicativo de treino híbrido para musculação e corrida. O foco do produto é ajudar o usuário a planejar, executar, adaptar e acompanhar sua evolução semanal.
 
-## Versão atual
+## Status
 
-`v1.7.0` — Relatórios e Exportação.
+Versão atual: **v2.0.0 — MVP Consolidado**
 
-## Módulos disponíveis
+## Módulos do MVP
 
 - Dashboard semanal
 - Planejamento editável
-- Execução de treino de musculação
-- Biblioteca de exercícios
-- Minha academia e equipamentos disponíveis
-- Motor de adaptação para troca de exercícios
-- Corridas com fonte manual, esteira, mock Strava e base OAuth Strava
-- Estatísticas, metas e recordes
-- Histórico de sessões com filtros e detalhes
-- Relatórios por período com exportação CSV
+- Execução de musculação com séries, carga, RIR, RPE e descanso
+- Motor de adaptação para trocar exercícios quando a academia estiver cheia
+- Configuração de equipamentos da academia
+- Corridas com cadastro manual, foco em esteira, e Strava opcional
+- Histórico de treinos
+- Relatórios e exportação CSV
+- Metas, recordes e estatísticas iniciais
 
-## Subir o projeto
+## Stack
+
+### Backend
+- FastAPI
+- SQLAlchemy
+- Alembic
+- PostgreSQL
+- Pytest
+
+### Frontend
+- React
+- Vite
+- TypeScript
+- TailwindCSS
+
+### Infra
+- Docker Compose
+- GitHub Actions
+
+## Como rodar
 
 ```bash
 docker compose down
@@ -33,23 +51,30 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend python -m pytest -q -vv
 ```
 
-Frontend:
+Acesse:
 
 ```text
-http://localhost:5173
+Frontend: http://localhost:5173
+Backend:  http://localhost:8000/docs
+Health:   http://localhost:8000/api/v1/health
+MVP:      http://localhost:8000/api/v1/product/mvp-status
 ```
 
-Backend:
+## Comandos úteis
 
-```text
-http://localhost:8000/api/v1/health
+```bash
+make rebuild
+make migrate
+make test
+make logs
 ```
 
-## Testes rápidos
+## Decisão de produto
 
-```text
-http://localhost:8000/api/v1/reports/overview?user_id=1
-http://localhost:8000/api/v1/reports/export/sessions.csv?user_id=1
-http://localhost:8000/api/v1/reports/export/running.csv?user_id=1
-http://localhost:8000/api/v1/reports/export/strength.csv?user_id=1
-```
+O Mo² LOG não depende exclusivamente do Strava. Como muitas corridas serão na esteira, o cadastro manual é parte central do Running Core. O Strava permanece como integração opcional.
+
+## Próximas milestones
+
+- v3.0.0 — autenticação real, perfil e dados separados por usuário
+- v4.0.0 — inteligência, comparação planejado vs realizado e insights avançados
+- v5.0.0 — deploy, documentação de portfólio e versão demonstrável

@@ -1,29 +1,32 @@
-# Mo² LOG Design System
+# Design System — Mo² LOG
 
-## Visual direction
+## Direção visual
 
-Mo² LOG uses a dark, performance-oriented interface with neon green accents.
+- Tema escuro.
+- Verde neon como cor de ação e progresso.
+- Cards arredondados com borda discreta.
+- Interface orientada à execução: o usuário deve saber rapidamente o que fazer hoje, o que falta na semana e como está evoluindo.
 
-## Color tokens
+## Componentes base
 
-```text
-Background: #050807
-Surface: #0b1110
-Elevated Surface: #111a18
-Border: #1c2a27
-Primary: #77ff6b
-Primary Soft: #d8ffd4
-Muted Text: #8fa19c
-```
+- `MetricCard`
+- `ProgressBar`
+- `SessionList`
+- `GoalCard`
+- `LoadingState`
+- `EmptyState`
+- `SectionHeader`
 
-## Components included in v0.8.0
+## Estados obrigatórios
 
-- MetricCard
-- ProgressBar
-- SessionList
-- GoalCard
-- AppShell
+Toda tela principal deve prever:
 
-## UX principle
+- loading;
+- erro;
+- vazio;
+- sucesso após ação;
+- feedback visual para ação em andamento.
 
-The dashboard should work as a command center: the user must understand what to do today, what has already been completed, what remains in the week and how performance is evolving.
+## Padrão de copy
+
+A linguagem deve ser direta, orientada à ação e ao treino híbrido.

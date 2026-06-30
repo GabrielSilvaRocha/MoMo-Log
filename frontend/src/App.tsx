@@ -8,18 +8,19 @@ import { ExerciseLibraryPage } from './pages/ExerciseLibraryPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { ReportsPage } from './pages/ReportsPage'
+import { MvpPage } from './pages/MvpPage'
 import { PlanningPage } from './pages/PlanningPage'
 import { RunningPage } from './pages/RunningPage'
 import { WorkoutPage } from './pages/WorkoutPage'
 
-export type AppView = 'dashboard' | 'planning' | 'workout' | 'running' | 'analytics' | 'history' | 'reports' | 'goals' | 'exercises' | 'adaptation'
+export type AppView = 'dashboard' | 'planning' | 'workout' | 'running' | 'analytics' | 'history' | 'reports' | 'goals' | 'exercises' | 'adaptation' | 'mvp'
 
 export default function App() {
   const [view, setView] = useState<AppView>('dashboard')
 
   useEffect(() => {
     const queryView = new URLSearchParams(window.location.search).get('view')
-    if (queryView && ['dashboard', 'planning', 'workout', 'running', 'analytics', 'history', 'reports', 'goals', 'exercises', 'adaptation'].includes(queryView)) {
+    if (queryView && ['dashboard', 'planning', 'workout', 'running', 'analytics', 'history', 'reports', 'goals', 'exercises', 'adaptation', 'mvp'].includes(queryView)) {
       setView(queryView as AppView)
       window.history.replaceState({}, '', window.location.pathname)
     }
@@ -37,6 +38,7 @@ export default function App() {
       {view === 'goals' && <GoalsPage />}
       {view === 'exercises' && <ExerciseLibraryPage />}
       {view === 'adaptation' && <AdaptationPage />}
+      {view === 'mvp' && <MvpPage />}
     </AppShell>
   )
 }

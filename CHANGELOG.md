@@ -1,28 +1,26 @@
 # Changelog
 
-## v1.7.0 - Relatórios e Exportação
+## v2.0.0 — MVP Consolidado
 
-### Added
-- Nova tela **Relatórios** no frontend.
-- Endpoint `GET /api/v1/reports/overview` para resumo exportável por período.
-- Exportação CSV de sessões: `GET /api/v1/reports/export/sessions.csv`.
-- Exportação CSV de corridas: `GET /api/v1/reports/export/running.csv`.
-- Exportação CSV de musculação: `GET /api/v1/reports/export/strength.csv`.
-- Insights consolidados por período para consistência, volume, corrida e esteira.
+### Adicionado
+- Endpoint `/api/v1/product/mvp-status` com visão consolidada dos módulos do produto.
+- Endpoint `/api/v1/product/release-notes` com destaques da versão.
+- Tela `MVP` no frontend com status dos módulos, checklist de fluxos e prioridades.
+- Componentes reutilizáveis `LoadingState`, `EmptyState` e `SectionHeader`.
+- Workflows `Backend CI` e `Frontend CI`.
+- `Makefile` com comandos úteis para desenvolvimento local.
 
-### Changed
-- Versão da aplicação atualizada para `1.7.0`.
-- Navegação do MVP passa a incluir **Relatórios** como visão própria.
+### Consolidado
+- MVP agora agrupa musculação, corrida manual/esteira, planejamento, adaptação, histórico, relatórios, metas e estatísticas.
+- Strava permanece como integração opcional, sem bloquear o uso principal do app.
 
-## v1.6.0 - Histórico de Treinos
+### Corrigido
+- Limpeza de artefatos gerados (`__pycache__`, `tsbuildinfo`) no pacote da release.
+- Documentação e versão atualizadas para `2.0.0`.
 
-### Added
-- Nova tela **Histórico** no frontend.
-- Endpoint `GET /api/v1/history/sessions` para consultar sessões por período, tipo e status.
-- Endpoint `GET /api/v1/history/summary` com resumo agregado do período.
-- Detalhe lateral de sessão com exercícios, séries, volume, corrida vinculada e status.
-- Filtros por data, tipo de sessão e status.
+## v1.7.0 — Relatórios e Exportação
+- Tela de relatórios.
+- Exportação CSV de sessões, corridas e musculação.
 
-### Changed
-- Versão da aplicação atualizada para `1.6.0`.
-- Navegação do MVP passa a incluir Histórico como visão própria.
+## v1.6.0 — Histórico de Treinos
+- Histórico de sessões e resumo por período.

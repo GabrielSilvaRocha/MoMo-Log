@@ -273,3 +273,33 @@ export type ReportOverview = {
   completion_rate: number
   insights: string[]
 }
+
+
+export type ProductModuleStatus = {
+  key: string
+  label: string
+  status: 'stable' | 'beta' | 'planned' | string
+  description: string
+}
+
+export type ProductUserFlow = {
+  key: string
+  label: string
+  coverage: number
+}
+
+export type ProductMvpStatus = {
+  app: string
+  version: string
+  milestone: string
+  status: string
+  modules: ProductModuleStatus[]
+  user_flows: ProductUserFlow[]
+  next_priorities: string[]
+}
+
+export type ProductReleaseNotes = {
+  version: string
+  title: string
+  highlights: string[]
+}

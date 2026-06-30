@@ -18,6 +18,7 @@ const navItems: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'goals', label: 'Metas', icon: '🎯' },
   { id: 'exercises', label: 'Exercícios', icon: '🔁' },
   { id: 'adaptation', label: 'Adaptação', icon: '🧠' },
+  { id: 'mvp', label: 'MVP', icon: '🚀' },
 ]
 
 export function AppShell({ children, currentView, onNavigate }: AppShellProps) {
@@ -29,11 +30,11 @@ export function AppShell({ children, currentView, onNavigate }: AppShellProps) {
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
               <p className="text-sm uppercase tracking-[0.4em] text-mo-primary">Mo² LOG</p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight">Treino híbrido inteligente</h1>
-              <p className="mt-2 text-mo-muted">Musculação, corrida, adaptação e evolução em um só fluxo.</p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight">MVP consolidado de treino híbrido</h1>
+              <p className="mt-2 text-mo-muted">Musculação, corrida de esteira, adaptação, histórico, relatórios e evolução em um só fluxo.</p>
             </div>
             <div className="rounded-2xl border border-mo-border bg-black/20 px-4 py-3 text-sm text-mo-muted">
-              API: <span className="text-mo-primary">localhost:8000</span>
+              MVP: <span className="text-mo-primary">v2.0.0</span>
             </div>
           </div>
 

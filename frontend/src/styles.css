@@ -18,3 +18,17 @@ body {
 button {
   cursor: pointer;
 }
+
+
+a {
+  color: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.scrollbar-soft {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(119, 255, 107, 0.35) rgba(255, 255, 255, 0.04);
+}

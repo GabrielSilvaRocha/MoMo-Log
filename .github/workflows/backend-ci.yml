@@ -22,10 +22,10 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres -d mo2log"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
+          --health-cmd "pg_isready -U postgres -d mo2log"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     defaults:
       run:
@@ -33,9 +33,7 @@ jobs:
 
     env:
       APP_ENV: test
-      APP_VERSION: 1.0.0
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mo2log
-      FRONTEND_ORIGIN: http://localhost:5173
       PYTHONPATH: ${{ github.workspace }}/backend
 
     steps:
@@ -52,8 +50,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run migrations
+      - name: Apply migrations
         run: alembic upgrade head
 
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -q -vv

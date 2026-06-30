@@ -9,6 +9,7 @@ settings = get_settings()
 app = FastAPI(
     title=f"{settings.app_name} API",
     version=settings.app_version,
+    description="API do Mo² LOG para treino híbrido: musculação, corrida, adaptação, histórico e relatórios.",
 )
 
 app.add_middleware(
