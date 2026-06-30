@@ -35,7 +35,7 @@ Tela do Running Core.
 
 Permite:
 
-- visualizar status Strava;
+- visualizar plano de corrida guiado;
 - sincronizar atividades mock;
 - listar corridas importadas;
 - ver distância, pace e tempo em movimento.

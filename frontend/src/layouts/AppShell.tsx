@@ -38,11 +38,11 @@ export function AppShell({ children, currentView, onNavigate, user, onLogout }: 
             <div>
               <p className="text-sm uppercase tracking-[0.4em] text-mo-primary">Mo² LOG</p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight">Mo² LOG com inteligência híbrida</h1>
-              <p className="mt-2 text-mo-muted">Treino híbrido, templates de musculação, esteira manual, adaptação, relatórios e inteligência de evolução.</p>
+              <p className="mt-2 text-mo-muted">Treino híbrido, templates de musculação, Running Coach para esteira, adaptação, relatórios e inteligência de evolução.</p>
             </div>
             <div className="flex flex-col gap-2 rounded-2xl border border-mo-border bg-black/20 px-4 py-3 text-sm text-mo-muted sm:items-end">
               <span>Usuário: <strong className="text-white">{user.name}</strong></span>
-              <span>Versão: <span className="text-mo-primary">v6.0.0</span></span>
+              <span>Versão: <span className="text-mo-primary">v6.1.0</span></span>
               <button onClick={onLogout} className="text-left text-xs font-semibold text-mo-primary hover:text-white sm:text-right">Sair</button>
             </div>
           </div>

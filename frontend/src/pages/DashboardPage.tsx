@@ -5,14 +5,13 @@ import { GoalCard } from '../components/GoalCard'
 import { MetricCard } from '../components/MetricCard'
 import { ProgressBar } from '../components/ProgressBar'
 import { SessionList } from '../components/SessionList'
-import type { ApiStatus, StravaStatus, WeekDashboard, WeeklyStatistics } from '../types/api'
+import type { ApiStatus, WeekDashboard, WeeklyStatistics } from '../types/api'
 import { formatNumber } from '../utils/format'
 
 type DashboardState = {
   health: ApiStatus | null
   dashboard: WeekDashboard | null
   statistics: WeeklyStatistics | null
-  strava: StravaStatus | null
 }
 
 type DashboardPageProps = {
@@ -24,7 +23,6 @@ export function DashboardPage({ onStartWorkout }: DashboardPageProps) {
     health: null,
     dashboard: null,
     statistics: null,
-    strava: null,
   })
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -35,15 +33,14 @@ export function DashboardPage({ onStartWorkout }: DashboardPageProps) {
     async function loadDashboard() {
       try {
         setLoading(true)
-        const [health, dashboard, statistics, strava] = await Promise.all([
+        const [health, dashboard, statistics] = await Promise.all([
           mo2logApi.health(),
           mo2logApi.weekDashboard(),
           mo2logApi.weekStatistics(),
-          mo2logApi.stravaStatus(),
         ])
 
         if (mounted) {
-          setState({ health, dashboard, statistics, strava })
+          setState({ health, dashboard, statistics })
           setError(null)
         }
       } catch (err) {
@@ -115,10 +112,9 @@ export function DashboardPage({ onStartWorkout }: DashboardPageProps) {
           <strong className="mt-2 block text-2xl text-white">{state.health?.status?.toUpperCase()}</strong>
           <p className="mt-2 text-sm text-mo-muted">Versão {state.health?.version}</p>
           <div className="mt-6 rounded-2xl bg-white/[0.03] p-4">
-            <p className="text-sm text-mo-muted">Strava</p>
-            <p className="mt-1 font-semibold text-white">
-              {state.strava?.connected ? 'Conta conectada' : 'Conta não conectada'}
-            </p>
+            <p className="text-sm text-mo-muted">Corrida</p>
+            <p className="mt-1 font-semibold text-white">Running Coach ativo</p>
+            <p className="mt-2 text-xs text-mo-muted">Plano por objetivo e execução guiada na esteira.</p>
           </div>
         </div>
       </section>
@@ -133,7 +129,7 @@ export function DashboardPage({ onStartWorkout }: DashboardPageProps) {
         <MetricCard
           label="Corrida na semana"
           value={`${formatNumber(dashboard?.weekly_running_distance_km ?? 0)} km`}
-          hint="Dados sincronizados pelo Running Core"
+          hint="Dados do plano e registros manuais"
           icon="🏃"
         />
         <MetricCard

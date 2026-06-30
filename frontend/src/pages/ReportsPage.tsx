@@ -58,7 +58,7 @@ export function ReportsPage() {
       },
       {
         label: 'Exportar corridas',
-        description: 'Corridas manuais, esteira, Strava/mock e métricas de pace.',
+        description: 'Corridas guiadas por objetivo, esteira e métricas de pace.',
         href: buildExportUrl('running', dateFrom, dateTo),
       },
       {

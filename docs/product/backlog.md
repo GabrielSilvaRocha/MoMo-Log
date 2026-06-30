@@ -19,4 +19,4 @@
 - [ ] Configuração de equipamentos da academia
 - [ ] Planejamento semanal
 - [ ] Sessões de treino
-- [ ] Integração Strava
+- [ ] Evoluir Running Coach com progressão automática

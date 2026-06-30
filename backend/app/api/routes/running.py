@@ -1,28 +1,21 @@
 from datetime import datetime, timezone
-import json
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.database.dependencies import get_db
-from app.integrations.strava.client import StravaClient, should_refresh_token
-from app.models.running import RunningActivity, StravaAccount, StravaSyncLog
+from app.models.running import RunningActivity
 from app.models.training import TrainingSession
 from app.models.user import User
-from app.schemas.running import (
-    RunningActivityCreate,
-    RunningActivityRead,
-    StravaStatusRead,
-    StravaSyncResponse,
-)
+from app.schemas.running import RunningActivityCreate, RunningActivityRead
 
 router = APIRouter(tags=["running"])
 
 
 def _calculate_average_speed(distance_m: Decimal, moving_time_s: int) -> Decimal:
+    # m/s para manter compatibilidade com o campo legado.
     return (distance_m / Decimal(moving_time_s)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
@@ -30,45 +23,6 @@ def _calculate_average_pace(distance_m: Decimal, moving_time_s: int) -> Decimal:
     minutes = Decimal(moving_time_s) / Decimal(60)
     kilometers = distance_m / Decimal(1000)
     return (minutes / kilometers).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-def _parse_strava_datetime(value: str | None) -> datetime:
-    if not value:
-        return datetime.now(timezone.utc)
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
-def _build_activity_from_strava_payload(
-    *,
-    user_id: int,
-    account_id: int,
-    payload: dict,
-) -> RunningActivity:
-    distance_m = Decimal(str(payload.get("distance") or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    moving_time_s = int(payload.get("moving_time") or 0)
-    elapsed_time_s = int(payload.get("elapsed_time") or moving_time_s)
-    average_speed = Decimal(str(payload.get("average_speed") or "0")).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-    max_speed = Decimal(str(payload.get("max_speed") or "0")).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-    elevation = Decimal(str(payload.get("total_elevation_gain") or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    average_pace = _calculate_average_pace(distance_m, moving_time_s) if distance_m > 0 and moving_time_s > 0 else None
-
-    return RunningActivity(
-        user_id=user_id,
-        strava_account_id=account_id,
-        strava_activity_id=str(payload.get("id")),
-        name=payload.get("name") or "Corrida Strava",
-        distance_m=distance_m,
-        moving_time_s=moving_time_s,
-        elapsed_time_s=elapsed_time_s,
-        average_speed=average_speed,
-        average_pace=average_pace,
-        max_speed=max_speed,
-        total_elevation_gain=elevation,
-        activity_type=payload.get("sport_type") or payload.get("type") or "Run",
-        source="strava",
-        start_date=_parse_strava_datetime(payload.get("start_date")),
-        raw_payload=json.dumps(payload, ensure_ascii=False),
-    )
 
 
 @router.get("/running-activities", response_model=list[RunningActivityRead])
@@ -89,6 +43,11 @@ def get_running_activity(activity_id: int, db: Session = Depends(get_db)) -> Run
 
 @router.post("/running-activities", response_model=RunningActivityRead, status_code=201)
 def create_running_activity(payload: RunningActivityCreate, db: Session = Depends(get_db)) -> RunningActivity:
+    """Mantém cadastro manual de corrida para histórico, principalmente esteira.
+
+    O módulo de corrida deixou de depender de integrações externas. Use este
+    endpoint para registrar atividades manuais realizadas fora do executor guiado.
+    """
     if db.get(User, payload.user_id) is None:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -102,6 +61,9 @@ def create_running_activity(payload: RunningActivityCreate, db: Session = Depend
             raise HTTPException(status_code=400, detail="Training session is not a running session")
 
     data = payload.model_dump()
+    data["strava_account_id"] = None
+    data["strava_activity_id"] = None
+    data["source"] = data.get("source") or "manual_treadmill"
     if data.get("average_speed") is None:
         data["average_speed"] = _calculate_average_speed(payload.distance_m, payload.moving_time_s)
     if data.get("average_pace") is None:
@@ -115,168 +77,8 @@ def create_running_activity(payload: RunningActivityCreate, db: Session = Depend
         if session is not None:
             session.status = "completed"
             session.started_at = payload.start_date
-            session.finished_at = payload.start_date
+            session.finished_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(activity)
     return activity
-
-
-@router.get("/strava/status", response_model=StravaStatusRead)
-def get_strava_status(user_id: int, db: Session = Depends(get_db)) -> dict:
-    account = db.execute(select(StravaAccount).where(StravaAccount.user_id == user_id)).scalar_one_or_none()
-    return {
-        "user_id": user_id,
-        "connected": account is not None,
-        "strava_athlete_id": account.strava_athlete_id if account else None,
-        "token_expires_at": account.token_expires_at if account else None,
-    }
-
-
-@router.post("/strava/sync", response_model=StravaSyncResponse)
-async def sync_strava(user_id: int, force_mock: bool = False, db: Session = Depends(get_db)) -> dict:
-    """Sincroniza corridas do Strava.
-
-    Quando OAuth está configurado e o usuário possui tokens, o endpoint busca
-    atividades reais. Quando ainda não há conexão, mantém o modo mock para o
-    desenvolvimento local do MVP.
-    """
-    if db.get(User, user_id) is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    account = db.execute(select(StravaAccount).where(StravaAccount.user_id == user_id)).scalar_one_or_none()
-    settings = get_settings()
-    client = StravaClient(settings)
-
-    if account is not None and account.access_token_encrypted and account.refresh_token_encrypted and client.is_configured and not force_mock:
-        if should_refresh_token(account):
-            refreshed = await client.refresh_access_token(account.refresh_token_encrypted)
-            account.access_token_encrypted = refreshed.get("access_token")
-            account.refresh_token_encrypted = refreshed.get("refresh_token")
-            expires_at = refreshed.get("expires_at")
-            account.token_expires_at = datetime.fromtimestamp(int(expires_at), tz=timezone.utc) if expires_at else None
-            db.flush()
-
-        activities_payload = await client.get_athlete_activities(
-            account.access_token_encrypted,
-            per_page=settings.strava_activity_limit,
-        )
-
-        imported = 0
-        updated = 0
-        ignored = 0
-
-        for payload in activities_payload:
-            activity_type = payload.get("sport_type") or payload.get("type")
-            if activity_type not in {"Run", "TrailRun", "VirtualRun"}:
-                ignored += 1
-                continue
-
-            strava_activity_id = str(payload.get("id"))
-            existing = db.execute(
-                select(RunningActivity).where(RunningActivity.strava_activity_id == strava_activity_id)
-            ).scalar_one_or_none()
-            if existing is not None:
-                existing.raw_payload = json.dumps(payload, ensure_ascii=False)
-                updated += 1
-                continue
-
-            db.add(_build_activity_from_strava_payload(user_id=user_id, account_id=account.id, payload=payload))
-            imported += 1
-
-        sync_log = StravaSyncLog(
-            user_id=user_id,
-            finished_at=datetime.now(timezone.utc),
-            imported_count=imported,
-            updated_count=updated,
-            ignored_count=ignored,
-            status="success",
-            message="Sincronização real com Strava concluída.",
-        )
-        db.add(sync_log)
-        db.commit()
-        return {
-            "imported": imported,
-            "updated": updated,
-            "ignored": ignored,
-            "status": "success",
-            "message": "Sincronização real com Strava concluída.",
-        }
-
-    # fallback mock para desenvolvimento local
-    if account is None:
-        account = StravaAccount(
-            user_id=user_id,
-            strava_athlete_id=f"demo-athlete-{user_id}",
-            access_token_encrypted=None,
-            refresh_token_encrypted=None,
-            token_expires_at=None,
-        )
-        db.add(account)
-        db.flush()
-
-    running_sessions = list(
-        db.execute(
-            select(TrainingSession)
-            .where(TrainingSession.user_id == user_id, TrainingSession.session_type == "running")
-            .order_by(TrainingSession.scheduled_date, TrainingSession.id)
-        ).scalars().all()
-    )
-
-    imported = 0
-    ignored = 0
-
-    for session in running_sessions:
-        existing = db.execute(
-            select(RunningActivity).where(RunningActivity.training_session_id == session.id)
-        ).scalar_one_or_none()
-        if existing is not None:
-            ignored += 1
-            continue
-
-        distance_m = Decimal("5000.00") if "Rodagem" in session.title else Decimal("6000.00")
-        moving_time_s = 1800 if distance_m == Decimal("5000.00") else 2100
-        start_datetime = datetime.combine(session.scheduled_date, datetime.min.time(), tzinfo=timezone.utc)
-
-        activity = RunningActivity(
-            user_id=user_id,
-            training_session_id=session.id,
-            strava_account_id=account.id,
-            strava_activity_id=f"demo-strava-{session.id}",
-            name=session.title,
-            distance_m=distance_m,
-            moving_time_s=moving_time_s,
-            elapsed_time_s=moving_time_s + 60,
-            average_speed=_calculate_average_speed(distance_m, moving_time_s),
-            average_pace=_calculate_average_pace(distance_m, moving_time_s),
-            max_speed=Decimal("4.20"),
-            total_elevation_gain=Decimal("35.00"),
-            activity_type="Run",
-            source="strava_mock",
-            start_date=start_datetime,
-        )
-        session.status = "completed"
-        session.started_at = start_datetime
-        session.finished_at = start_datetime
-        db.add(activity)
-        imported += 1
-
-    sync_log = StravaSyncLog(
-        user_id=user_id,
-        finished_at=datetime.now(timezone.utc),
-        imported_count=imported,
-        updated_count=0,
-        ignored_count=ignored,
-        status="success",
-        message="Sincronização mock concluída. Configure o OAuth para usar dados reais do Strava.",
-    )
-    db.add(sync_log)
-    db.commit()
-
-    return {
-        "imported": imported,
-        "updated": 0,
-        "ignored": ignored,
-        "status": "success",
-        "message": "Sincronização mock concluída. Configure o OAuth para usar dados reais do Strava.",
-    }

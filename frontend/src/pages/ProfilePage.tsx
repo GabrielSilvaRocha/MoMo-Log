@@ -8,9 +8,7 @@ import type { AuthenticatedUser, UserPreference } from '../types/api'
 const sourceOptions = [
   { value: 'manual_treadmill', label: 'Esteira manual' },
   { value: 'manual_outdoor', label: 'Corrida manual externa' },
-  { value: 'strava', label: 'Strava opcional' },
-  { value: 'samsung_health', label: 'Samsung Health futuro' },
-  { value: 'health_connect', label: 'Health Connect futuro' },
+  { value: 'running_coach', label: 'Running Coach / plano por objetivo' },
 ]
 
 export function ProfilePage() {

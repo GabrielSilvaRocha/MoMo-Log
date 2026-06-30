@@ -13,7 +13,7 @@ O Mo² LOG não deve versionar senhas, tokens, secrets, client secrets ou arquiv
 
 - `backend/.env`
 - tokens OAuth
-- client secrets do Strava
+- client secrets de integrações externas futuras
 - senhas demo
 - chaves JWT reais
 

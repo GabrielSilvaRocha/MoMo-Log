@@ -67,7 +67,6 @@ export type RunningActivity = {
   id: number
   user_id: number
   training_session_id: number | null
-  strava_activity_id: string | null
   name: string
   distance_m: string
   moving_time_s: number
@@ -147,21 +146,6 @@ export type WeeklyStatistics = {
   insights: string[]
 }
 
-export type StravaStatus = {
-  connected: boolean
-  user_id: number
-  strava_athlete_id?: string
-  token_expires_at?: string
-}
-
-export type StravaSyncResult = {
-  imported: number
-  updated: number
-  ignored: number
-  status: string
-  message: string
-}
-
 export type Equipment = {
   id: number
   name: string
@@ -182,13 +166,99 @@ export type ExerciseSwapResult = {
   message: string
 }
 
-export type StravaAuthorizeResponse = {
-  authorization_url: string
-  configured: boolean
-  scope: string
-  redirect_uri: string
+
+export type RunningGoal = {
+  id: number
+  user_id: number
+  goal_type: string
+  race_distance_km: string
+  race_date: string
+  current_5k_time_seconds: number | null
+  target_5k_time_seconds: number | null
+  training_location: string
+  available_weekdays: string
+  status: string
 }
 
+export type RunningWorkoutStep = {
+  id: number
+  running_plan_session_id: number
+  order_index: number
+  step_type: string
+  title: string
+  target_distance_m: number | null
+  target_duration_seconds: number | null
+  target_pace_seconds_per_km: number | null
+  target_speed_kmh: string | null
+  rest_seconds: number | null
+  notes: string | null
+}
+
+export type RunningPlanSession = {
+  id: number
+  user_id: number
+  goal_id: number
+  training_session_id: number | null
+  session_type: string
+  title: string
+  scheduled_date: string
+  description: string | null
+  target_distance_km: string | null
+  target_duration_seconds: number | null
+  target_pace_seconds_per_km: number | null
+  target_speed_kmh: string | null
+  status: string
+  steps: RunningWorkoutStep[]
+}
+
+export type RunningExecution = {
+  id: number
+  running_plan_session_id: number
+  started_at: string
+  finished_at: string | null
+  status: string
+  total_distance_km: string | null
+  total_duration_seconds: number | null
+  average_speed_kmh: string | null
+  average_pace_seconds_per_km: number | null
+}
+
+export type RunningStepLog = {
+  id: number
+  running_execution_log_id: number
+  running_workout_step_id: number
+  planned_speed_kmh: string | null
+  actual_speed_kmh: string | null
+  started_at: string
+  finished_at: string | null
+  completed: boolean
+}
+
+export type RunningSpeedAdjustment = {
+  id: number
+  running_step_log_id: number
+  adjustment_type: string
+  previous_speed_kmh: string | null
+  new_speed_kmh: string | null
+  created_at: string
+}
+
+export type RunningGoalPayload = {
+  user_id: number
+  goal_type?: string
+  race_distance_km: number
+  race_date: string
+  current_5k_time_seconds?: number | null
+  target_5k_time_seconds?: number | null
+  training_location?: string
+  available_weekdays?: string
+}
+
+export type RunningPlanGenerateResponse = {
+  goal_id: number
+  created_sessions: number
+  message: string
+}
 
 export type ManualRunningActivityPayload = {
   user_id: number

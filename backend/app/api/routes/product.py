@@ -14,7 +14,7 @@ def get_mvp_status() -> dict:
         {"key": "templates", "label": "Templates", "status": "stable", "description": "Biblioteca de treinos reutilizáveis e criação rápida de sessões planejadas."},
         {"key": "workout", "label": "Execução de treino", "status": "stable", "description": "Registro de séries, checklist, volume do treino, RPE e cronômetro de descanso."},
         {"key": "adaptation", "label": "Adaptação", "status": "stable", "description": "Sugestões de substituição com penalidade para equipamento indisponível e bônus para favoritos."},
-        {"key": "running", "label": "Corridas", "status": "stable", "description": "Cadastro manual de esteira, sincronização mock e Strava opcional."},
+        {"key": "running", "label": "Corridas", "status": "stable", "description": "Running Coach com objetivo de 5 km, plano de esteira e execução guiada."},
         {"key": "history", "label": "Histórico", "status": "stable", "description": "Consulta de sessões por período, status e tipo."},
         {"key": "reports", "label": "Relatórios", "status": "stable", "description": "Resumo por período e exportação CSV."},
         {"key": "analytics", "label": "Estatísticas", "status": "stable", "description": "Metas, recordes pessoais e insights iniciais."},
@@ -30,7 +30,7 @@ def get_mvp_status() -> dict:
         {"key": "weekly_planning", "label": "Editar planejamento semanal", "coverage": 95},
         {"key": "schedule_template", "label": "Criar sessão a partir de template", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
-        {"key": "strava_real_oauth", "label": "Strava real via OAuth", "coverage": 60},
+        {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 60},
         {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 10},
         {"key": "user_authentication", "label": "Entrar, cadastrar e manter sessão local", "coverage": 100},
         {"key": "user_preferences", "label": "Configurar fonte padrão de corrida e metas semanais", "coverage": 100},
@@ -38,7 +38,7 @@ def get_mvp_status() -> dict:
 
     next_priorities = [
         "Templates customizáveis criados pelo usuário",
-        "Importação GPX/CSV/FIT",
+        "Progressão automática do plano de corrida",
         "Evolução de carga por exercício",
         "Previsões por distância e prova-alvo",
         "Health Connect / Samsung Health no app mobile",
@@ -47,7 +47,7 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Templates e Workout Builder",
+        "milestone": "Running Coach Core",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -58,12 +58,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "6.0.0",
-        "title": "Templates e Workout Builder",
+        "version": "6.1.0",
+        "title": "Running Coach Core",
         "highlights": [
-            "Nova tela Templates para reutilizar treinos de musculação.",
-            "Endpoint para listar templates e agendar uma sessão a partir de um template.",
-            "Migration com templates iniciais para pernas, empurrar e costas + core.",
-            "Fluxo mais rápido para montar a semana sem cadastrar cada exercício manualmente.",
+            "Reforma completa do módulo Corridas para Running Coach.",
+            "Remoção do Strava do fluxo principal e da interface.",
+            "Objetivo inicial de 5 km com plano progressivo para esteira.",
+            "Execução guiada com etapas, cronômetro regressivo e ajuste de velocidade +/−.",
         ],
     }

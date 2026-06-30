@@ -10,4 +10,4 @@ Como usuário, quero marcar que uma máquina não existe na minha academia para 
 
 ## Corrida
 
-Como usuário, quero sincronizar minhas corridas do Strava para acompanhar minha evolução junto com a musculação.
+Como usuário, quero definir uma prova de 5 km e receber um plano de treinos de esteira até a data da corrida.

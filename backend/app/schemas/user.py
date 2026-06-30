@@ -46,7 +46,7 @@ class UserPreferenceRead(BaseModel):
 
 
 class UserPreferenceUpdate(BaseModel):
-    default_running_source: str | None = Field(default=None, pattern="^(manual_treadmill|manual_outdoor|manual|strava|samsung_health|health_connect|gpx_import|csv_import|fit_import)$")
+    default_running_source: str | None = Field(default=None, pattern="^(running_coach|manual_treadmill|manual_outdoor|manual)$")
     preferred_training_days: str | None = Field(default=None, max_length=120)
     weekly_running_goal_km: int | None = Field(default=None, ge=0, le=300)
     weekly_strength_goal_sessions: int | None = Field(default=None, ge=0, le=14)

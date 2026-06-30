@@ -1,27 +1,22 @@
 # Changelog
 
-## v6.0.0 - Templates e Workout Builder
+## 6.1.0 — Running Coach Core
 
-### Adicionado
-- Tela **Templates** no frontend.
-- Endpoint `GET /api/v1/workout-templates`.
-- Endpoint `GET /api/v1/workout-templates/{template_id}`.
-- Endpoint `POST /api/v1/workout-templates/{template_id}/schedule`.
-- Models `WorkoutTemplate` e `WorkoutTemplateExercise`.
-- Migration `20260630_0008_create_workout_templates`.
-- Templates iniciais para:
-  - Pernas — Força e base
-  - Superior — Empurrar
-  - Costas + Core
-- Criação automática de sessão de musculação a partir de template.
-- Cópia automática dos exercícios planejados para a sessão criada.
-- Testes básicos para os endpoints de template.
+### Added
+- Objetivo de corrida próprio para prova de 5 km.
+- Plano de treinos de corrida gerado até a prova.
+- Sessões de corrida com etapas de aquecimento, tiros, recuperação e desaquecimento.
+- Execução guiada para esteira com pace alvo, velocidade alvo e cronômetro regressivo.
+- Botões `+` e `-` para ajustar velocidade em 0,1 km/h durante a execução.
+- Registro de ajustes de velocidade para análise futura.
+- Endpoints `running-goals`, `running-plan`, `running-executions`, `running-step-logs`.
+- Migration `20260630_0009_create_running_coach_core`.
 
-### Atualizado
-- Versão da aplicação para `6.0.0`.
-- Tela MVP com módulo Templates.
-- Release notes do produto.
-- Navegação principal do frontend.
+### Changed
+- O módulo Corridas deixa de depender de integrações externas.
+- A interface de Corridas passa a priorizar planejamento e execução guiada.
+- O dashboard passa a exibir Running Coach como status de corrida.
 
-### Objetivo
-Reduzir o atrito no planejamento semanal. Em vez de criar todos os exercícios manualmente, o usuário pode reutilizar templates e gerar sessões completas em poucos segundos.
+### Removed
+- Rotas públicas de OAuth/sincronização Strava do roteador principal.
+- Botões de conexão/sincronização externa na tela Corridas.

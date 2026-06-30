@@ -3,7 +3,7 @@
 ## v2.0.0 — MVP Consolidado
 
 - Consolidar telas e fluxos principais.
-- Manter Strava como opcional.
+- Consolidar Running Coach como fluxo principal de corrida.
 - Priorizar corrida manual de esteira.
 - Adicionar status de produto e checklist do MVP.
 

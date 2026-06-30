@@ -19,10 +19,16 @@ from app.models.training import (  # noqa: F401
     TrainingPlan,
     TrainingSession,
 )
-from app.models.running import (
+from app.models.running import (  # noqa: F401
     RunningActivity,
     StravaAccount,
     StravaSyncLog,
+    RunningGoal,
+    RunningPlanSession,
+    RunningWorkoutStep,
+    RunningExecutionLog,
+    RunningStepLog,
+    RunningSpeedAdjustment,
 )
 from app.models.user import User, UserPreference  # noqa: F401
 

@@ -24,7 +24,7 @@ def get_operations_status(db: Session = Depends(get_db)) -> dict:
         {"key": "backend", "label": "Backend API", "status": "ok", "detail": "FastAPI online"},
         {"key": "database", "label": "PostgreSQL", "status": "ok" if database_ok else "error", "detail": database_message},
         {"key": "frontend", "label": "Frontend", "status": "external", "detail": "Validado pelo build do Vite e Docker"},
-        {"key": "strava", "label": "Strava", "status": "optional", "detail": "Integração opcional; cadastro manual de esteira permanece como fonte principal"},
+        {"key": "running_coach", "label": "Running Coach", "status": "optional", "detail": "Plano por objetivo e execução guiada de esteira sem integrações externas"},
     ]
 
     return {
@@ -39,7 +39,7 @@ def get_operations_status(db: Session = Depends(get_db)) -> dict:
 @router.get("/deployment-checklist")
 def get_deployment_checklist() -> dict:
     return {
-        "version": "6.0.0",
+        "version": "6.1.0",
         "title": "Checklist de deploy e portfólio",
         "items": [
             {"key": "env", "label": "Variáveis de ambiente separadas por ambiente", "status": "ready"},

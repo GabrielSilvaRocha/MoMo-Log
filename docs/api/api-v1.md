@@ -47,10 +47,12 @@ POST /training-sessions/{id}/swap-exercise
 GET /running-activities
 POST /running-activities
 GET /running-activities/{id}
-POST /strava/sync
-GET /strava/status
-GET /auth/strava/authorize
-GET /auth/strava/callback
+POST /running-goals
+GET /running-goals/current
+POST /running-goals/{id}/generate-plan
+GET /running-plan/week
+GET /running-plan/sessions/{id}
+POST /running-plan/sessions/{id}/start
 ```
 
 ## Exercícios e academia

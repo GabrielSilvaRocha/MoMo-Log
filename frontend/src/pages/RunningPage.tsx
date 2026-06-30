@@ -1,74 +1,81 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
 import { getCurrentUserId } from '../auth/session'
+import { LoadingState } from '../components/LoadingState'
 import { MetricCard } from '../components/MetricCard'
-import type { RunningActivity, StravaStatus, StravaSyncResult } from '../types/api'
-import { formatDateTime, formatDuration, formatNumber, formatPace } from '../utils/format'
+import type { RunningExecution, RunningGoal, RunningPlanSession, RunningStepLog, RunningWorkoutStep } from '../types/api'
+import { formatDateTime, formatDuration, formatNumber } from '../utils/format'
 
-type RunningState = {
-  activities: RunningActivity[]
-  strava: StravaStatus | null
+function formatPaceFromSeconds(seconds?: number | null) {
+  if (!seconds || seconds <= 0) return '—'
+  const min = Math.floor(seconds / 60)
+  const sec = seconds % 60
+  return `${min}:${String(sec).padStart(2, '0')}/km`
 }
 
-type ManualRunForm = {
-  name: string
-  distanceKm: string
-  durationMinutes: string
-  startDate: string
-  startTime: string
-  notes: string
+function formatClock(seconds: number) {
+  const safe = Math.max(0, Math.floor(seconds))
+  const min = Math.floor(safe / 60)
+  const sec = safe % 60
+  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-const sourceLabels: Record<string, string> = {
-  manual_treadmill: 'Esteira manual',
-  manual_outdoor: 'Manual rua',
-  manual: 'Manual',
-  samsung_health: 'Samsung Health',
-  health_connect: 'Health Connect',
-  gpx_import: 'GPX',
-  strava: 'Strava',
-  strava_mock: 'Mock Strava',
+function timeToSeconds(value: string) {
+  const [minutes, seconds] = value.split(':').map((part) => Number(part))
+  return (minutes || 0) * 60 + (seconds || 0)
 }
 
-function getSourceLabel(source?: string | null) {
-  if (!source) return 'Manual'
-  return sourceLabels[source] ?? source
+function secondsToTime(seconds?: number | null) {
+  if (!seconds) return ''
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-function getTodayDateInput() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function getNowTimeInput() {
-  return new Date().toTimeString().slice(0, 5)
+function stepTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    warmup: 'Aquecimento',
+    run: 'Corrida',
+    interval: 'Tiro',
+    recovery: 'Recuperação',
+    rest: 'Descanso',
+    cooldown: 'Desaquecimento',
+  }
+  return labels[type] ?? type
 }
 
 export function RunningPage() {
-  const [state, setState] = useState<RunningState>({ activities: [], strava: null })
+  const [goal, setGoal] = useState<RunningGoal | null>(null)
+  const [plan, setPlan] = useState<RunningPlanSession[]>([])
+  const [selectedSession, setSelectedSession] = useState<RunningPlanSession | null>(null)
+  const [execution, setExecution] = useState<RunningExecution | null>(null)
+  const [activeStep, setActiveStep] = useState<RunningWorkoutStep | null>(null)
+  const [activeStepLog, setActiveStepLog] = useState<RunningStepLog | null>(null)
+  const [remainingSeconds, setRemainingSeconds] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [savingManualRun, setSavingManualRun] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [syncResult, setSyncResult] = useState<StravaSyncResult | null>(null)
-  const [manualRun, setManualRun] = useState<ManualRunForm>({
-    name: 'Corrida na esteira',
-    distanceKm: '',
-    durationMinutes: '',
-    startDate: getTodayDateInput(),
-    startTime: getNowTimeInput(),
-    notes: '',
+  const [message, setMessage] = useState<string | null>(null)
+  const [goalForm, setGoalForm] = useState({
+    raceDate: '2026-08-16',
+    current5k: '24:58',
+    target5k: '23:30',
   })
 
   async function load() {
     try {
       setLoading(true)
-      const [activities, strava] = await Promise.all([mo2logApi.runningActivities(getCurrentUserId()), mo2logApi.stravaStatus(getCurrentUserId())])
-      setState({ activities, strava })
+      let currentGoal: RunningGoal | null = null
+      try {
+        currentGoal = await mo2logApi.currentRunningGoal(getCurrentUserId())
+      } catch {
+        currentGoal = null
+      }
+      const week = await mo2logApi.runningPlanWeek(getCurrentUserId(), '2026-06-29')
+      setGoal(currentGoal)
+      setPlan(week)
+      if (!selectedSession && week.length) setSelectedSession(week[0])
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar corridas')
+      setError(err instanceof Error ? err.message : 'Erro ao carregar plano de corrida')
     } finally {
       setLoading(false)
     }
@@ -76,292 +83,232 @@ export function RunningPage() {
 
   useEffect(() => {
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const summary = useMemo(() => {
-    const totalDistanceKm = state.activities.reduce((total, activity) => total + Number(activity.distance_m) / 1000, 0)
-    const totalSeconds = state.activities.reduce((total, activity) => total + activity.moving_time_s, 0)
-    const avgPace = totalDistanceKm > 0 ? totalSeconds / 60 / totalDistanceKm : 0
-    const treadmillCount = state.activities.filter((activity) => activity.source === 'manual_treadmill').length
+  useEffect(() => {
+    if (!activeStep || remainingSeconds <= 0) return
+    const timer = window.setInterval(() => {
+      setRemainingSeconds((current) => Math.max(0, current - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [activeStep, remainingSeconds])
 
-    return {
-      totalDistanceKm,
-      totalSeconds,
-      avgPace,
-      count: state.activities.length,
-      treadmillCount,
-    }
-  }, [state.activities])
+  const weeklySummary = useMemo(() => {
+    const distance = plan.reduce((total, session) => total + Number(session.target_distance_km ?? 0), 0)
+    const duration = plan.reduce((total, session) => total + Number(session.target_duration_seconds ?? 0), 0)
+    const intervals = plan.filter((session) => session.session_type === 'interval').length
+    return { distance, duration, intervals, sessions: plan.length }
+  }, [plan])
 
-  async function connectStrava() {
+  async function saveGoalAndGenerate() {
     try {
-      const response = await mo2logApi.stravaAuthorize(getCurrentUserId())
-      if (!response.configured) {
-        setError('OAuth do Strava ainda não está configurado. Como alternativa, use o cadastro manual para corridas na esteira.')
-        return
-      }
-      window.location.href = response.authorization_url
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao iniciar conexão com Strava')
-    }
-  }
-
-  async function syncStrava() {
-    setSyncing(true)
-    setSyncResult(null)
-    setSuccessMessage(null)
-    try {
-      const result = await mo2logApi.stravaSync(getCurrentUserId())
-      setSyncResult(result)
-      await load()
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao sincronizar Strava')
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  async function createManualRun(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSavingManualRun(true)
-    setSuccessMessage(null)
-    setSyncResult(null)
-
-    try {
-      const distanceKm = Number(manualRun.distanceKm.replace(',', '.'))
-      const durationMinutes = Number(manualRun.durationMinutes.replace(',', '.'))
-
-      if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
-        throw new Error('Informe uma distância válida em km.')
-      }
-
-      if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-        throw new Error('Informe uma duração válida em minutos.')
-      }
-
-      const startDateTime = new Date(`${manualRun.startDate}T${manualRun.startTime || '00:00'}:00`)
-
-      await mo2logApi.createManualRun({
+      const createdGoal = await mo2logApi.createRunningGoal({
         user_id: getCurrentUserId(),
-        name: manualRun.name.trim() || 'Corrida na esteira',
-        distance_m: Math.round(distanceKm * 1000),
-        moving_time_s: Math.round(durationMinutes * 60),
-        elapsed_time_s: Math.round(durationMinutes * 60),
-        activity_type: 'TreadmillRun',
-        source: 'manual_treadmill',
-        start_date: startDateTime.toISOString(),
-        total_elevation_gain: 0,
+        race_distance_km: 5,
+        race_date: `${goalForm.raceDate}T09:00:00Z`,
+        current_5k_time_seconds: timeToSeconds(goalForm.current5k),
+        target_5k_time_seconds: timeToSeconds(goalForm.target5k),
+        training_location: 'treadmill',
+        available_weekdays: 'mon,tue,wed,thu,fri',
       })
-
-      setManualRun({
-        name: 'Corrida na esteira',
-        distanceKm: '',
-        durationMinutes: '',
-        startDate: getTodayDateInput(),
-        startTime: getNowTimeInput(),
-        notes: '',
-      })
-      setSuccessMessage('Corrida na esteira registrada com sucesso.')
-      setError(null)
+      await mo2logApi.generateRunningPlan(createdGoal.id)
+      setMessage('Objetivo salvo e plano de esteira gerado com sucesso.')
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao cadastrar corrida manual')
-    } finally {
-      setSavingManualRun(false)
+      setError(err instanceof Error ? err.message : 'Erro ao gerar plano')
     }
   }
+
+  async function regeneratePlan() {
+    if (!goal) return
+    try {
+      const result = await mo2logApi.generateRunningPlan(goal.id)
+      setMessage(result.message)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao gerar plano')
+    }
+  }
+
+  async function startSession(session: RunningPlanSession) {
+    try {
+      const started = await mo2logApi.startRunningExecution(session.id)
+      setExecution(started)
+      setSelectedSession(session)
+      setMessage('Execução iniciada. Siga as etapas na esteira.')
+      const firstStep = session.steps[0]
+      if (firstStep) await startStep(started.id, firstStep)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao iniciar corrida')
+    }
+  }
+
+  async function startStep(executionId: number, step: RunningWorkoutStep) {
+    const log = await mo2logApi.startRunningStep(executionId, step.id)
+    setActiveStep(step)
+    setActiveStepLog(log)
+    setRemainingSeconds(step.target_duration_seconds ?? step.rest_seconds ?? 0)
+  }
+
+  async function adjustSpeed(direction: 'up' | 'down') {
+    if (!activeStepLog) return
+    const adjustment = direction === 'up'
+      ? await mo2logApi.speedUpRunningStep(activeStepLog.id)
+      : await mo2logApi.speedDownRunningStep(activeStepLog.id)
+    setActiveStepLog((current) => current ? { ...current, actual_speed_kmh: adjustment.new_speed_kmh } : current)
+  }
+
+  async function finishExecution() {
+    if (!execution) return
+    const finished = await mo2logApi.finishRunningExecution(execution.id)
+    setExecution(finished)
+    setMessage('Treino finalizado e registrado no Running Coach.')
+    await load()
+  }
+
+  const currentSpeed = activeStepLog?.actual_speed_kmh ?? activeStep?.target_speed_kmh ?? selectedSession?.target_speed_kmh ?? null
+
+  if (loading) return <LoadingState title="Carregando corrida" description="Montando objetivo, plano e execução guiada." />
 
   return (
     <main className="space-y-6">
       <section className="rounded-3xl border border-mo-border bg-mo-surface p-6 shadow-glow">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-mo-primary">Running Sources</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white">Corridas</h2>
-            <p className="mt-3 max-w-3xl text-mo-muted">
-              O Mo² LOG agora não depende apenas do Strava. Você pode registrar corridas manualmente, especialmente treinos na esteira,
-              manter o Strava como fonte opcional e preparar a base para Samsung Health / Health Connect no futuro.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              onClick={connectStrava}
-              className="rounded-2xl border border-mo-primary/50 px-5 py-3 font-semibold text-mo-primary transition hover:bg-mo-primary/10"
-            >
-              Conectar Strava
-            </button>
-            <button
-              onClick={syncStrava}
-              disabled={syncing}
-              className="rounded-2xl bg-mo-primary px-5 py-3 font-semibold text-black shadow-glow disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {syncing ? 'Sincronizando...' : 'Sincronizar mock/Strava'}
-            </button>
-          </div>
-        </div>
+        <p className="text-sm uppercase tracking-[0.3em] text-mo-primary">Running Coach</p>
+        <h2 className="mt-3 text-3xl font-bold tracking-tight text-white">Plano de corrida para 5 km na esteira</h2>
+        <p className="mt-3 max-w-4xl text-mo-muted">
+          O módulo de corridas agora é guiado por objetivo. Sem Strava, sem integrações externas: você define a prova, o Mo² LOG monta o plano e executa cada treino com pace, velocidade da esteira, etapas e cronômetro regressivo.
+        </p>
       </section>
 
       {error && <div className="rounded-3xl border border-red-500/40 bg-red-950/30 p-5 text-red-100">{error}</div>}
-      {successMessage && <div className="rounded-3xl border border-mo-primary/40 bg-mo-primary/10 p-5 text-mo-primary">{successMessage}</div>}
-      {syncResult && (
-        <div className="rounded-3xl border border-mo-primary/40 bg-mo-primary/10 p-5 text-mo-primary">
-          {syncResult.message} Importadas: {syncResult.imported} · Ignoradas: {syncResult.ignored}
-        </div>
-      )}
+      {message && <div className="rounded-3xl border border-mo-primary/40 bg-mo-primary/10 p-5 text-mo-primary">{message}</div>}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Corridas" value={String(summary.count)} hint="Atividades registradas" icon="🏃" />
-        <MetricCard label="Esteira" value={String(summary.treadmillCount)} hint="Entradas manuais" icon="🏟️" />
-        <MetricCard label="Distância total" value={`${formatNumber(summary.totalDistanceKm)} km`} hint="Somatório das atividades" icon="📏" />
-        <MetricCard label="Tempo em movimento" value={formatDuration(summary.totalSeconds)} hint="Tempo efetivo de corrida" icon="⏱️" />
-        <MetricCard label="Pace médio" value={formatPace(summary.avgPace)} hint="Média calculada do histórico" icon="⚡" />
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Sessões da semana" value={String(weeklySummary.sessions)} hint="Plano atual" icon="📅" />
+        <MetricCard label="Km planejados" value={`${formatNumber(weeklySummary.distance)} km`} hint="Somatório da semana" icon="📏" />
+        <MetricCard label="Tempo planejado" value={formatDuration(weeklySummary.duration)} hint="Tempo estimado" icon="⏱️" />
+        <MetricCard label="Intervalados" value={String(weeklySummary.intervals)} hint="Treinos com etapas" icon="⚡" />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <form onSubmit={createManualRun} className="rounded-3xl border border-mo-border bg-mo-surface p-5">
-          <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-mo-primary">Entrada manual</p>
-            <h3 className="mt-2 text-xl font-semibold text-white">Registrar corrida na esteira</h3>
-            <p className="mt-2 text-sm text-mo-muted">
-              Use quando a corrida for feita na esteira ou quando você preferir lançar o treino sem depender de integração externa.
-            </p>
-          </div>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-sm font-medium text-mo-muted">Nome do treino</span>
-              <input
-                value={manualRun.name}
-                onChange={(event) => setManualRun((current) => ({ ...current, name: event.target.value }))}
-                className="w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white outline-none transition focus:border-mo-primary"
-                placeholder="Corrida na esteira"
-              />
-            </label>
-
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-mo-muted">Distância (km)</span>
-              <input
-                value={manualRun.distanceKm}
-                onChange={(event) => setManualRun((current) => ({ ...current, distanceKm: event.target.value }))}
-                className="w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white outline-none transition focus:border-mo-primary"
-                inputMode="decimal"
-                placeholder="5,00"
-              />
-            </label>
-
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-mo-muted">Duração (min)</span>
-              <input
-                value={manualRun.durationMinutes}
-                onChange={(event) => setManualRun((current) => ({ ...current, durationMinutes: event.target.value }))}
-                className="w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white outline-none transition focus:border-mo-primary"
-                inputMode="decimal"
-                placeholder="30"
-              />
-            </label>
-
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-mo-muted">Data</span>
-              <input
-                type="date"
-                value={manualRun.startDate}
-                onChange={(event) => setManualRun((current) => ({ ...current, startDate: event.target.value }))}
-                className="w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white outline-none transition focus:border-mo-primary"
-              />
-            </label>
-
-            <label className="space-y-2">
-              <span className="text-sm font-medium text-mo-muted">Horário</span>
-              <input
-                type="time"
-                value={manualRun.startTime}
-                onChange={(event) => setManualRun((current) => ({ ...current, startTime: event.target.value }))}
-                className="w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white outline-none transition focus:border-mo-primary"
-              />
-            </label>
-          </div>
-
-          <button
-            type="submit"
-            disabled={savingManualRun}
-            className="mt-5 w-full rounded-2xl bg-mo-primary px-5 py-3 font-semibold text-black shadow-glow disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {savingManualRun ? 'Salvando...' : 'Registrar corrida manual'}
-          </button>
-        </form>
+      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="rounded-3xl border border-mo-border bg-mo-surface p-5">
+          <h3 className="text-xl font-semibold text-white">Objetivo atual</h3>
+          {goal ? (
+            <div className="mt-4 space-y-3 text-sm text-mo-muted">
+              <p>Prova: <strong className="text-white">{goal.race_distance_km} km</strong></p>
+              <p>Data: <strong className="text-white">{formatDateTime(goal.race_date)}</strong></p>
+              <p>Tempo atual 5 km: <strong className="text-white">{secondsToTime(goal.current_5k_time_seconds)}</strong></p>
+              <p>Meta 5 km: <strong className="text-white">{secondsToTime(goal.target_5k_time_seconds)}</strong></p>
+              <p>Local: <strong className="text-white">Esteira</strong></p>
+              <button onClick={regeneratePlan} className="mt-2 rounded-2xl bg-mo-primary px-5 py-3 font-bold text-black shadow-glow">Gerar/atualizar plano</button>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <label className="block text-sm text-mo-muted">Data da prova
+                <input type="date" value={goalForm.raceDate} onChange={(event) => setGoalForm((current) => ({ ...current, raceDate: event.target.value }))} className="mt-2 w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white" />
+              </label>
+              <label className="block text-sm text-mo-muted">Seu 5 km atual
+                <input value={goalForm.current5k} onChange={(event) => setGoalForm((current) => ({ ...current, current5k: event.target.value }))} className="mt-2 w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white" />
+              </label>
+              <label className="block text-sm text-mo-muted">Meta de 5 km
+                <input value={goalForm.target5k} onChange={(event) => setGoalForm((current) => ({ ...current, target5k: event.target.value }))} className="mt-2 w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white" />
+              </label>
+              <button onClick={saveGoalAndGenerate} className="rounded-2xl bg-mo-primary px-5 py-3 font-bold text-black shadow-glow">Salvar objetivo e gerar plano</button>
+            </div>
+          )}
+        </div>
 
         <div className="rounded-3xl border border-mo-border bg-mo-surface p-5">
-          <h3 className="text-lg font-semibold text-white">Fontes de corrida</h3>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-mo-primary/30 bg-mo-primary/10 p-4">
-              <p className="text-sm font-semibold text-mo-primary">Principal agora</p>
-              <h4 className="mt-1 font-semibold text-white">Manual / Esteira</h4>
-              <p className="mt-2 text-sm text-mo-muted">Ideal para os seus treinos indoor. O Mo² LOG calcula pace e volume semanal automaticamente.</p>
-            </div>
-            <div className="rounded-2xl bg-white/[0.03] p-4">
-              <p className="text-sm font-semibold text-mo-muted">Opcional</p>
-              <h4 className="mt-1 font-semibold text-white">Strava</h4>
-              <p className="mt-2 text-sm text-mo-muted">Mantido como integração opcional quando a API estiver disponível para sua conta.</p>
-            </div>
-            <div className="rounded-2xl bg-white/[0.03] p-4">
-              <p className="text-sm font-semibold text-mo-muted">Próxima integração</p>
-              <h4 className="mt-1 font-semibold text-white">Samsung Health</h4>
-              <p className="mt-2 text-sm text-mo-muted">Entrada planejada por arquivo exportado ou Health Connect em uma versão mobile futura.</p>
-            </div>
-            <div className="rounded-2xl bg-white/[0.03] p-4">
-              <p className="text-sm font-semibold text-mo-muted">Futuro</p>
-              <h4 className="mt-1 font-semibold text-white">GPX / CSV / FIT</h4>
-              <p className="mt-2 text-sm text-mo-muted">Importação manual por arquivo para não depender de fornecedores fechados.</p>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-2xl bg-white/[0.03] p-4">
-            <p className="text-sm text-mo-muted">Status Strava</p>
-            <p className="mt-1 text-xl font-semibold text-white">{state.strava?.connected ? 'Conectado' : 'Não conectado'}</p>
-            <p className="mt-2 text-sm text-mo-muted">Atleta: {state.strava?.strava_athlete_id ?? 'Mock local'}</p>
+          <h3 className="text-xl font-semibold text-white">Plano da semana</h3>
+          <div className="mt-4 space-y-3">
+            {plan.map((session) => (
+              <button key={session.id} onClick={() => setSelectedSession(session)} className={`w-full rounded-2xl border p-4 text-left transition ${selectedSession?.id === session.id ? 'border-mo-primary bg-mo-primary/10' : 'border-mo-border bg-white/[0.03] hover:border-mo-primary/40'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-white">{session.title}</p>
+                    <p className="mt-1 text-sm text-mo-muted">{formatDateTime(session.scheduled_date)} · {stepTypeLabel(session.session_type)}</p>
+                  </div>
+                  <span className="rounded-full bg-black/30 px-3 py-1 text-xs text-mo-primary">{session.steps.length} etapas</span>
+                </div>
+                <p className="mt-2 text-sm text-mo-muted">{session.target_distance_km ?? '—'} km · {formatPaceFromSeconds(session.target_pace_seconds_per_km)} · {session.target_speed_kmh ?? '—'} km/h</p>
+              </button>
+            ))}
+            {!plan.length && <p className="text-sm text-mo-muted">Nenhuma sessão gerada para esta semana.</p>}
           </div>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-mo-border bg-mo-surface p-5">
-        <h3 className="text-lg font-semibold text-white">Atividades registradas</h3>
-        <div className="mt-5 space-y-3">
-          {loading && <p className="text-sm text-mo-muted">Carregando corridas...</p>}
-          {!loading && state.activities.length === 0 && (
-            <p className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">
-              Nenhuma corrida registrada. Cadastre uma corrida na esteira ou use a sincronização mock/Strava.
-            </p>
-          )}
-          {state.activities.map((activity) => (
-            <article key={activity.id} className="rounded-2xl border border-mo-border bg-white/[0.03] p-4">
-              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                <div>
-                  <h4 className="font-semibold text-white">{activity.name}</h4>
-                  <p className="mt-1 text-sm text-mo-muted">{formatDateTime(activity.start_date)}</p>
-                </div>
-                <span className="rounded-full bg-mo-primary/10 px-3 py-1 text-xs font-semibold text-mo-primary">
-                  {getSourceLabel(activity.source)}
-                </span>
+      {selectedSession && (
+        <section className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+          <div className="rounded-3xl border border-mo-border bg-mo-surface p-5">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+              <div>
+                <p className="text-sm uppercase tracking-[0.25em] text-mo-primary">Execução guiada</p>
+                <h3 className="mt-2 text-2xl font-bold text-white">{selectedSession.title}</h3>
+                <p className="mt-2 text-mo-muted">{selectedSession.description}</p>
               </div>
-              <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-                <div className="rounded-xl bg-black/20 p-3">
-                  <p className="text-mo-muted">Distância</p>
-                  <p className="font-semibold text-white">{formatNumber(Number(activity.distance_m) / 1000)} km</p>
+              {!execution || execution.status === 'completed' ? (
+                <button onClick={() => startSession(selectedSession)} className="rounded-2xl bg-mo-primary px-5 py-3 font-bold text-black shadow-glow">Iniciar treino</button>
+              ) : (
+                <button onClick={finishExecution} className="rounded-2xl border border-mo-primary px-5 py-3 font-bold text-mo-primary">Finalizar treino</button>
+              )}
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-4">
+              <MetricCard label="Pace alvo" value={formatPaceFromSeconds(selectedSession.target_pace_seconds_per_km)} hint="Ritmo planejado" icon="⚡" />
+              <MetricCard label="Velocidade" value={`${selectedSession.target_speed_kmh ?? '—'} km/h`} hint="Esteira" icon="🏟️" />
+              <MetricCard label="Distância" value={`${selectedSession.target_distance_km ?? '—'} km`} hint="Planejada" icon="📏" />
+              <MetricCard label="Duração" value={formatDuration(selectedSession.target_duration_seconds ?? 0)} hint="Estimada" icon="⏱️" />
+            </div>
+
+            <div className="mt-6 space-y-3">
+              {selectedSession.steps.map((step) => (
+                <button key={step.id} disabled={!execution || execution.status === 'completed'} onClick={() => execution && startStep(execution.id, step)} className={`w-full rounded-2xl border p-4 text-left transition ${activeStep?.id === step.id ? 'border-mo-primary bg-mo-primary/10' : 'border-mo-border bg-white/[0.03] hover:border-mo-primary/40'} disabled:cursor-not-allowed disabled:opacity-60`}>
+                  <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                    <p className="font-semibold text-white">{step.order_index}. {step.title}</p>
+                    <p className="text-sm text-mo-muted">{stepTypeLabel(step.step_type)} · {step.target_speed_kmh ?? '—'} km/h · {step.target_duration_seconds ? formatClock(step.target_duration_seconds) : 'distância'}</p>
+                  </div>
+                  {step.notes && <p className="mt-2 text-sm text-mo-muted">{step.notes}</p>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-mo-border bg-mo-surface p-6">
+            <p className="text-sm uppercase tracking-[0.25em] text-mo-primary">Esteira</p>
+            <h3 className="mt-2 text-2xl font-bold text-white">Painel de controle</h3>
+            {activeStep ? (
+              <div className="mt-6 space-y-5">
+                <div className="rounded-3xl border border-mo-primary/30 bg-mo-primary/10 p-5 text-center">
+                  <p className="text-sm text-mo-muted">Etapa atual</p>
+                  <p className="mt-1 text-xl font-bold text-white">{activeStep.title}</p>
+                  <p className="mt-4 text-5xl font-black text-mo-primary">{formatClock(remainingSeconds)}</p>
+                  <p className="mt-2 text-sm text-mo-muted">tempo restante da etapa</p>
                 </div>
-                <div className="rounded-xl bg-black/20 p-3">
-                  <p className="text-mo-muted">Tempo</p>
-                  <p className="font-semibold text-white">{formatDuration(activity.moving_time_s)}</p>
+
+                <div className="rounded-3xl border border-mo-border bg-black/20 p-5 text-center">
+                  <p className="text-sm text-mo-muted">Velocidade atual da esteira</p>
+                  <div className="mt-4 flex items-center justify-center gap-4">
+                    <button onClick={() => adjustSpeed('down')} className="h-14 w-14 rounded-2xl border border-mo-border text-2xl font-bold text-white">−</button>
+                    <strong className="min-w-32 text-4xl text-white">{currentSpeed ?? '—'}</strong>
+                    <button onClick={() => adjustSpeed('up')} className="h-14 w-14 rounded-2xl bg-mo-primary text-2xl font-bold text-black shadow-glow">+</button>
+                  </div>
+                  <p className="mt-3 text-sm text-mo-muted">Ajustes de 0,1 km/h são registrados para análise futura.</p>
                 </div>
-                <div className="rounded-xl bg-black/20 p-3">
-                  <p className="text-mo-muted">Pace</p>
-                  <p className="font-semibold text-white">{formatPace(activity.average_pace)}</p>
+
+                <div className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">
+                  <p>Pace alvo: <strong className="text-white">{formatPaceFromSeconds(activeStep.target_pace_seconds_per_km)}</strong></p>
+                  <p>Distância da etapa: <strong className="text-white">{activeStep.target_distance_m ? `${activeStep.target_distance_m} m` : 'por tempo'}</strong></p>
+                  <p>Próxima etapa: <strong className="text-white">{selectedSession.steps.find((step) => step.order_index === activeStep.order_index + 1)?.title ?? 'finalizar treino'}</strong></p>
                 </div>
               </div>
-            </article>
-          ))}
-        </div>
-      </section>
+            ) : (
+              <p className="mt-5 text-mo-muted">Inicie uma sessão e selecione a primeira etapa para liberar o controle de velocidade.</p>
+            )}
+          </div>
+        </section>
+      )}
     </main>
   )
 }

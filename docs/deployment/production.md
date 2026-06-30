@@ -42,4 +42,4 @@ GET /api/v1/ops/deployment-checklist
 
 ## Observações
 
-O Strava é opcional. O fluxo principal de corrida do MVP continua sendo cadastro manual, especialmente para corridas na esteira.
+O fluxo de corrida não depende de integrações externas. O Running Coach gera plano e execução guiada para esteira.
