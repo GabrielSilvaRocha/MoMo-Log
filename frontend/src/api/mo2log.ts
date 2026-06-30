@@ -7,6 +7,7 @@ import type {
   ExerciseAlternative,
   ExerciseSwapResult,
   Goal,
+  HistorySummary,
   PersonalRecord,
   ManualRunningActivityPayload,
   RunningActivity,
@@ -30,6 +31,20 @@ export const mo2logApi = {
     apiGet<WeekDashboard>(`/dashboard/week?user_id=${userId}&reference_date=${referenceDate}`),
   weekStatistics: (userId = 1, referenceDate = '2026-06-29') =>
     apiGet<WeeklyStatistics>(`/statistics/week?user_id=${userId}&reference_date=${referenceDate}`),
+  historySummary: (userId = 1, dateFrom?: string, dateTo?: string) => {
+    const params = new URLSearchParams({ user_id: String(userId) })
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    return apiGet<HistorySummary>(`/history/summary?${params.toString()}`)
+  },
+  sessionHistory: (userId = 1, filters?: { dateFrom?: string; dateTo?: string; sessionType?: string; status?: string; limit?: number }) => {
+    const params = new URLSearchParams({ user_id: String(userId), limit: String(filters?.limit ?? 50) })
+    if (filters?.dateFrom) params.set('date_from', filters.dateFrom)
+    if (filters?.dateTo) params.set('date_to', filters.dateTo)
+    if (filters?.sessionType) params.set('session_type', filters.sessionType)
+    if (filters?.status) params.set('status', filters.status)
+    return apiGet<TrainingSession[]>(`/history/sessions?${params.toString()}`)
+  },
   goals: (userId = 1) => apiGet<Goal[]>(`/goals?user_id=${userId}`),
   personalRecords: (userId = 1) => apiGet<PersonalRecord[]>(`/personal-records?user_id=${userId}`),
   stravaStatus: (userId = 1) => apiGet<StravaStatus>(`/strava/status?user_id=${userId}`),

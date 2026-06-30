@@ -231,3 +231,22 @@ export type StrengthWorkoutExerciseCreatePayload = {
   rest_seconds?: number | null
   notes?: string | null
 }
+
+export type HistorySummary = {
+  user_id: number
+  date_from: string
+  date_to: string
+  total_sessions: number
+  completed_sessions: number
+  adapted_sessions: number
+  skipped_sessions: number
+  strength_sessions: number
+  running_sessions: number
+  total_sets: number
+  strength_volume: string
+  running_activities: number
+  running_distance_km: string
+  running_time_s: number
+  average_pace: string | null
+  completion_rate: number
+}

@@ -1,13 +1,14 @@
 # Changelog
 
-## v1.5.0 - Workout Execution UX
+## v1.6.0 - Histórico de Treinos
 
 ### Added
-- Visual checklist for planned strength sets.
-- Automatic rest timer after set logging.
-- Manual rest timer action for each exercise.
-- Workout execution summary with total volume and average RPE.
-- Toggle to enable or disable automatic rest timer.
+- Nova tela **Histórico** no frontend.
+- Endpoint `GET /api/v1/history/sessions` para consultar sessões por período, tipo e status.
+- Endpoint `GET /api/v1/history/summary` com resumo agregado do período.
+- Detalhe lateral de sessão com exercícios, séries, volume, corrida vinculada e status.
+- Filtros por data, tipo de sessão e status.
 
 ### Changed
-- Workout page now better supports real gym execution, especially when following planned sets and rest intervals.
+- Versão da aplicação atualizada para `1.6.0`.
+- Navegação do MVP passa a incluir Histórico como visão própria.
