@@ -15,6 +15,7 @@ const navItems: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'analytics', label: 'Estatísticas', icon: '📈' },
   { id: 'goals', label: 'Metas', icon: '🎯' },
   { id: 'exercises', label: 'Exercícios', icon: '🔁' },
+  { id: 'adaptation', label: 'Adaptação', icon: '🧠' },
 ]
 
 export function AppShell({ children, currentView, onNavigate }: AppShellProps) {

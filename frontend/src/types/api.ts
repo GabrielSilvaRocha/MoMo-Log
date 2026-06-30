@@ -28,6 +28,16 @@ export type ExerciseAlternative = {
   is_default_suggestion: boolean
 }
 
+
+export type AdaptationSuggestion = ExerciseAlternative & {
+  recommendation_score: number
+  recommendation_label: string
+  badges: string[]
+  equipment_names: string[]
+  penalties: string[]
+  bonuses: string[]
+}
+
 export type StrengthSetLog = {
   id: number
   strength_workout_exercise_id: number

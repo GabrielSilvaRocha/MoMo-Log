@@ -53,3 +53,23 @@ POST /api/v1/strava/sync?user_id=1
 
 Sem credenciais configuradas, `/strava/sync` executa o modo mock.
 Com OAuth configurado, ele importa atividades reais.
+
+
+## Adaptation Engine
+
+```http
+GET /api/v1/adaptation/exercises/{exercise_id}/suggestions
+```
+
+Query params:
+
+- `user_id`
+- `mode`: `default` or `all`
+- `reason`: `equipment_busy`, `equipment_unavailable`, `pain_discomfort`, `preference`, `manual_adjustment`
+
+Rules:
+
+- `mode=default`: hides unavailable equipment from primary suggestions.
+- `mode=all`: shows unavailable equipment with warning and score penalty.
+- Favorite equipment receives a bonus.
+- Frequently busy equipment receives a penalty.

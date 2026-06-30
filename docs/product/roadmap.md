@@ -1,15 +1,16 @@
-# Roadmap Mo² LOG
+# Roadmap
 
-## v1.3.0 - Planejamento semanal editável
+## v1.4.0 - Adaptation Engine
 
-- Criar sessões de musculação, corrida, mobilidade e descanso.
-- Editar título, data e observações de sessões.
-- Alterar status de sessões.
-- Adicionar exercícios planejados em sessões de musculação.
+- Ranking inteligente de substituições.
+- Penalização por equipamento inexistente ou sempre ocupado.
+- Bônus por equipamento favorito.
+- Tela dedicada para simular substituições.
 
 ## Próximos passos
 
-- Templates de treino recorrentes.
-- Duplicar semana.
-- Ajuste automático de semanas quando um treino for perdido.
-- Health Connect / Samsung Health em versão mobile futura.
+- Templates de treino.
+- Histórico de adaptações.
+- Sugestões automáticas para reorganizar a semana.
+- Importação GPX/CSV.
+- Health Connect no roadmap mobile.

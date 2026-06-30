@@ -1,43 +1,42 @@
 # Mo² LOG
 
-Mo² LOG é um app de treino híbrido para musculação e corrida. Ele centraliza planejamento, execução, adaptação e evolução do treino.
+Mo² LOG is a hybrid training app for strength training and running.
 
-## v1.3.0
+## v1.4.0
 
-Esta versão adiciona o módulo de Planejamento semanal editável.
+This release introduces the first version of the Adaptation Engine.
 
-### Principais módulos
+### Highlights
 
-- Dashboard semanal
-- Treino do dia
-- Planejamento semanal
-- Corridas com múltiplas fontes
-- Cadastro manual de corrida na esteira
-- Biblioteca de exercícios
-- Troca de exercícios por disponibilidade da academia
-- Metas, recordes e estatísticas
+- Smart exercise replacement ranking.
+- Context-aware suggestions based on user gym equipment.
+- Unavailable equipment is hidden from default suggestions but remains visible in "show all" mode.
+- Frequently busy equipment receives a score penalty.
+- Favorite equipment receives a score bonus.
+- New frontend page: **Adaptação**.
 
-## Executar localmente
+## Running locally
 
 ```bash
 docker compose down
 docker compose up --build
 ```
 
-Em outro terminal:
+In another terminal:
 
 ```bash
 docker compose exec backend alembic upgrade head
-```
-
-Backend:
-
-```text
-http://localhost:8000/api/v1/health
+docker compose exec backend python -m pytest -q -vv
 ```
 
 Frontend:
 
 ```text
 http://localhost:5173
+```
+
+API docs:
+
+```text
+http://localhost:8000/docs
 ```

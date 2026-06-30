@@ -1,14 +1,17 @@
 # Changelog
 
+## v1.4.0 - Adaptation Engine
+
+- Added backend Adaptation Engine service.
+- Added ranked exercise replacement suggestions.
+- Added penalties for unavailable/frequently busy equipment.
+- Added bonus for favorite equipment.
+- Added `/api/v1/adaptation/exercises/{exercise_id}/suggestions`.
+- Added frontend Adaptation page.
+- Updated workout swap flow to use recommendation score.
+
 ## v1.3.0 - Editable Planning
 
-- Adiciona tela de Planejamento semanal.
-- Permite criar sessões de musculação, corrida, mobilidade e descanso.
-- Permite editar título, data, status e observações de sessões.
-- Permite adicionar exercícios planejados em sessões de musculação.
-- Mantém Dashboard, Corridas, Estatísticas, Metas e Execução integrados ao mesmo Training Core.
-
-## v1.2.0 - Running Sources
-
-- Adiciona cadastro manual de corridas, com foco em esteira.
-- Torna Strava uma fonte opcional.
+- Added weekly planning screen.
+- Added create/edit/delete training sessions.
+- Added strength exercises to sessions.

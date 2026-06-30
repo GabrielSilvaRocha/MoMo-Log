@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
 import { ProgressBar } from '../components/ProgressBar'
-import type { ExerciseAlternative, StrengthWorkoutExercise, TrainingSession } from '../types/api'
+import type { AdaptationSuggestion, StrengthWorkoutExercise, TrainingSession } from '../types/api'
 import { formatDate, translateStatus } from '../utils/format'
 
 type SetForm = {
@@ -14,7 +14,7 @@ type SetForm = {
 
 type AlternativesState = {
   workoutExercise: StrengthWorkoutExercise
-  alternatives: ExerciseAlternative[]
+  alternatives: AdaptationSuggestion[]
   mode: 'default' | 'all'
 } | null
 
@@ -126,7 +126,7 @@ export function WorkoutPage() {
     if (!workoutExercise.exercise_id) return
     setSaving(true)
     try {
-      const alternatives = await mo2logApi.exerciseAlternatives(workoutExercise.exercise_id, 1, mode)
+      const alternatives = await mo2logApi.adaptationSuggestions(workoutExercise.exercise_id, 1, mode, 'equipment_busy')
       setAlternativesState({ workoutExercise, alternatives, mode })
       setMessage(null)
     } catch (err) {
@@ -136,7 +136,7 @@ export function WorkoutPage() {
     }
   }
 
-  async function swapExercise(alternative: ExerciseAlternative) {
+  async function swapExercise(alternative: AdaptationSuggestion) {
     if (!session || !alternativesState) return
     setSaving(true)
     try {
@@ -399,7 +399,7 @@ export function WorkoutPage() {
                       <div>
                         <h4 className="font-semibold text-white">{alternative.alternative_exercise.name}</h4>
                         <p className="mt-1 text-sm text-mo-muted">
-                          Equivalência {alternative.equivalence_score}% · {alternative.reason ?? 'Substituição compatível'}
+                          Equivalência {alternative.equivalence_score}% · Score {alternative.recommendation_score}% · {alternative.reason ?? 'Substituição compatível'}
                         </p>
                         {alternative.equipment_status === 'unavailable' && (
                           <p className="mt-2 inline-flex rounded-full border border-red-400/40 bg-red-950/30 px-3 py-1 text-xs text-red-100">

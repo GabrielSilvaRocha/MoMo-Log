@@ -1,5 +1,6 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './client'
 import type {
+  AdaptationSuggestion,
   ApiStatus,
   Equipment,
   Exercise,
@@ -64,6 +65,15 @@ export const mo2logApi = {
   }) => apiPost<StrengthSetLog>('/strength/set-logs', payload),
   exerciseAlternatives: (exerciseId: number, userId = 1, mode: 'default' | 'all' = 'default') =>
     apiGet<ExerciseAlternative[]>(`/exercises/${exerciseId}/alternatives?user_id=${userId}&mode=${mode}`),
+  adaptationSuggestions: (
+    exerciseId: number,
+    userId = 1,
+    mode: 'default' | 'all' = 'default',
+    reason: 'equipment_busy' | 'equipment_unavailable' | 'pain_discomfort' | 'preference' | 'manual_adjustment' = 'equipment_busy',
+  ) =>
+    apiGet<AdaptationSuggestion[]>(
+      `/adaptation/exercises/${exerciseId}/suggestions?user_id=${userId}&mode=${mode}&reason=${reason}`,
+    ),
   swapExercise: (
     sessionId: number,
     payload: {

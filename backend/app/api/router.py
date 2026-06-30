@@ -4,6 +4,7 @@ from app.api.routes.exercises import router as exercises_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.health import router as health_router
 from app.api.routes.analytics import router as analytics_router
+from app.api.routes.adaptation import router as adaptation_router
 from app.api.routes.goals import router as goals_router
 from app.api.routes.running import router as running_router
 from app.api.routes.strava_auth import router as strava_auth_router
@@ -22,3 +23,4 @@ api_router.include_router(strava_auth_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(goals_router)
 api_router.include_router(analytics_router)
+api_router.include_router(adaptation_router)
