@@ -20,10 +20,11 @@ from app.models.running import (
     StravaSyncLog,
 )
 from app.models.analytics import Goal, PersonalRecord
-from app.models.user import User
+from app.models.user import User, UserPreference
 
 __all__ = [
     "User",
+    "UserPreference",
     "Exercise",
     "MuscleGroup",
     "Equipment",

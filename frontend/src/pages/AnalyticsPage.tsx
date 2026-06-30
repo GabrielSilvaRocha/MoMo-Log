@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
+import { getCurrentUserId } from '../auth/session'
 import { GoalCard } from '../components/GoalCard'
 import { MetricCard } from '../components/MetricCard'
 import { ProgressBar } from '../components/ProgressBar'
@@ -18,7 +19,7 @@ export function AnalyticsPage() {
     async function load() {
       try {
         setLoading(true)
-        const data = await mo2logApi.weekStatistics(1, '2026-06-29')
+        const data = await mo2logApi.weekStatistics(getCurrentUserId(), '2026-06-29')
         if (mounted) {
           setStatistics(data)
           setError(null)

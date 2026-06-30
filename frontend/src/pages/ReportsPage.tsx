@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { getApiBaseUrl } from '../api/client'
 import { mo2logApi } from '../api/mo2log'
+import { getCurrentUserId } from '../auth/session'
 import { MetricCard } from '../components/MetricCard'
 import type { ReportOverview } from '../types/api'
 import { formatDuration, formatNumber, formatPace } from '../utils/format'
@@ -17,7 +18,7 @@ function getDefaultDateTo() {
 }
 
 function buildExportUrl(kind: 'sessions' | 'running' | 'strength', dateFrom: string, dateTo: string) {
-  const params = new URLSearchParams({ user_id: '1' })
+  const params = new URLSearchParams({ user_id: String(getCurrentUserId()) })
   if (dateFrom) params.set('date_from', dateFrom)
   if (dateTo) params.set('date_to', dateTo)
   return `${getApiBaseUrl()}/reports/export/${kind}.csv?${params.toString()}`
@@ -33,7 +34,7 @@ export function ReportsPage() {
   async function load() {
     try {
       setLoading(true)
-      const data = await mo2logApi.reportOverview(1, dateFrom, dateTo)
+      const data = await mo2logApi.reportOverview(getCurrentUserId(), dateFrom, dateTo)
       setOverview(data)
       setError(null)
     } catch (err) {

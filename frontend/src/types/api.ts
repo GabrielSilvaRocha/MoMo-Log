@@ -303,3 +303,60 @@ export type ProductReleaseNotes = {
   title: string
   highlights: string[]
 }
+
+export type User = {
+  id: number
+  name: string
+  email: string
+  avatar_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type UserPreference = {
+  id: number
+  user_id: number
+  default_running_source: string
+  preferred_training_days: string | null
+  weekly_running_goal_km: number | null
+  weekly_strength_goal_sessions: number | null
+  gym_notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AuthToken = {
+  access_token: string
+  token_type: string
+  user: User
+}
+
+export type AuthenticatedUser = {
+  user: User
+  preferences: UserPreference | null
+}
+
+export type RegisterPayload = {
+  name: string
+  email: string
+  password: string
+  avatar_url?: string | null
+}
+
+export type LoginPayload = {
+  email: string
+  password: string
+}
+
+export type UserProfileUpdatePayload = {
+  name?: string
+  avatar_url?: string | null
+}
+
+export type UserPreferenceUpdatePayload = {
+  default_running_source?: string
+  preferred_training_days?: string | null
+  weekly_running_goal_km?: number | null
+  weekly_strength_goal_sessions?: number | null
+  gym_notes?: string | null
+}

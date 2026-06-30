@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
+import { getCurrentUserId } from '../auth/session'
 import type { Equipment, Exercise, UserGymEquipment } from '../types/api'
 
 type EquipmentStatus = 'available' | 'unavailable' | 'unknown' | 'favorite' | 'frequently_busy'
@@ -29,7 +30,7 @@ export function ExerciseLibraryPage() {
       const [exerciseData, equipmentData, userEquipmentData] = await Promise.all([
         mo2logApi.exercises(),
         mo2logApi.equipment(),
-        mo2logApi.userGymEquipment(1),
+        mo2logApi.userGymEquipment(getCurrentUserId()),
       ])
       setExercises(exerciseData)
       setEquipment(equipmentData)
@@ -60,7 +61,7 @@ export function ExerciseLibraryPage() {
     setSavingId(item.id)
     try {
       const updated = await mo2logApi.updateEquipmentStatus({
-        user_id: 1,
+        user_id: getCurrentUserId(),
         equipment_id: item.id,
         status,
         notes: status === 'unavailable' ? 'Equipamento não existe na minha academia' : undefined,

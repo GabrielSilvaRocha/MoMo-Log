@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
+import { getCurrentUserId } from '../auth/session'
 import { GoalCard } from '../components/GoalCard'
 import type { Goal } from '../types/api'
 
@@ -16,7 +17,7 @@ export function GoalsPage() {
   async function load() {
     try {
       setLoading(true)
-      const data = await mo2logApi.goals(1)
+      const data = await mo2logApi.goals(getCurrentUserId())
       setGoals(data)
       if (data[0]) {
         setSelectedGoalId(data[0].id)

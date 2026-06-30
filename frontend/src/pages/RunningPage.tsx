@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
+import { getCurrentUserId } from '../auth/session'
 import { MetricCard } from '../components/MetricCard'
 import type { RunningActivity, StravaStatus, StravaSyncResult } from '../types/api'
 import { formatDateTime, formatDuration, formatNumber, formatPace } from '../utils/format'
@@ -63,7 +64,7 @@ export function RunningPage() {
   async function load() {
     try {
       setLoading(true)
-      const [activities, strava] = await Promise.all([mo2logApi.runningActivities(1), mo2logApi.stravaStatus(1)])
+      const [activities, strava] = await Promise.all([mo2logApi.runningActivities(getCurrentUserId()), mo2logApi.stravaStatus(getCurrentUserId())])
       setState({ activities, strava })
       setError(null)
     } catch (err) {
@@ -94,7 +95,7 @@ export function RunningPage() {
 
   async function connectStrava() {
     try {
-      const response = await mo2logApi.stravaAuthorize(1)
+      const response = await mo2logApi.stravaAuthorize(getCurrentUserId())
       if (!response.configured) {
         setError('OAuth do Strava ainda não está configurado. Como alternativa, use o cadastro manual para corridas na esteira.')
         return
@@ -110,7 +111,7 @@ export function RunningPage() {
     setSyncResult(null)
     setSuccessMessage(null)
     try {
-      const result = await mo2logApi.stravaSync(1)
+      const result = await mo2logApi.stravaSync(getCurrentUserId())
       setSyncResult(result)
       await load()
       setError(null)
@@ -142,7 +143,7 @@ export function RunningPage() {
       const startDateTime = new Date(`${manualRun.startDate}T${manualRun.startTime || '00:00'}:00`)
 
       await mo2logApi.createManualRun({
-        user_id: 1,
+        user_id: getCurrentUserId(),
         name: manualRun.name.trim() || 'Corrida na esteira',
         distance_m: Math.round(distanceKm * 1000),
         moving_time_s: Math.round(durationMinutes * 60),

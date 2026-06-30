@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
+import { getCurrentUserId } from '../auth/session'
 import type { Exercise, TrainingSession } from '../types/api'
 import { formatDate, translateSessionType, translateStatus } from '../utils/format'
 
@@ -68,7 +69,7 @@ export function PlanningPage() {
     try {
       setLoading(true)
       const [weekSessions, exerciseList] = await Promise.all([
-        mo2logApi.weekTrainingSessions(1, referenceDate),
+        mo2logApi.weekTrainingSessions(getCurrentUserId(), referenceDate),
         mo2logApi.exercises(),
       ])
       setSessions(weekSessions)
@@ -136,7 +137,7 @@ export function PlanningPage() {
         setMessage('Sessão atualizada com sucesso.')
       } else {
         const created = await mo2logApi.createTrainingSession({
-          user_id: 1,
+          user_id: getCurrentUserId(),
           training_plan_id: 1,
           title: sessionForm.title,
           session_type: sessionForm.sessionType,

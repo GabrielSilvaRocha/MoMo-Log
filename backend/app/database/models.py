@@ -24,6 +24,6 @@ from app.models.running import (
     StravaAccount,
     StravaSyncLog,
 )
-from app.models.user import User  # noqa: F401
+from app.models.user import User, UserPreference  # noqa: F401
 
 from app.models.analytics import Goal, PersonalRecord  # noqa: F401

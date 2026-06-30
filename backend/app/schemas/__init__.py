@@ -20,10 +20,26 @@ from app.schemas.analytics import (
     PersonalRecordRead,
     WeeklyStatisticsRead,
 )
-from app.schemas.user import UserRead
+from app.schemas.user import (
+    AuthenticatedUserRead,
+    AuthTokenRead,
+    UserCreate,
+    UserLogin,
+    UserPreferenceRead,
+    UserPreferenceUpdate,
+    UserProfileUpdate,
+    UserRead,
+)
 
 __all__ = [
     "UserRead",
+    "UserCreate",
+    "UserLogin",
+    "AuthTokenRead",
+    "AuthenticatedUserRead",
+    "UserProfileUpdate",
+    "UserPreferenceRead",
+    "UserPreferenceUpdate",
     "ExerciseRead",
     "EquipmentRead",
     "MuscleGroupRead",
