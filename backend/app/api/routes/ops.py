@@ -39,7 +39,7 @@ def get_operations_status(db: Session = Depends(get_db)) -> dict:
 @router.get("/deployment-checklist")
 def get_deployment_checklist() -> dict:
     return {
-        "version": "5.0.0",
+        "version": "6.0.0",
         "title": "Checklist de deploy e portfólio",
         "items": [
             {"key": "env", "label": "Variáveis de ambiente separadas por ambiente", "status": "ready"},

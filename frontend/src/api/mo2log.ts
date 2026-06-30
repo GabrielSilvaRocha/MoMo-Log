@@ -39,6 +39,9 @@ import type {
   UserGymEquipment,
   WeekDashboard,
   WeeklyStatistics,
+  WorkoutTemplate,
+  WorkoutTemplateSchedulePayload,
+  WorkoutTemplateScheduleResponse,
 } from '../types/api'
 
 export const mo2logApi = {
@@ -98,6 +101,10 @@ export const mo2logApi = {
   userGymEquipment: (userId = getCurrentUserId()) => apiGet<UserGymEquipment[]>(`/user-gym-equipment?user_id=${userId}`),
   updateEquipmentStatus: (payload: { user_id: number; equipment_id: number; status: string; notes?: string }) =>
     apiPost<UserGymEquipment>('/user-gym-equipment', payload),
+  workoutTemplates: (userId = getCurrentUserId()) => apiGet<WorkoutTemplate[]>(`/workout-templates?user_id=${userId}`),
+  workoutTemplate: (templateId: number) => apiGet<WorkoutTemplate>(`/workout-templates/${templateId}`),
+  scheduleWorkoutTemplate: (templateId: number, payload: WorkoutTemplateSchedulePayload) =>
+    apiPost<WorkoutTemplateScheduleResponse>(`/workout-templates/${templateId}/schedule`, payload),
   weekTrainingSessions: (userId = getCurrentUserId(), referenceDate = '2026-06-29') =>
     apiGet<TrainingSession[]>(`/training-sessions/week?user_id=${userId}&reference_date=${referenceDate}`),
   createTrainingSession: (payload: TrainingSessionCreatePayload) =>

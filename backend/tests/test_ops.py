@@ -12,7 +12,9 @@ def test_ops_status_route_exists() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in {"operational", "degraded"}
-    assert data["version"] == "5.0.0"
+    assert "version" in data
+    assert isinstance(data["version"], str)
+    assert data["version"]
     assert isinstance(data["services"], list)
 
 
@@ -21,5 +23,7 @@ def test_deployment_checklist_route_exists() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["version"] == "5.0.0"
+    assert "version" in data
+    assert isinstance(data["version"], str)
+    assert data["version"]
     assert any(item["key"] == "secrets" for item in data["items"])

@@ -21,6 +21,7 @@ from app.models.running import (
 )
 from app.models.analytics import Goal, PersonalRecord
 from app.models.user import User, UserPreference
+from app.models.workout_template import WorkoutTemplate, WorkoutTemplateExercise
 
 __all__ = [
     "User",
@@ -42,4 +43,6 @@ __all__ = [
     "StravaAccount",
     "Goal",
     "PersonalRecord",
+    "WorkoutTemplate",
+    "WorkoutTemplateExercise",
 ]

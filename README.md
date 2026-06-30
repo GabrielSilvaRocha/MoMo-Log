@@ -1,22 +1,21 @@
 # Mo² LOG
 
-Mo² LOG é um aplicativo de treino híbrido para musculação e corrida. O produto combina planejamento semanal, execução de treinos, troca inteligente de exercícios quando a academia está cheia, registro manual de corridas na esteira, histórico, relatórios, inteligência de evolução e preparação para deploy.
+**v6.0.0 — Templates e Workout Builder**
 
-## Release atual
+O **Mo² LOG** é uma aplicação de treino híbrido para musculação e corrida. O foco é ajudar o usuário a planejar, executar, adaptar e analisar treinos combinando musculação, corrida de rua/esteira, histórico, relatórios e inteligência inicial.
 
-**v5.0.0 — Deploy, portfólio e qualidade operacional**
+## Destaques da versão
 
-Esta versão consolida o projeto para apresentação técnica:
+- Backend FastAPI + PostgreSQL + SQLAlchemy + Alembic.
+- Frontend React + Vite + TypeScript + Tailwind.
+- Autenticação local com usuário demo sem senha versionada.
+- Dashboard, planejamento, treino do dia, corridas, histórico, relatórios, inteligência e deploy readiness.
+- Cadastro manual de corrida, com foco em esteira.
+- Motor de adaptação para troca de exercícios quando a academia está cheia.
+- Exportação CSV.
+- **Novo:** templates de treino para criar sessões de musculação rapidamente.
 
-- Nova tela **Deploy**.
-- Endpoints operacionais `/ops/status` e `/ops/deployment-checklist`.
-- Docker Compose de produção base.
-- Dockerfiles de produção para backend e frontend.
-- Documentação de deploy, portfólio e política de secrets.
-- README e changelog consolidados.
-- Strava permanece opcional; cadastro manual de esteira continua sendo o fluxo principal para corrida.
-
-## Como rodar localmente
+## Rodando localmente
 
 ```bash
 docker compose down
@@ -30,56 +29,38 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend python -m pytest -q -vv
 ```
 
-Acesse:
+Frontend:
 
 ```text
-Frontend: http://localhost:5173
-Backend:  http://localhost:8000
-Swagger:  http://localhost:8000/docs
-Health:   http://localhost:8000/api/v1/health
-Ops:      http://localhost:8000/api/v1/ops/status
+http://localhost:5173
 ```
 
-## Login local
+Backend:
 
-Use o botão **Entrar como Demo Local**. Nenhuma senha demo é versionada no repositório.
-
-## Stack
-
-- Backend: FastAPI, SQLAlchemy, Alembic, PostgreSQL.
-- Frontend: React, Vite, TypeScript, TailwindCSS.
-- Infra: Docker Compose.
-- CI: GitHub Actions.
-- Produto: planejamento híbrido, execução, adaptação, corrida manual, relatórios e inteligência.
-
-## Deploy base
-
-Copie `.env.production.example` para `.env.production`, preencha os valores reais fora do Git e execute:
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up --build -d
+```text
+http://localhost:8000/docs
 ```
 
-Depois aplique migrations:
+## Fluxo recomendado de teste
 
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production exec backend alembic upgrade head
+1. Entrar usando o botão **Entrar como Demo Local**.
+2. Acessar **Templates**.
+3. Selecionar um template.
+4. Escolher uma data.
+5. Clicar em **Criar sessão**.
+6. Ir para **Planejamento** e validar a nova sessão criada.
+7. Abrir **Treino do dia** quando a data corresponder.
+
+## Principais endpoints novos
+
+```text
+GET  /api/v1/workout-templates?user_id=1
+GET  /api/v1/workout-templates/{template_id}
+POST /api/v1/workout-templates/{template_id}/schedule
 ```
 
 ## Segurança
 
-Não versionar:
-
-- `.env` real
-- tokens
-- client secrets
-- senhas
-- chaves JWT reais
-
-Use apenas `.env.example` e `.env.production.example` com placeholders.
-
-## Próximos marcos
-
-- v6.0.0 — Importação GPX/CSV/FIT.
-- v7.0.0 — Evolução de carga por exercício.
-- v8.0.0 — Mobile/Health Connect para Samsung Health.
+- Não versionar `.env`.
+- Não versionar senhas, tokens, client secrets ou chaves reais.
+- Usar `.env.example` apenas com placeholders.

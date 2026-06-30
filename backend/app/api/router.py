@@ -18,6 +18,7 @@ from app.api.routes.strava_auth import router as strava_auth_router
 from app.api.routes.training import router as training_router
 from app.api.routes.user_gym_equipment import router as user_gym_equipment_router
 from app.api.routes.users import router as users_router
+from app.api.routes.workout_templates import router as workout_templates_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
@@ -27,6 +28,7 @@ api_router.include_router(users_router)
 api_router.include_router(exercises_router)
 api_router.include_router(user_gym_equipment_router)
 api_router.include_router(training_router)
+api_router.include_router(workout_templates_router)
 api_router.include_router(running_router)
 api_router.include_router(strava_auth_router)
 api_router.include_router(dashboard_router)

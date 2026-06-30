@@ -27,3 +27,4 @@ from app.models.running import (
 from app.models.user import User, UserPreference  # noqa: F401
 
 from app.models.analytics import Goal, PersonalRecord  # noqa: F401
+from app.models.workout_template import WorkoutTemplate, WorkoutTemplateExercise  # noqa: F401

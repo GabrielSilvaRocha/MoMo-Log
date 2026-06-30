@@ -456,3 +456,41 @@ export type DeploymentChecklist = {
   items: DeploymentChecklistItem[]
   recommended_next_targets: string[]
 }
+
+export type WorkoutTemplateExercise = {
+  id: number
+  workout_template_id: number
+  exercise_id: number
+  order_index: number
+  planned_sets: number
+  planned_reps: string
+  rest_seconds: number | null
+  notes: string | null
+  exercise: Exercise | null
+}
+
+export type WorkoutTemplate = {
+  id: number
+  user_id: number
+  name: string
+  description: string | null
+  goal: string | null
+  difficulty: string
+  estimated_duration_minutes: number | null
+  status: string
+  exercises: WorkoutTemplateExercise[]
+}
+
+export type WorkoutTemplateSchedulePayload = {
+  user_id: number
+  scheduled_date: string
+  training_plan_id?: number | null
+  title?: string | null
+  notes?: string | null
+}
+
+export type WorkoutTemplateScheduleResponse = {
+  status: string
+  message: string
+  session: TrainingSession
+}

@@ -12,6 +12,7 @@ import { GoalsPage } from './pages/GoalsPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { IntelligencePage } from './pages/IntelligencePage'
 import { ReportsPage } from './pages/ReportsPage'
+import { TemplatesPage } from './pages/TemplatesPage'
 import { MvpPage } from './pages/MvpPage'
 import { PlanningPage } from './pages/PlanningPage'
 import { ProfilePage } from './pages/ProfilePage'
@@ -20,9 +21,9 @@ import { WorkoutPage } from './pages/WorkoutPage'
 import { mo2logApi } from './api/mo2log'
 import type { AuthToken, User } from './types/api'
 
-export type AppView = 'dashboard' | 'planning' | 'workout' | 'running' | 'analytics' | 'intelligence' | 'history' | 'reports' | 'goals' | 'exercises' | 'adaptation' | 'profile' | 'mvp' | 'deploy'
+export type AppView = 'dashboard' | 'planning' | 'templates' | 'workout' | 'running' | 'analytics' | 'intelligence' | 'history' | 'reports' | 'goals' | 'exercises' | 'adaptation' | 'profile' | 'mvp' | 'deploy'
 
-const views: AppView[] = ['dashboard', 'planning', 'workout', 'running', 'analytics', 'intelligence', 'history', 'reports', 'goals', 'exercises', 'adaptation', 'profile', 'mvp', 'deploy']
+const views: AppView[] = ['dashboard', 'planning', 'templates', 'workout', 'running', 'analytics', 'intelligence', 'history', 'reports', 'goals', 'exercises', 'adaptation', 'profile', 'mvp', 'deploy']
 
 export default function App() {
   const [view, setView] = useState<AppView>('dashboard')
@@ -85,6 +86,7 @@ export default function App() {
     <AppShell currentView={view} onNavigate={setView} user={user} onLogout={handleLogout}>
       {view === 'dashboard' && <DashboardPage onStartWorkout={() => setView('workout')} />}
       {view === 'planning' && <PlanningPage />}
+      {view === 'templates' && <TemplatesPage />}
       {view === 'workout' && <WorkoutPage />}
       {view === 'running' && <RunningPage />}
       {view === 'analytics' && <AnalyticsPage />}

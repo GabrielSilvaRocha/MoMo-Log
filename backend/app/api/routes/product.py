@@ -11,6 +11,7 @@ def get_mvp_status() -> dict:
     modules = [
         {"key": "dashboard", "label": "Dashboard", "status": "stable", "description": "Resumo diário e semanal com próximos treinos, progresso, metas e insights."},
         {"key": "planning", "label": "Planejamento", "status": "stable", "description": "Criação, edição e remoção de sessões de musculação, corrida, mobilidade e descanso."},
+        {"key": "templates", "label": "Templates", "status": "stable", "description": "Biblioteca de treinos reutilizáveis e criação rápida de sessões planejadas."},
         {"key": "workout", "label": "Execução de treino", "status": "stable", "description": "Registro de séries, checklist, volume do treino, RPE e cronômetro de descanso."},
         {"key": "adaptation", "label": "Adaptação", "status": "stable", "description": "Sugestões de substituição com penalidade para equipamento indisponível e bônus para favoritos."},
         {"key": "running", "label": "Corridas", "status": "stable", "description": "Cadastro manual de esteira, sincronização mock e Strava opcional."},
@@ -27,6 +28,7 @@ def get_mvp_status() -> dict:
         {"key": "mark_equipment_unavailable", "label": "Marcar equipamento inexistente", "coverage": 100},
         {"key": "manual_treadmill_run", "label": "Registrar corrida na esteira", "coverage": 100},
         {"key": "weekly_planning", "label": "Editar planejamento semanal", "coverage": 95},
+        {"key": "schedule_template", "label": "Criar sessão a partir de template", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
         {"key": "strava_real_oauth", "label": "Strava real via OAuth", "coverage": 60},
         {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 10},
@@ -35,7 +37,7 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Deploy demonstrável em cloud",
+        "Templates customizáveis criados pelo usuário",
         "Importação GPX/CSV/FIT",
         "Evolução de carga por exercício",
         "Previsões por distância e prova-alvo",
@@ -45,7 +47,7 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Deploy, Portfólio e Qualidade",
+        "milestone": "Templates e Workout Builder",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -56,12 +58,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "5.0.0",
-        "title": "Deploy, portfólio e qualidade operacional",
+        "version": "6.0.0",
+        "title": "Templates e Workout Builder",
         "highlights": [
-            "Nova tela Deploy com checklist operacional e próximos alvos de publicação.",
-            "Endpoints de operações para status da aplicação e checklist de deploy.",
-            "Docker Compose de produção base, documentação de deploy e política de segurança.",
-            "README, changelog e comandos Makefile consolidados para apresentação de portfólio.",
+            "Nova tela Templates para reutilizar treinos de musculação.",
+            "Endpoint para listar templates e agendar uma sessão a partir de um template.",
+            "Migration com templates iniciais para pernas, empurrar e costas + core.",
+            "Fluxo mais rápido para montar a semana sem cadastrar cada exercício manualmente.",
         ],
     }
