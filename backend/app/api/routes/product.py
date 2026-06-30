@@ -35,17 +35,17 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
+        "Deploy demonstrável em cloud",
         "Importação GPX/CSV/FIT",
         "Evolução de carga por exercício",
         "Previsões por distância e prova-alvo",
         "Health Connect / Samsung Health no app mobile",
-        "Deploy demonstrável para portfólio",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Inteligência e Evolução",
+        "milestone": "Deploy, Portfólio e Qualidade",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -56,12 +56,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "4.0.0",
-        "title": "Inteligência, insights e evolução",
+        "version": "5.0.0",
+        "title": "Deploy, portfólio e qualidade operacional",
         "highlights": [
-            "Nova tela Inteligência com leitura semanal do treino híbrido.",
-            "Comparação planejado vs realizado para musculação, corrida, mobilidade e descanso.",
-            "Previsão simples de tempo para 5 km com base nas corridas registradas.",
-            "Recomendações acionáveis para consistência, volume, esteira e adaptação de exercícios.",
+            "Nova tela Deploy com checklist operacional e próximos alvos de publicação.",
+            "Endpoints de operações para status da aplicação e checklist de deploy.",
+            "Docker Compose de produção base, documentação de deploy e política de segurança.",
+            "README, changelog e comandos Makefile consolidados para apresentação de portfólio.",
         ],
     }

@@ -1,36 +1,42 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 .pytest_cache/
 .mypy_cache/
-.ruff_cache/
 .coverage
 htmlcov/
 
-# Python virtual envs
+# Virtual environments
 .venv/
 venv/
 env/
 
-# Environment files
+# Environment variables
 .env
 .env.*
 !.env.example
+!.env.production.example
+backend/.env
+frontend/.env
 
-# Node / frontend
-node_modules/
-dist/
-build/
-*.tsbuildinfo
-
-# IDE / OS
+# IDEs
 .vscode/
 .idea/
-.DS_Store
-Thumbs.db
 
 # Logs
 *.log
 
-# Docker local data
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# Docker/local data
 postgres_data/

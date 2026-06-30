@@ -428,3 +428,31 @@ export type UserPreferenceUpdatePayload = {
   weekly_strength_goal_sessions?: number | null
   gym_notes?: string | null
 }
+
+export type OpsServiceStatus = {
+  key: string
+  label: string
+  status: string
+  detail: string
+}
+
+export type OpsStatus = {
+  app: string
+  version: string
+  environment: string
+  status: string
+  services: OpsServiceStatus[]
+}
+
+export type DeploymentChecklistItem = {
+  key: string
+  label: string
+  status: string
+}
+
+export type DeploymentChecklist = {
+  version: string
+  title: string
+  items: DeploymentChecklistItem[]
+  recommended_next_targets: string[]
+}

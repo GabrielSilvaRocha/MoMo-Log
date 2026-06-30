@@ -24,6 +24,7 @@ const navItems: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'adaptation', label: 'Adaptação', icon: '🧠' },
   { id: 'profile', label: 'Perfil', icon: '👤' },
   { id: 'mvp', label: 'MVP', icon: '🚀' },
+  { id: 'deploy', label: 'Deploy', icon: '🛠️' },
 ]
 
 export function AppShell({ children, currentView, onNavigate, user, onLogout }: AppShellProps) {
@@ -40,7 +41,7 @@ export function AppShell({ children, currentView, onNavigate, user, onLogout }: 
             </div>
             <div className="flex flex-col gap-2 rounded-2xl border border-mo-border bg-black/20 px-4 py-3 text-sm text-mo-muted sm:items-end">
               <span>Usuário: <strong className="text-white">{user.name}</strong></span>
-              <span>Versão: <span className="text-mo-primary">v4.0.0</span></span>
+              <span>Versão: <span className="text-mo-primary">v5.0.0</span></span>
               <button onClick={onLogout} className="text-left text-xs font-semibold text-mo-primary hover:text-white sm:text-right">Sair</button>
             </div>
           </div>

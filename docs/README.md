@@ -1,13 +1,36 @@
-# Documentação do Mo² LOG
+# Documentação Mo² LOG
 
-Esta pasta centraliza a documentação de produto, arquitetura, API, banco de dados, UI e decisões técnicas.
+## Produto
 
-## Principais documentos
+- `product/vision.md`
+- `product/roadmap.md`
+- `product/backlog.md`
+- `product/user-stories.md`
 
-- `product/mvp-v2.md` — escopo do MVP consolidado.
-- `product/vision.md` — visão do produto.
-- `architecture/overview.md` — visão arquitetural.
-- `api/api-v1.md` — contrato da API.
-- `database/der-v1.md` — modelo de dados.
-- `ui/design-system.md` — identidade visual e componentes.
-- `decisions/` — ADRs.
+## Arquitetura
+
+- `architecture/overview.md`
+- `architecture/backend.md`
+- `architecture/frontend.md`
+- `architecture/integrations.md`
+
+## API e banco
+
+- `api/api-v1.md`
+- `api/authentication.md`
+- `api/endpoints.md`
+- `database/der-v1.md`
+- `database/data-dictionary.md`
+- `database/migrations.md`
+
+## UI
+
+- `ui/design-system.md`
+- `ui/wireframes.md`
+- `ui/components.md`
+
+## Deploy, segurança e portfólio
+
+- `deployment/production.md`
+- `deployment/portfolio.md`
+- `security/secrets.md`

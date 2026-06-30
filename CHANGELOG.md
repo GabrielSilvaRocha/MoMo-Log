@@ -1,5 +1,29 @@
 # Changelog
 
+## v5.0.0 - Deploy, portfólio e qualidade operacional
+
+### Adicionado
+
+- Tela **Deploy** no frontend.
+- Endpoint `GET /api/v1/ops/status`.
+- Endpoint `GET /api/v1/ops/deployment-checklist`.
+- Docker Compose de produção base.
+- Dockerfile de produção do backend.
+- Dockerfile de produção do frontend com Nginx.
+- Documentação de deploy, portfólio e política de secrets.
+- Testes para os endpoints operacionais.
+
+### Alterado
+
+- Versão da aplicação para `5.0.0`.
+- README consolidado para uso local, deploy e portfólio.
+- Notas de release e status do produto atualizados.
+
+### Segurança
+
+- Mantida a decisão de não versionar credenciais reais.
+- Demo local permanece sem senha versionada.
+
 ## 4.0.1 - Security Hotfix
 
 - Remove senha demo hardcoded do README, documentação, frontend e backend.
@@ -14,36 +38,3 @@
 - Adicionado score híbrido semanal.
 - Adicionados insights e recomendações acionáveis.
 - Adicionada previsão simples para 5 km.
-- Atualizada documentação da API e produto.
-
-
-## v3.0.0 — Usuários, autenticação e preferências
-
-### Adicionado
-
-- Cadastro de usuário.
-- Login com token assinado no backend.
-- Login demo para usar o banco populado.
-- Endpoint `POST /api/v1/auth/register`.
-- Endpoint `POST /api/v1/auth/login`.
-- Endpoint `POST /api/v1/auth/demo-login`.
-- Endpoint `GET /api/v1/auth/me`.
-- Endpoint `GET /api/v1/profile/{user_id}`.
-- Endpoint `PATCH /api/v1/profile/{user_id}`.
-- Endpoint `GET /api/v1/profile/{user_id}/preferences`.
-- Endpoint `PATCH /api/v1/profile/{user_id}/preferences`.
-- Tabela `user_preferences`.
-- Tela de autenticação no frontend.
-- Tela de perfil e preferências.
-- Sessão local no frontend usando token.
-- Uso do usuário autenticado nos fluxos principais.
-
-### Alterado
-
-- Versão da aplicação para `3.0.0`.
-- Produto agora passa do MVP consolidado para camada de usuário real.
-- Strava permanece opcional; a fonte padrão de corrida fica configurável por usuário.
-
-### Corrigido
-
-- Demo seed agora possui senha configurada para autenticação local.
