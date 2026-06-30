@@ -7,6 +7,7 @@ from app.api.routes.analytics import router as analytics_router
 from app.api.routes.adaptation import router as adaptation_router
 from app.api.routes.goals import router as goals_router
 from app.api.routes.history import router as history_router
+from app.api.routes.reports import router as reports_router
 from app.api.routes.running import router as running_router
 from app.api.routes.strava_auth import router as strava_auth_router
 from app.api.routes.training import router as training_router
@@ -26,3 +27,4 @@ api_router.include_router(goals_router)
 api_router.include_router(analytics_router)
 api_router.include_router(adaptation_router)
 api_router.include_router(history_router)
+api_router.include_router(reports_router)

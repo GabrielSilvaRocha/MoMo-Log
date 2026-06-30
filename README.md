@@ -4,7 +4,7 @@ Mo² LOG é um aplicativo de treino híbrido para musculação e corrida.
 
 ## Versão atual
 
-`v1.6.0` — Histórico de Treinos.
+`v1.7.0` — Relatórios e Exportação.
 
 ## Módulos disponíveis
 
@@ -17,6 +17,7 @@ Mo² LOG é um aplicativo de treino híbrido para musculação e corrida.
 - Corridas com fonte manual, esteira, mock Strava e base OAuth Strava
 - Estatísticas, metas e recordes
 - Histórico de sessões com filtros e detalhes
+- Relatórios por período com exportação CSV
 
 ## Subir o projeto
 
@@ -47,6 +48,8 @@ http://localhost:8000/api/v1/health
 ## Testes rápidos
 
 ```text
-http://localhost:8000/api/v1/history/summary?user_id=1
-http://localhost:8000/api/v1/history/sessions?user_id=1&limit=20
+http://localhost:8000/api/v1/reports/overview?user_id=1
+http://localhost:8000/api/v1/reports/export/sessions.csv?user_id=1
+http://localhost:8000/api/v1/reports/export/running.csv?user_id=1
+http://localhost:8000/api/v1/reports/export/strength.csv?user_id=1
 ```

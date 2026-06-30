@@ -8,6 +8,7 @@ import type {
   ExerciseSwapResult,
   Goal,
   HistorySummary,
+  ReportOverview,
   PersonalRecord,
   ManualRunningActivityPayload,
   RunningActivity,
@@ -31,6 +32,12 @@ export const mo2logApi = {
     apiGet<WeekDashboard>(`/dashboard/week?user_id=${userId}&reference_date=${referenceDate}`),
   weekStatistics: (userId = 1, referenceDate = '2026-06-29') =>
     apiGet<WeeklyStatistics>(`/statistics/week?user_id=${userId}&reference_date=${referenceDate}`),
+  reportOverview: (userId = 1, dateFrom?: string, dateTo?: string) => {
+    const params = new URLSearchParams({ user_id: String(userId) })
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    return apiGet<ReportOverview>(`/reports/overview?${params.toString()}`)
+  },
   historySummary: (userId = 1, dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams({ user_id: String(userId) })
     if (dateFrom) params.set('date_from', dateFrom)

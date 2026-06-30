@@ -250,3 +250,26 @@ export type HistorySummary = {
   average_pace: string | null
   completion_rate: number
 }
+
+
+export type ReportOverview = {
+  user_id: number
+  date_from: string
+  date_to: string
+  total_sessions: number
+  completed_sessions: number
+  adapted_sessions: number
+  skipped_sessions: number
+  strength_sessions: number
+  running_sessions: number
+  strength_volume: string
+  total_sets: number
+  average_rpe: number | null
+  running_activities: number
+  treadmill_runs: number
+  running_distance_km: string
+  running_time_s: number
+  average_pace: string | null
+  completion_rate: number
+  insights: string[]
+}

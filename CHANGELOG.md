@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.7.0 - Relatórios e Exportação
+
+### Added
+- Nova tela **Relatórios** no frontend.
+- Endpoint `GET /api/v1/reports/overview` para resumo exportável por período.
+- Exportação CSV de sessões: `GET /api/v1/reports/export/sessions.csv`.
+- Exportação CSV de corridas: `GET /api/v1/reports/export/running.csv`.
+- Exportação CSV de musculação: `GET /api/v1/reports/export/strength.csv`.
+- Insights consolidados por período para consistência, volume, corrida e esteira.
+
+### Changed
+- Versão da aplicação atualizada para `1.7.0`.
+- Navegação do MVP passa a incluir **Relatórios** como visão própria.
+
 ## v1.6.0 - Histórico de Treinos
 
 ### Added

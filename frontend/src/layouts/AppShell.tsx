@@ -14,6 +14,7 @@ const navItems: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'running', label: 'Corridas', icon: '🏃' },
   { id: 'analytics', label: 'Estatísticas', icon: '📈' },
   { id: 'history', label: 'Histórico', icon: '🗂️' },
+  { id: 'reports', label: 'Relatórios', icon: '📄' },
   { id: 'goals', label: 'Metas', icon: '🎯' },
   { id: 'exercises', label: 'Exercícios', icon: '🔁' },
   { id: 'adaptation', label: 'Adaptação', icon: '🧠' },
