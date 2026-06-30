@@ -104,14 +104,14 @@ def demo_login(db: Session = Depends(get_db)) -> AuthTokenRead:
             id=1,
             name="Gabriel Rocha",
             email="gabriel.demo@mo2log.com.br",
-            password_hash=hash_password("mo2log123", salt="demo_salt"),
+            password_hash=None,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
 
     if user.password_hash is None:
-        user.password_hash = hash_password("mo2log123", salt="demo_salt")
+        # Demo user does not receive a repository-defined password
         db.commit()
         db.refresh(user)
 

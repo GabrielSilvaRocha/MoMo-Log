@@ -42,7 +42,7 @@ Use o botão **Entrar como Gabriel Demo** ou informe:
 
 ```text
 E-mail: gabriel.demo@mo2log.com.br
-Senha: mo2log123
+Senha: não versionada. Use o botão "Entrar como Gabriel Demo" em ambiente local.
 ```
 
 ## URLs úteis

@@ -27,7 +27,7 @@ POST /api/v1/auth/login
 ```json
 {
   "email": "gabriel.demo@mo2log.com.br",
-  "password": "mo2log123"
+  "password": "<sua-senha>"
 }
 ```
 

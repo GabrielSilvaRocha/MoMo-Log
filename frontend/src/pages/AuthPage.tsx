@@ -13,8 +13,8 @@ type Mode = 'login' | 'register'
 export function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('Gabriel Rocha')
-  const [email, setEmail] = useState('gabriel.demo@mo2log.com.br')
-  const [password, setPassword] = useState('mo2log123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
