@@ -87,6 +87,7 @@ export function RunningPage() {
   const [remainingDistanceMeters, setRemainingDistanceMeters] = useState<number | null>(null)
   const [preStartCountdown, setPreStartCountdown] = useState<number | null>(null)
   const [pendingFirstStep, setPendingFirstStep] = useState<{ executionId: number; step: RunningWorkoutStep } | null>(null)
+  const [autoAdvancing, setAutoAdvancing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -147,6 +148,11 @@ export function RunningPage() {
     ? secondsFromDistanceAndSpeed(remainingDistanceMeters, currentSpeed)
     : remainingSeconds
   const currentPaceSeconds = paceSecondsFromSpeed(currentSpeed) ?? activeStep?.target_pace_seconds_per_km ?? null
+  const activeStepIsComplete = Boolean(activeStep) && (
+    activeStepIsDistanceBased
+      ? remainingDistanceMeters !== null && remainingDistanceMeters <= 0
+      : remainingSeconds <= 0
+  )
 
   useEffect(() => {
     if (!activeStep) return
@@ -166,6 +172,13 @@ export function RunningPage() {
     }, 1000)
     return () => window.clearInterval(timer)
   }, [activeStep, activeStepIsDistanceBased, currentSpeed, remainingDistanceMeters, remainingSeconds])
+
+  useEffect(() => {
+    if (!activeStepIsComplete || !activeStepLog || autoAdvancing) return
+
+    void completeActiveStep()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStepIsComplete, activeStepLog, autoAdvancing])
 
   const weeklySummary = useMemo(() => {
     const distance = plan.reduce((total, session) => total + Number(session.target_distance_km ?? 0), 0)
@@ -213,6 +226,7 @@ export function RunningPage() {
       setActiveStepLog(null)
       setRemainingDistanceMeters(null)
       setRemainingSeconds(0)
+      setAutoAdvancing(false)
       const firstStep = session.steps[0]
       if (firstStep) {
         setPendingFirstStep({ executionId: started.id, step: firstStep })
@@ -246,6 +260,31 @@ export function RunningPage() {
       ? await mo2logApi.speedUpRunningStep(activeStepLog.id)
       : await mo2logApi.speedDownRunningStep(activeStepLog.id)
     setActiveStepLog((current) => current ? { ...current, actual_speed_kmh: adjustment.new_speed_kmh } : current)
+  }
+
+  async function completeActiveStep() {
+    if (!activeStepLog || autoAdvancing) return
+    try {
+      setAutoAdvancing(true)
+      const progress = await mo2logApi.completeRunningStep(activeStepLog.id)
+      setExecution(progress.execution)
+      setMessage(progress.message)
+
+      if (progress.next_step) {
+        await startStep(progress.execution.id, progress.next_step)
+      } else {
+        setActiveStep(null)
+        setActiveStepLog(null)
+        setRemainingDistanceMeters(null)
+        setRemainingSeconds(0)
+        await load()
+      }
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao avançar etapa')
+    } finally {
+      setAutoAdvancing(false)
+    }
   }
 
   async function finishExecution() {
@@ -351,7 +390,7 @@ export function RunningPage() {
 
             <div className="mt-6 space-y-3">
               {selectedSession.steps.map((step) => (
-                <button key={step.id} disabled={!execution || execution.status === 'completed' || preStartCountdown !== null} onClick={() => execution && startStep(execution.id, step)} className={`w-full rounded-2xl border p-4 text-left transition ${activeStep?.id === step.id ? 'border-mo-primary bg-mo-primary/10' : 'border-mo-border bg-white/[0.03] hover:border-mo-primary/40'} disabled:cursor-not-allowed disabled:opacity-60`}>
+                <button key={step.id} disabled={!execution || execution.status === 'completed' || preStartCountdown !== null || autoAdvancing} onClick={() => execution && startStep(execution.id, step)} className={`w-full rounded-2xl border p-4 text-left transition ${activeStep?.id === step.id ? 'border-mo-primary bg-mo-primary/10' : 'border-mo-border bg-white/[0.03] hover:border-mo-primary/40'} disabled:cursor-not-allowed disabled:opacity-60`}>
                   <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                     <p className="font-semibold text-white">{step.order_index}. {step.title}</p>
                     <p className="text-sm text-mo-muted">{describeStepTarget(step)}</p>
@@ -389,6 +428,7 @@ export function RunningPage() {
                   <p className="mt-3 text-sm text-mo-muted">
                     {activeStepIsDistanceBased ? 'O tempo muda conforme a velocidade usada.' : 'Etapa controlada por tempo.'}
                   </p>
+                  {autoAdvancing && <p className="mt-2 text-sm font-semibold text-mo-primary">Avançando para a próxima etapa...</p>}
                 </div>
 
                 <div className="rounded-3xl border border-mo-border bg-black/20 p-5 text-center">
@@ -399,6 +439,7 @@ export function RunningPage() {
                     <button onClick={() => adjustSpeed('up')} className="h-14 w-14 rounded-2xl bg-mo-primary text-2xl font-bold text-black shadow-glow">+</button>
                   </div>
                   <p className="mt-3 text-sm text-mo-muted">Ajustes de 0,1 km/h recalculam o tempo restante e ficam registrados.</p>
+                  <button onClick={completeActiveStep} disabled={autoAdvancing} className="mt-4 rounded-2xl border border-mo-primary px-5 py-3 font-bold text-mo-primary disabled:cursor-not-allowed disabled:opacity-60">Concluir etapa agora</button>
                 </div>
 
                 <div className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">

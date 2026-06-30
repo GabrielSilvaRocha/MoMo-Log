@@ -243,6 +243,14 @@ export type RunningSpeedAdjustment = {
   created_at: string
 }
 
+export type RunningStepAdvance = {
+  completed_step_log: RunningStepLog
+  next_step: RunningWorkoutStep | null
+  execution: RunningExecution
+  session_completed: boolean
+  message: string
+}
+
 export type RunningGoalPayload = {
   user_id: number
   goal_type?: string

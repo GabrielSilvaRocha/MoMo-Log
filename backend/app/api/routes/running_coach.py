@@ -23,6 +23,7 @@ from app.schemas.running import (
     RunningPlanSessionRead,
     RunningSpeedAdjustmentRead,
     RunningStepLogRead,
+    RunningStepAdvanceRead,
 )
 
 router = APIRouter(tags=["running-coach"])
@@ -343,6 +344,65 @@ def speed_up(step_log_id: int, db: Session = Depends(get_db)) -> RunningSpeedAdj
 @router.post("/running-step-logs/{step_log_id}/speed-down", response_model=RunningSpeedAdjustmentRead)
 def speed_down(step_log_id: int, db: Session = Depends(get_db)) -> RunningSpeedAdjustment:
     return _adjust_speed(step_log_id, Decimal("-0.10"), "decrease", db)
+
+
+
+@router.post("/running-step-logs/{step_log_id}/complete", response_model=RunningStepAdvanceRead)
+def complete_running_step(step_log_id: int, db: Session = Depends(get_db)) -> dict:
+    step_log = db.get(RunningStepLog, step_log_id)
+    if step_log is None:
+        raise HTTPException(status_code=404, detail="Running step log not found")
+
+    execution = db.get(RunningExecutionLog, step_log.running_execution_log_id)
+    step = db.get(RunningWorkoutStep, step_log.running_workout_step_id)
+    if execution is None or step is None:
+        raise HTTPException(status_code=404, detail="Execution or step not found")
+    if step.running_plan_session_id != execution.running_plan_session_id:
+        raise HTTPException(status_code=400, detail="Step does not belong to this execution")
+
+    now = datetime.now(timezone.utc)
+    if not step_log.completed:
+        step_log.completed = True
+        step_log.finished_at = now
+
+    next_step = db.execute(
+        select(RunningWorkoutStep)
+        .where(
+            RunningWorkoutStep.running_plan_session_id == step.running_plan_session_id,
+            RunningWorkoutStep.order_index > step.order_index,
+        )
+        .order_by(RunningWorkoutStep.order_index.asc())
+    ).scalars().first()
+
+    session = db.get(RunningPlanSession, execution.running_plan_session_id)
+    session_completed = next_step is None
+    message = "Etapa concluída. Próxima etapa pronta."
+    if session_completed:
+        execution.status = "completed"
+        execution.finished_at = execution.finished_at or now
+        if session is not None:
+            session.status = "completed"
+            execution.total_distance_km = session.target_distance_km
+            execution.total_duration_seconds = session.target_duration_seconds
+            execution.average_speed_kmh = session.target_speed_kmh
+            execution.average_pace_seconds_per_km = session.target_pace_seconds_per_km
+        message = "Treino finalizado automaticamente ao concluir a última etapa."
+    elif next_step is not None:
+        message = f"Etapa concluída. Próxima etapa: {next_step.title}."
+
+    db.commit()
+    db.refresh(step_log)
+    db.refresh(execution)
+    if next_step is not None:
+        db.refresh(next_step)
+
+    return {
+        "completed_step_log": step_log,
+        "next_step": next_step,
+        "execution": execution,
+        "session_completed": session_completed,
+        "message": message,
+    }
 
 
 @router.post("/running-executions/{execution_id}/finish", response_model=RunningExecutionRead)

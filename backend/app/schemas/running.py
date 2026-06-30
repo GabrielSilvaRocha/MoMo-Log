@@ -174,3 +174,11 @@ class RunningSpeedAdjustmentRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RunningStepAdvanceRead(BaseModel):
+    completed_step_log: RunningStepLogRead
+    next_step: RunningWorkoutStepRead | None = None
+    execution: RunningExecutionRead
+    session_completed: bool
+    message: str
