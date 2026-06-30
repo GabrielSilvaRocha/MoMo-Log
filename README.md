@@ -38,11 +38,10 @@ http://localhost:5173
 
 ## Login demo
 
-Use o botão **Entrar como Gabriel Demo** ou informe:
+Use o botão **Entrar como Demo Local** ou informe:
 
 ```text
-E-mail: gabriel.demo@mo2log.com.br
-Senha: não versionada. Use o botão "Entrar como Gabriel Demo" em ambiente local.
+Use o botão **Entrar como Demo Local** em ambiente local. Nenhuma senha demo é versionada no repositório.
 ```
 
 ## URLs úteis

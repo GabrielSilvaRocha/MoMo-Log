@@ -110,10 +110,6 @@ def demo_login(db: Session = Depends(get_db)) -> AuthTokenRead:
         db.commit()
         db.refresh(user)
 
-    if user.password_hash is None:
-        # Demo user does not receive a repository-defined password
-        db.commit()
-        db.refresh(user)
 
     _ensure_preferences(db, user.id)
     return _token_for_user(user)

@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.1 - Security Hotfix
+
+- Remove senha demo hardcoded do README, documentação, frontend e backend.
+- Demo login permanece disponível sem senha versionada.
+- Adiciona migration para limpar hash antigo do usuário demo local.
+- Atualiza placeholders de ambiente para reduzir alertas de secret scanning.
+
 ## v4.0.0 - Intelligence Core
 
 - Adicionada tela **Inteligência** no frontend.

@@ -82,7 +82,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
           </div>
 
           <h2 className="text-2xl font-bold">{mode === 'login' ? 'Entrar no Mo² LOG' : 'Criar conta'}</h2>
-          <p className="mt-2 text-sm text-mo-muted">Use o login demo para acessar o planejamento já populado.</p>
+          <p className="mt-2 text-sm text-mo-muted">Use suas credenciais locais ou o botão demo para acessar o planejamento já populado.</p>
 
           {mode === 'register' && (
             <label className="mt-5 block text-sm text-mo-muted">
@@ -108,7 +108,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
           </button>
 
           <button type="button" disabled={loading} onClick={handleDemoLogin} className="mt-3 w-full rounded-2xl border border-mo-border bg-white/[0.03] px-5 py-3 font-semibold text-white hover:border-mo-primary disabled:opacity-60">
-            Entrar como Gabriel Demo
+            Entrar como Demo Local
           </button>
         </form>
       </section>

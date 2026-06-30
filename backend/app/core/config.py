@@ -6,10 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Mo² LOG"
     app_env: str = "development"
-    app_version: str = "4.0.0"
+    app_version: str = "4.0.1"
     database_url: str
     frontend_origin: str = "http://localhost:5173"
-    secret_key: str = "mo2log-development-secret-change-me"
+    secret_key: str = "development-only-not-a-secret"
     access_token_expire_minutes: int = 60 * 24
 
     strava_client_id: str | None = None

@@ -1,4 +1,4 @@
-"""create user preferences and demo auth credentials
+"""create user preferences
 
 Revision ID: 20260630_0006
 Revises: 20260629_0005
@@ -14,7 +14,6 @@ down_revision: Union[str, None] = "20260629_0005"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-DEMO_PASSWORD_HASH = "pbkdf2_sha256$210000$demo_salt$bcf1abec73b77161f191a65b8d30e980bef513949ea294f46bebb148b697b789"
 
 
 def upgrade() -> None:
@@ -36,13 +35,6 @@ def upgrade() -> None:
     op.create_index(op.f("ix_user_preferences_id"), "user_preferences", ["id"], unique=False)
     op.create_index(op.f("ix_user_preferences_user_id"), "user_preferences", ["user_id"], unique=False)
 
-    op.execute(
-        f"""
-        UPDATE users
-        SET password_hash = '{DEMO_PASSWORD_HASH}'
-        WHERE email = 'gabriel.demo@mo2log.com.br' AND password_hash IS NULL;
-        """
-    )
     op.execute(
         """
         INSERT INTO user_preferences (
