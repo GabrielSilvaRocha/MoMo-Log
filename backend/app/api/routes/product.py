@@ -14,7 +14,7 @@ def get_mvp_status() -> dict:
         {"key": "templates", "label": "Templates", "status": "stable", "description": "Biblioteca de treinos reutilizáveis e criação rápida de sessões planejadas."},
         {"key": "workout", "label": "Execução de treino", "status": "stable", "description": "Registro de séries, checklist, volume do treino, RPE e cronômetro de descanso."},
         {"key": "adaptation", "label": "Adaptação", "status": "stable", "description": "Sugestões de substituição com penalidade para equipamento indisponível e bônus para favoritos."},
-        {"key": "running", "label": "Corridas", "status": "stable", "description": "Running Coach com objetivo de 5 km, plano de esteira e execução guiada."},
+        {"key": "running", "label": "Corridas", "status": "stable", "description": "Running Coach com objetivo de 5 km, plano de esteira, execução por distância e ajuste de velocidade."},
         {"key": "history", "label": "Histórico", "status": "stable", "description": "Consulta de sessões por período, status e tipo."},
         {"key": "reports", "label": "Relatórios", "status": "stable", "description": "Resumo por período e exportação CSV."},
         {"key": "analytics", "label": "Estatísticas", "status": "stable", "description": "Metas, recordes pessoais e insights iniciais."},
@@ -47,7 +47,7 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Running Coach Core",
+        "milestone": "Running Coach Execution Hotfix",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -58,12 +58,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "6.1.0",
-        "title": "Running Coach Core",
+        "version": "6.1.1",
+        "title": "Running Coach Execution Hotfix",
         "highlights": [
-            "Reforma completa do módulo Corridas para Running Coach.",
-            "Remoção do Strava do fluxo principal e da interface.",
-            "Objetivo inicial de 5 km com plano progressivo para esteira.",
-            "Execução guiada com etapas, cronômetro regressivo e ajuste de velocidade +/−.",
+            "Timer de 5 segundos antes da primeira etapa.",
+            "Distância regressiva para treinos estruturados por km/m.",
+            "Tempo restante recalculado quando a velocidade é alterada.",
+            "Pace exibido pela velocidade atual e pace planejado lado a lado.",
         ],
     }

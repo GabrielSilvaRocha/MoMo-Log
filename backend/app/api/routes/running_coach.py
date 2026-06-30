@@ -114,10 +114,11 @@ def _continuous_steps(session_id: int, pace: int, speed: Decimal | None, distanc
             order_index=1,
             step_type="warmup",
             title="Aquecimento",
-            target_duration_seconds=300,
+            target_distance_m=800,
+            target_duration_seconds=312,
             target_pace_seconds_per_km=390,
             target_speed_kmh=_speed_from_pace(390),
-            notes="Trote leve para preparar a sessão.",
+            notes="Aquecimento estruturado por distância. Use o tempo apenas como estimativa pela velocidade.",
         ),
         RunningWorkoutStep(
             running_plan_session_id=session_id,
@@ -128,17 +129,18 @@ def _continuous_steps(session_id: int, pace: int, speed: Decimal | None, distanc
             target_duration_seconds=duration,
             target_pace_seconds_per_km=pace,
             target_speed_kmh=speed,
-            notes="Use + e - para ajustar em 0,1 km/h se necessário.",
+            notes="Use + e - para ajustar em 0,1 km/h; o tempo restante será recalculado.",
         ),
         RunningWorkoutStep(
             running_plan_session_id=session_id,
             order_index=3,
             step_type="cooldown",
             title="Desaquecimento",
-            target_duration_seconds=300,
+            target_distance_m=600,
+            target_duration_seconds=252,
             target_pace_seconds_per_km=420,
             target_speed_kmh=_speed_from_pace(420),
-            notes="Reduza gradualmente.",
+            notes="Desaquecimento por distância, reduzindo gradualmente.",
         ),
     ]
 
@@ -153,10 +155,11 @@ def _interval_steps(session_id: int, week: int) -> list[RunningWorkoutStep]:
             order_index=1,
             step_type="warmup",
             title="Aquecimento",
-            target_duration_seconds=600,
+            target_distance_m=1000,
+            target_duration_seconds=390,
             target_pace_seconds_per_km=390,
             target_speed_kmh=_speed_from_pace(390),
-            notes="Trote leve antes dos tiros.",
+            notes="Aquecimento por distância antes dos tiros.",
         )
     ]
     order = 2
@@ -196,10 +199,11 @@ def _interval_steps(session_id: int, week: int) -> list[RunningWorkoutStep]:
             order_index=order,
             step_type="cooldown",
             title="Desaquecimento",
-            target_duration_seconds=480,
+            target_distance_m=800,
+            target_duration_seconds=336,
             target_pace_seconds_per_km=420,
             target_speed_kmh=_speed_from_pace(420),
-            notes="Finalize leve.",
+            notes="Finalize leve por distância.",
         )
     )
     return steps
@@ -234,7 +238,7 @@ def generate_running_plan(goal_id: int, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="Running goal not found")
     created = _build_default_plan(goal, db)
     db.commit()
-    return {"goal_id": goal_id, "created_sessions": created, "message": "Plano de corrida gerado para esteira."}
+    return {"goal_id": goal_id, "created_sessions": created, "message": "Plano de corrida gerado para esteira, com execução orientada por distância."}
 
 
 @router.get("/running-plan/week", response_model=list[RunningPlanSessionRead])

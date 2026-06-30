@@ -43,6 +43,39 @@ function stepTypeLabel(type: string) {
   return labels[type] ?? type
 }
 
+function numberFromApi(value?: string | number | null) {
+  if (value === null || value === undefined) return null
+  const number = typeof value === 'string' ? Number(value) : value
+  return Number.isFinite(number) ? number : null
+}
+
+function secondsFromDistanceAndSpeed(distanceMeters: number | null, speedKmh: number | null) {
+  if (!distanceMeters || !speedKmh || speedKmh <= 0) return 0
+  return Math.ceil((distanceMeters / 1000 / speedKmh) * 3600)
+}
+
+function paceSecondsFromSpeed(speedKmh: number | null) {
+  if (!speedKmh || speedKmh <= 0) return null
+  return Math.round(3600 / speedKmh)
+}
+
+function formatDistanceMeters(distanceMeters?: number | null, fractionDigits = 2) {
+  if (!distanceMeters || distanceMeters <= 0) return '—'
+  if (distanceMeters >= 1000) return `${formatNumber(distanceMeters / 1000, fractionDigits)} km`
+  return `${Math.ceil(distanceMeters)} m`
+}
+
+function describeStepTarget(step: RunningWorkoutStep) {
+  const speed = numberFromApi(step.target_speed_kmh)
+  const distance = step.target_distance_m ? formatDistanceMeters(step.target_distance_m) : null
+  const estimated = step.target_distance_m
+    ? formatClock(secondsFromDistanceAndSpeed(step.target_distance_m, speed))
+    : step.target_duration_seconds
+      ? formatClock(step.target_duration_seconds)
+      : '—'
+  return `${stepTypeLabel(step.step_type)} · ${distance ?? 'por tempo'} · ${step.target_speed_kmh ?? '—'} km/h · ${estimated}`
+}
+
 export function RunningPage() {
   const [goal, setGoal] = useState<RunningGoal | null>(null)
   const [plan, setPlan] = useState<RunningPlanSession[]>([])
@@ -51,6 +84,9 @@ export function RunningPage() {
   const [activeStep, setActiveStep] = useState<RunningWorkoutStep | null>(null)
   const [activeStepLog, setActiveStepLog] = useState<RunningStepLog | null>(null)
   const [remainingSeconds, setRemainingSeconds] = useState(0)
+  const [remainingDistanceMeters, setRemainingDistanceMeters] = useState<number | null>(null)
+  const [preStartCountdown, setPreStartCountdown] = useState<number | null>(null)
+  const [pendingFirstStep, setPendingFirstStep] = useState<{ executionId: number; step: RunningWorkoutStep } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -87,12 +123,49 @@ export function RunningPage() {
   }, [])
 
   useEffect(() => {
-    if (!activeStep || remainingSeconds <= 0) return
+    if (!pendingFirstStep || preStartCountdown === null) return
+
+    if (preStartCountdown <= 0) {
+      const firstStep = pendingFirstStep
+      setPendingFirstStep(null)
+      setPreStartCountdown(null)
+      void startStep(firstStep.executionId, firstStep.step)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setPreStartCountdown((current) => (current === null ? null : Math.max(0, current - 1)))
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFirstStep, preStartCountdown])
+
+  const currentSpeed = numberFromApi(activeStepLog?.actual_speed_kmh ?? activeStep?.target_speed_kmh ?? selectedSession?.target_speed_kmh ?? null)
+  const activeStepIsDistanceBased = Boolean(activeStep?.target_distance_m && activeStep.target_distance_m > 0)
+  const estimatedRemainingSeconds = activeStepIsDistanceBased
+    ? secondsFromDistanceAndSpeed(remainingDistanceMeters, currentSpeed)
+    : remainingSeconds
+  const currentPaceSeconds = paceSecondsFromSpeed(currentSpeed) ?? activeStep?.target_pace_seconds_per_km ?? null
+
+  useEffect(() => {
+    if (!activeStep) return
+
+    if (activeStepIsDistanceBased) {
+      if (!remainingDistanceMeters || remainingDistanceMeters <= 0) return
+      const timer = window.setInterval(() => {
+        const metersPerSecond = currentSpeed && currentSpeed > 0 ? (currentSpeed * 1000) / 3600 : 0
+        setRemainingDistanceMeters((current) => Math.max(0, (current ?? 0) - metersPerSecond))
+      }, 1000)
+      return () => window.clearInterval(timer)
+    }
+
+    if (remainingSeconds <= 0) return
     const timer = window.setInterval(() => {
       setRemainingSeconds((current) => Math.max(0, current - 1))
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [activeStep, remainingSeconds])
+  }, [activeStep, activeStepIsDistanceBased, currentSpeed, remainingDistanceMeters, remainingSeconds])
 
   const weeklySummary = useMemo(() => {
     const distance = plan.reduce((total, session) => total + Number(session.target_distance_km ?? 0), 0)
@@ -136,9 +209,18 @@ export function RunningPage() {
       const started = await mo2logApi.startRunningExecution(session.id)
       setExecution(started)
       setSelectedSession(session)
-      setMessage('Execução iniciada. Siga as etapas na esteira.')
+      setActiveStep(null)
+      setActiveStepLog(null)
+      setRemainingDistanceMeters(null)
+      setRemainingSeconds(0)
       const firstStep = session.steps[0]
-      if (firstStep) await startStep(started.id, firstStep)
+      if (firstStep) {
+        setPendingFirstStep({ executionId: started.id, step: firstStep })
+        setPreStartCountdown(5)
+        setMessage('Prepare a esteira. O treino começa em 5 segundos.')
+      } else {
+        setMessage('Execução iniciada. Nenhuma etapa encontrada para este treino.')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao iniciar corrida')
     }
@@ -146,9 +228,16 @@ export function RunningPage() {
 
   async function startStep(executionId: number, step: RunningWorkoutStep) {
     const log = await mo2logApi.startRunningStep(executionId, step.id)
+    const speed = numberFromApi(log.actual_speed_kmh ?? step.target_speed_kmh)
+    const distanceMeters = step.target_distance_m ?? null
     setActiveStep(step)
     setActiveStepLog(log)
-    setRemainingSeconds(step.target_duration_seconds ?? step.rest_seconds ?? 0)
+    setRemainingDistanceMeters(distanceMeters)
+    setRemainingSeconds(
+      distanceMeters
+        ? secondsFromDistanceAndSpeed(distanceMeters, speed)
+        : step.target_duration_seconds ?? step.rest_seconds ?? 0,
+    )
   }
 
   async function adjustSpeed(direction: 'up' | 'down') {
@@ -167,8 +256,6 @@ export function RunningPage() {
     await load()
   }
 
-  const currentSpeed = activeStepLog?.actual_speed_kmh ?? activeStep?.target_speed_kmh ?? selectedSession?.target_speed_kmh ?? null
-
   if (loading) return <LoadingState title="Carregando corrida" description="Montando objetivo, plano e execução guiada." />
 
   return (
@@ -177,7 +264,7 @@ export function RunningPage() {
         <p className="text-sm uppercase tracking-[0.3em] text-mo-primary">Running Coach</p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight text-white">Plano de corrida para 5 km na esteira</h2>
         <p className="mt-3 max-w-4xl text-mo-muted">
-          O módulo de corridas agora é guiado por objetivo. Sem Strava, sem integrações externas: você define a prova, o Mo² LOG monta o plano e executa cada treino com pace, velocidade da esteira, etapas e cronômetro regressivo.
+          O módulo de corridas agora é guiado por objetivo e estruturado por distância. O tempo é estimado pela velocidade atual da esteira: se você ajustar a velocidade com + ou -, o Mo² LOG recalcula o tempo restante automaticamente.
         </p>
       </section>
 
@@ -186,8 +273,8 @@ export function RunningPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Sessões da semana" value={String(weeklySummary.sessions)} hint="Plano atual" icon="📅" />
-        <MetricCard label="Km planejados" value={`${formatNumber(weeklySummary.distance)} km`} hint="Somatório da semana" icon="📏" />
-        <MetricCard label="Tempo planejado" value={formatDuration(weeklySummary.duration)} hint="Tempo estimado" icon="⏱️" />
+        <MetricCard label="Km planejados" value={`${formatNumber(weeklySummary.distance)} km`} hint="Base do plano" icon="📏" />
+        <MetricCard label="Tempo estimado" value={formatDuration(weeklySummary.duration)} hint="Calculado pelo pace" icon="⏱️" />
         <MetricCard label="Intervalados" value={String(weeklySummary.intervals)} hint="Treinos com etapas" icon="⚡" />
       </section>
 
@@ -258,16 +345,16 @@ export function RunningPage() {
             <div className="mt-5 grid gap-4 md:grid-cols-4">
               <MetricCard label="Pace alvo" value={formatPaceFromSeconds(selectedSession.target_pace_seconds_per_km)} hint="Ritmo planejado" icon="⚡" />
               <MetricCard label="Velocidade" value={`${selectedSession.target_speed_kmh ?? '—'} km/h`} hint="Esteira" icon="🏟️" />
-              <MetricCard label="Distância" value={`${selectedSession.target_distance_km ?? '—'} km`} hint="Planejada" icon="📏" />
-              <MetricCard label="Duração" value={formatDuration(selectedSession.target_duration_seconds ?? 0)} hint="Estimada" icon="⏱️" />
+              <MetricCard label="Distância" value={`${selectedSession.target_distance_km ?? '—'} km`} hint="Base do treino" icon="📏" />
+              <MetricCard label="Tempo estimado" value={formatDuration(selectedSession.target_duration_seconds ?? 0)} hint="Pela velocidade" icon="⏱️" />
             </div>
 
             <div className="mt-6 space-y-3">
               {selectedSession.steps.map((step) => (
-                <button key={step.id} disabled={!execution || execution.status === 'completed'} onClick={() => execution && startStep(execution.id, step)} className={`w-full rounded-2xl border p-4 text-left transition ${activeStep?.id === step.id ? 'border-mo-primary bg-mo-primary/10' : 'border-mo-border bg-white/[0.03] hover:border-mo-primary/40'} disabled:cursor-not-allowed disabled:opacity-60`}>
+                <button key={step.id} disabled={!execution || execution.status === 'completed' || preStartCountdown !== null} onClick={() => execution && startStep(execution.id, step)} className={`w-full rounded-2xl border p-4 text-left transition ${activeStep?.id === step.id ? 'border-mo-primary bg-mo-primary/10' : 'border-mo-border bg-white/[0.03] hover:border-mo-primary/40'} disabled:cursor-not-allowed disabled:opacity-60`}>
                   <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                     <p className="font-semibold text-white">{step.order_index}. {step.title}</p>
-                    <p className="text-sm text-mo-muted">{stepTypeLabel(step.step_type)} · {step.target_speed_kmh ?? '—'} km/h · {step.target_duration_seconds ? formatClock(step.target_duration_seconds) : 'distância'}</p>
+                    <p className="text-sm text-mo-muted">{describeStepTarget(step)}</p>
                   </div>
                   {step.notes && <p className="mt-2 text-sm text-mo-muted">{step.notes}</p>}
                 </button>
@@ -278,33 +365,51 @@ export function RunningPage() {
           <div className="rounded-3xl border border-mo-border bg-mo-surface p-6">
             <p className="text-sm uppercase tracking-[0.25em] text-mo-primary">Esteira</p>
             <h3 className="mt-2 text-2xl font-bold text-white">Painel de controle</h3>
-            {activeStep ? (
+            {preStartCountdown !== null ? (
+              <div className="mt-6 rounded-3xl border border-mo-primary/30 bg-mo-primary/10 p-8 text-center">
+                <p className="text-sm uppercase tracking-[0.25em] text-mo-muted">Prepare a esteira</p>
+                <p className="mt-4 text-7xl font-black text-mo-primary">{preStartCountdown}</p>
+                <p className="mt-3 text-sm text-mo-muted">A primeira etapa começa automaticamente.</p>
+              </div>
+            ) : activeStep ? (
               <div className="mt-6 space-y-5">
                 <div className="rounded-3xl border border-mo-primary/30 bg-mo-primary/10 p-5 text-center">
                   <p className="text-sm text-mo-muted">Etapa atual</p>
                   <p className="mt-1 text-xl font-bold text-white">{activeStep.title}</p>
-                  <p className="mt-4 text-5xl font-black text-mo-primary">{formatClock(remainingSeconds)}</p>
-                  <p className="mt-2 text-sm text-mo-muted">tempo restante da etapa</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-black/20 p-4">
+                      <p className="text-sm text-mo-muted">Km restantes</p>
+                      <p className="mt-2 text-4xl font-black text-mo-primary">{activeStepIsDistanceBased ? formatDistanceMeters(remainingDistanceMeters) : '—'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-black/20 p-4">
+                      <p className="text-sm text-mo-muted">Tempo estimado</p>
+                      <p className="mt-2 text-4xl font-black text-white">{formatClock(estimatedRemainingSeconds)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm text-mo-muted">
+                    {activeStepIsDistanceBased ? 'O tempo muda conforme a velocidade usada.' : 'Etapa controlada por tempo.'}
+                  </p>
                 </div>
 
                 <div className="rounded-3xl border border-mo-border bg-black/20 p-5 text-center">
                   <p className="text-sm text-mo-muted">Velocidade atual da esteira</p>
                   <div className="mt-4 flex items-center justify-center gap-4">
                     <button onClick={() => adjustSpeed('down')} className="h-14 w-14 rounded-2xl border border-mo-border text-2xl font-bold text-white">−</button>
-                    <strong className="min-w-32 text-4xl text-white">{currentSpeed ?? '—'}</strong>
+                    <strong className="min-w-32 text-4xl text-white">{currentSpeed?.toFixed(2) ?? '—'}</strong>
                     <button onClick={() => adjustSpeed('up')} className="h-14 w-14 rounded-2xl bg-mo-primary text-2xl font-bold text-black shadow-glow">+</button>
                   </div>
-                  <p className="mt-3 text-sm text-mo-muted">Ajustes de 0,1 km/h são registrados para análise futura.</p>
+                  <p className="mt-3 text-sm text-mo-muted">Ajustes de 0,1 km/h recalculam o tempo restante e ficam registrados.</p>
                 </div>
 
                 <div className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">
-                  <p>Pace alvo: <strong className="text-white">{formatPaceFromSeconds(activeStep.target_pace_seconds_per_km)}</strong></p>
-                  <p>Distância da etapa: <strong className="text-white">{activeStep.target_distance_m ? `${activeStep.target_distance_m} m` : 'por tempo'}</strong></p>
+                  <p>Pace pela velocidade atual: <strong className="text-white">{formatPaceFromSeconds(currentPaceSeconds)}</strong></p>
+                  <p>Pace planejado: <strong className="text-white">{formatPaceFromSeconds(activeStep.target_pace_seconds_per_km)}</strong></p>
+                  <p>Distância da etapa: <strong className="text-white">{activeStep.target_distance_m ? formatDistanceMeters(activeStep.target_distance_m) : 'por tempo'}</strong></p>
                   <p>Próxima etapa: <strong className="text-white">{selectedSession.steps.find((step) => step.order_index === activeStep.order_index + 1)?.title ?? 'finalizar treino'}</strong></p>
                 </div>
               </div>
             ) : (
-              <p className="mt-5 text-mo-muted">Inicie uma sessão e selecione a primeira etapa para liberar o controle de velocidade.</p>
+              <p className="mt-5 text-mo-muted">Inicie uma sessão para liberar o timer de largada e o controle de velocidade.</p>
             )}
           </div>
         </section>

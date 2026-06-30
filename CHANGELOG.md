@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.1.1 — Running Coach Execution Hotfix
+
+### Added
+- Timer de largada de 5 segundos antes de iniciar a primeira etapa da corrida.
+- Distância regressiva em km/m para etapas baseadas em distância.
+- Tempo estimado recalculado pela velocidade atual da esteira.
+
+### Changed
+- A execução guiada passa a tratar distância como referência principal do plano.
+- Botões `+` e `-` agora recalculam o tempo restante da etapa imediatamente.
+- Painel de controle exibe pace pela velocidade atual e pace planejado separadamente.
+- Teste de status operacional deixa de depender de uma versão fixa.
+
 ## 6.1.0 — Running Coach Core
 
 ### Added

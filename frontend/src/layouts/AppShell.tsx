@@ -42,7 +42,7 @@ export function AppShell({ children, currentView, onNavigate, user, onLogout }: 
             </div>
             <div className="flex flex-col gap-2 rounded-2xl border border-mo-border bg-black/20 px-4 py-3 text-sm text-mo-muted sm:items-end">
               <span>Usuário: <strong className="text-white">{user.name}</strong></span>
-              <span>Versão: <span className="text-mo-primary">v6.1.0</span></span>
+              <span>Versão: <span className="text-mo-primary">v6.1.1</span></span>
               <button onClick={onLogout} className="text-left text-xs font-semibold text-mo-primary hover:text-white sm:text-right">Sair</button>
             </div>
           </div>
