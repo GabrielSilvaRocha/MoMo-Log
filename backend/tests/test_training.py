@@ -51,3 +51,39 @@ def test_strength_load_progression_handles_empty_history() -> None:
     data = response.json()
     assert data["sample_sets"] == 0
     assert data["recommendation"] == "start"
+
+
+def test_next_workout_readiness_finds_created_session() -> None:
+    register = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Next Workout Ready",
+            "email": f"next-workout-{uuid4()}@example.com",
+            "password": "password123",
+        },
+    )
+    assert register.status_code == 201
+    user_id = register.json()["user"]["id"]
+
+    created = client.post(
+        "/api/v1/training-sessions",
+        json={
+            "user_id": user_id,
+            "session_type": "strength",
+            "title": "Treino pronto para hoje",
+            "scheduled_date": "2026-07-02",
+            "source": "test",
+        },
+    )
+    assert created.status_code == 201
+
+    response = client.get(f"/api/v1/training-sessions/next-ready?user_id={user_id}&reference_date=2026-07-01")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ready"
+    assert data["session"]["id"] == created.json()["id"]
+    assert data["summary"]["planned_sets"] >= data["summary"]["logged_sets"]
+    assert data["summary"]["remaining_sets"] >= 0
+    assert data["checklist"]
+    assert "load_session" in data["quick_actions"]

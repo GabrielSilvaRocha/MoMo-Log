@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
 import { ProgressBar } from '../components/ProgressBar'
-import type { AdaptationSuggestion, StrengthLoadProgression, StrengthWorkoutExercise, TrainingSession } from '../types/api'
+import type { AdaptationSuggestion, NextWorkoutReadiness, StrengthLoadProgression, StrengthWorkoutExercise, TrainingSession } from '../types/api'
 import { formatDate, translateStatus } from '../utils/format'
 
 type SetForm = {
@@ -62,6 +62,20 @@ export function WorkoutPage() {
   const [alternativesState, setAlternativesState] = useState<AlternativesState>(null)
   const [activeRestTimer, setActiveRestTimer] = useState<ActiveRestTimer>(null)
   const [autoStartRestTimer, setAutoStartRestTimer] = useState(true)
+  const [nextWorkout, setNextWorkout] = useState<NextWorkoutReadiness | null>(null)
+  const [loadingNextWorkout, setLoadingNextWorkout] = useState(false)
+
+  async function loadNextWorkoutReadiness() {
+    setLoadingNextWorkout(true)
+    try {
+      const data = await mo2logApi.nextWorkoutReadiness()
+      setNextWorkout(data)
+    } catch {
+      setNextWorkout(null)
+    } finally {
+      setLoadingNextWorkout(false)
+    }
+  }
 
   async function loadSession(id = sessionId) {
     try {
@@ -90,6 +104,10 @@ export function WorkoutPage() {
     loadSession(sessionId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
+
+  useEffect(() => {
+    void loadNextWorkoutReadiness()
+  }, [])
 
   useEffect(() => {
     if (!activeRestTimer || activeRestTimer.remaining <= 0) return
@@ -228,6 +246,13 @@ export function WorkoutPage() {
     }
   }
 
+  async function loadRecommendedWorkout() {
+    if (!nextWorkout?.session) return
+    setSessionId(nextWorkout.session.id)
+    await loadSession(nextWorkout.session.id)
+    setMessage('Proximo treino recomendado carregado para execucao.')
+  }
+
   function updateForm(id: number, field: keyof SetForm, value: string) {
     setForms((current) => ({
       ...current,
@@ -285,6 +310,45 @@ export function WorkoutPage() {
           <div className={`rounded-2xl border px-4 py-3 text-sm ${statusStyle[session?.status ?? ''] ?? 'border-mo-border bg-white/[0.03] text-mo-muted'}`}>
             Status atual: <strong>{translateStatus(session?.status ?? 'planned')}</strong>
           </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-mo-primary/30 bg-mo-primary/10 p-4">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-mo-primary">Proximo treino</p>
+              <h3 className="mt-2 text-xl font-semibold text-white">
+                {nextWorkout?.session?.title ?? (loadingNextWorkout ? 'Buscando treino recomendado...' : 'Nenhum treino futuro encontrado')}
+              </h3>
+              <p className="mt-1 text-sm text-mo-muted">
+                {nextWorkout?.session
+                  ? `${formatDate(nextWorkout.session.scheduled_date)} - ${nextWorkout.summary.remaining_sets} series restantes`
+                  : 'Agende um treino nos proximos 14 dias para usar o carregamento automatico.'}
+              </p>
+            </div>
+            <button
+              onClick={loadRecommendedWorkout}
+              disabled={!nextWorkout?.session || loadingNextWorkout || saving}
+              className="rounded-2xl bg-mo-primary px-5 py-3 font-semibold text-black shadow-glow disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Carregar proximo treino
+            </button>
+          </div>
+          {nextWorkout?.checklist?.length ? (
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {nextWorkout.checklist.slice(0, 4).map((item) => (
+                <div
+                  key={item.key}
+                  className={`rounded-2xl border px-3 py-2 text-sm ${item.status === 'ready' ? 'border-mo-primary/40 bg-black/20 text-mo-primary' : 'border-amber-400/40 bg-amber-950/20 text-amber-100'}`}
+                >
+                  <p className="font-semibold">{item.label}</p>
+                  <p className="mt-1 text-xs text-mo-muted">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {nextWorkout?.warmup?.length ? (
+            <p className="mt-4 text-sm text-mo-muted">Aquecimento: {nextWorkout.warmup.join(' ')}</p>
+          ) : null}
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">

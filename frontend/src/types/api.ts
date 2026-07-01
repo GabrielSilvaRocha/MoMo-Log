@@ -111,6 +111,27 @@ export type TrainingSession = {
   running_activity?: RunningActivity | null
 }
 
+export type NextWorkoutReadiness = {
+  status: 'ready' | 'empty' | string
+  reference_date: string
+  search_until: string
+  session: TrainingSession | null
+  summary: {
+    exercise_count: number
+    planned_sets: number
+    logged_sets: number
+    remaining_sets: number
+  }
+  checklist: Array<{
+    key: string
+    label: string
+    status: 'ready' | 'review' | string
+    detail: string
+  }>
+  warmup: string[]
+  quick_actions: string[]
+}
+
 export type WeekDashboard = {
   user_id: number
   completed_sessions: TrainingSession[]

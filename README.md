@@ -2,11 +2,21 @@
 
 Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
-## Próximas entregas
+## Proximas entregas
 
-- v7.3.0 — Camada social/compartilhamento de evolução e provas.
-- v7.4.0 — Compartilhamento público de relatórios e snapshots de progresso.
-- v7.5.0 — Integração mobile executável com build Android real.
+- v8.1.0 - Polimento mobile-first da tela de treino para uso na academia.
+- v8.2.0 - Assistente de ajustes entre series com base em RIR, RPE e carga.
+- v8.3.0 - Compartilhamento publico de relatorios e snapshots de progresso.
+- v8.4.0 - Camada social de evolucao, provas e comparativos.
+
+## v8.0.0 - Next Workout Ready
+
+Esta versao deixa o Mo2 LOG pronto para abrir no proximo treino:
+
+- Nova rota /api/v1/training-sessions/next-ready encontra a proxima sessao executavel dos proximos 14 dias.
+- Tela de execucao mostra o proximo treino recomendado com checklist, aquecimento e botao de carregamento automatico.
+- Registro de series, descanso automatico, sugestao de carga e troca de exercicio ficam no mesmo fluxo de uso.
+- Documento docs/product/next-workout-ready.md descreve o roteiro pratico para usar no treino.
 
 ## v7.2.0 — Android Health Connect App Readiness
 

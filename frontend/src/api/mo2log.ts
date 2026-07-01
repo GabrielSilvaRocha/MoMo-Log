@@ -23,6 +23,7 @@ import type {
   AndroidSyncPlan,
   CloudDemoReadiness,
   MobileSyncReadiness,
+  NextWorkoutReadiness,
   PersonalRecord,
   ManualRunningActivityPayload,
   RegisterPayload,
@@ -131,6 +132,8 @@ export const mo2logApi = {
   archiveWorkoutTemplate: (templateId: number, userId = getCurrentUserId()) => apiDelete(`/workout-templates/${templateId}?user_id=${userId}`),
   scheduleWorkoutTemplate: (templateId: number, payload: WorkoutTemplateSchedulePayload) =>
     apiPost<WorkoutTemplateScheduleResponse>(`/workout-templates/${templateId}/schedule`, payload),
+  nextWorkoutReadiness: (userId = getCurrentUserId(), referenceDate = new Date().toISOString().slice(0, 10)) =>
+    apiGet<NextWorkoutReadiness>(`/training-sessions/next-ready?user_id=${userId}&reference_date=${referenceDate}`),
   weekTrainingSessions: (userId = getCurrentUserId(), referenceDate = '2026-06-29') =>
     apiGet<TrainingSession[]>(`/training-sessions/week?user_id=${userId}&reference_date=${referenceDate}`),
   createTrainingSession: (payload: TrainingSessionCreatePayload) =>

@@ -48,8 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Android Health Connect App Readiness",
+        "milestone": "Next Workout Ready",
         "status": "operational",
+        "release_focus": "Abrir o app no treino, carregar a proxima sessao recomendada e registrar series sem procurar IDs.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -59,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "7.2.0",
-        "title": "Android Health Connect App Readiness",
+        "version": "8.0.0",
+        "title": "Next Workout Ready",
         "highlights": [
-            "Contrato mobile agora descreve app Android nativo em Kotlin, Jetpack Compose e WorkManager.",
-            "Health Connect ganhou plano de permissões, janelas de sincronização e deduplicação.",
-            "Nova rota /mobile-sync/android-plan documenta módulos, dependências e payload para a API.",
-            "Docs mobile adicionam scaffold Android e roteiro de implementação nativa.",
+            "Nova rota /training-sessions/next-ready encontra a proxima sessao executavel dos proximos 14 dias.",
+            "Tela de treino agora exibe card de proximo treino com checklist, aquecimento e carregamento automatico.",
+            "Documentacao operacional mostra como abrir o app e usar no treino real.",
+            "Release promove o foco de produto para uso pratico no proximo treino.",
         ],
     }

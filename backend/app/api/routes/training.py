@@ -60,6 +60,55 @@ def _average_decimal(values: list[Decimal]) -> Decimal | None:
     return (sum(values, Decimal("0.00")) / Decimal(len(values))).quantize(Decimal("0.01"))
 
 
+def _session_read(session: TrainingSession) -> dict:
+    return TrainingSessionRead.model_validate(session).model_dump(mode="json")
+
+
+def _next_workout_checklist(session: TrainingSession) -> list[dict]:
+    strength_exercises = session.strength_exercises or []
+    planned_sets = sum(item.planned_sets for item in strength_exercises)
+    logged_sets = sum(len(item.set_logs or []) for item in strength_exercises)
+
+    if session.session_type == "running":
+        return [
+            {"key": "session_selected", "label": "Sessao selecionada", "status": "ready", "detail": session.title},
+            {"key": "running_plan", "label": "Plano de corrida", "status": "ready", "detail": "Abra o Running Coach para executar por etapas."},
+            {"key": "warmup", "label": "Aquecimento", "status": "review", "detail": "Comece leve antes do bloco principal."},
+        ]
+
+    return [
+        {"key": "session_selected", "label": "Sessao selecionada", "status": "ready", "detail": session.title},
+        {
+            "key": "exercises_loaded",
+            "label": "Exercicios carregados",
+            "status": "ready" if strength_exercises else "review",
+            "detail": f"{len(strength_exercises)} exercicios no treino.",
+        },
+        {
+            "key": "first_set_ready",
+            "label": "Primeira serie pronta",
+            "status": "ready" if planned_sets > logged_sets else "review",
+            "detail": f"{logged_sets}/{planned_sets} series registradas.",
+        },
+        {"key": "equipment_check", "label": "Equipamentos", "status": "review", "detail": "Use Trocar exercicio se a academia estiver cheia."},
+        {"key": "rest_timer", "label": "Descanso automatico", "status": "ready", "detail": "Cronometro disponivel por exercicio."},
+    ]
+
+
+def _next_workout_warmup(session: TrainingSession) -> list[str]:
+    if session.session_type == "running":
+        return [
+            "5 min de caminhada leve ou trote facil.",
+            "2 min ajustando a velocidade da esteira antes do primeiro bloco.",
+        ]
+
+    return [
+        "5 min de aquecimento geral antes da primeira serie pesada.",
+        "1 serie leve do primeiro exercicio para calibrar carga e amplitude.",
+        "Confirme equipamentos ocupados antes de iniciar o circuito principal.",
+    ]
+
+
 @router.get("/training-plans/current", response_model=TrainingPlanRead)
 def get_current_training_plan(user_id: int, db: Session = Depends(get_db)) -> TrainingPlan:
     plan = db.execute(
@@ -109,6 +158,61 @@ def create_training_session(
     db.commit()
     db.refresh(session)
     return session
+
+
+@router.get("/training-sessions/next-ready")
+def get_next_ready_training_session(
+    user_id: int,
+    reference_date: date | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    today = reference_date or date.today()
+    search_until = today + timedelta(days=14)
+    session = db.execute(
+        _session_query()
+        .where(
+            TrainingSession.user_id == user_id,
+            TrainingSession.scheduled_date >= today,
+            TrainingSession.scheduled_date <= search_until,
+            TrainingSession.status.notin_(["completed", "skipped"]),
+        )
+        .order_by(TrainingSession.scheduled_date, TrainingSession.id)
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if session is None:
+        return {
+            "status": "empty",
+            "reference_date": today.isoformat(),
+            "search_until": search_until.isoformat(),
+            "session": None,
+            "summary": {"exercise_count": 0, "planned_sets": 0, "logged_sets": 0, "remaining_sets": 0},
+            "checklist": [
+                {"key": "schedule", "label": "Sessao agendada", "status": "review", "detail": "Crie ou agende um treino para os proximos 14 dias."},
+            ],
+            "warmup": [],
+            "quick_actions": ["open_planning", "schedule_template"],
+        }
+
+    strength_exercises = session.strength_exercises or []
+    planned_sets = sum(item.planned_sets for item in strength_exercises)
+    logged_sets = sum(len(item.set_logs or []) for item in strength_exercises)
+
+    return {
+        "status": "ready",
+        "reference_date": today.isoformat(),
+        "search_until": search_until.isoformat(),
+        "session": _session_read(session),
+        "summary": {
+            "exercise_count": len(strength_exercises),
+            "planned_sets": planned_sets,
+            "logged_sets": logged_sets,
+            "remaining_sets": max(planned_sets - logged_sets, 0),
+        },
+        "checklist": _next_workout_checklist(session),
+        "warmup": _next_workout_warmup(session),
+        "quick_actions": ["load_session", "start_session", "register_set", "swap_exercise"],
+    }
 
 
 @router.get("/training-sessions/{session_id}", response_model=TrainingSessionRead)
