@@ -26,6 +26,7 @@ def get_operations_status(db: Session = Depends(get_db)) -> dict:
         {"key": "frontend", "label": "Frontend", "status": "external", "detail": "Validado pelo build do Vite e Docker"},
         {"key": "running_coach", "label": "Running Coach", "status": "ok", "detail": "Plano por objetivo, progressão personalizada e execução guiada de esteira"},
         {"key": "mobile_sync", "label": "Mobile Sync", "status": "designed", "detail": "Roteiro Health Connect / Samsung Health preparado para app mobile"},
+        {"key": "cloud_demo", "label": "Cloud Demo", "status": "ready", "detail": "Stack, variáveis, domínio e smoke tests preparados"},
         {"key": "portfolio", "label": "Portfólio", "status": "ready", "detail": "Checklist, demo script e screenshots-alvo disponíveis"},
     ]
 
@@ -41,8 +42,8 @@ def get_operations_status(db: Session = Depends(get_db)) -> dict:
 @router.get("/deployment-checklist")
 def get_deployment_checklist() -> dict:
     return {
-        "version": "7.0.0",
-        "title": "Checklist de deploy e portfólio",
+        "version": "7.1.0",
+        "title": "Checklist de deploy cloud e portfólio",
         "items": [
             {"key": "env", "label": "Variáveis de ambiente separadas por ambiente", "status": "ready", "detail": "Exemplos locais e produção separados."},
             {"key": "secrets", "label": "Sem credenciais reais versionadas", "status": "ready", "detail": "Arquivos de exemplo usam placeholders."},
@@ -52,13 +53,13 @@ def get_deployment_checklist() -> dict:
             {"key": "docs", "label": "Documentação de produto, deploy e segurança", "status": "ready", "detail": "README, docs e status operacional expõem o roteiro."},
             {"key": "mobile_sync", "label": "Roteiro Health Connect / Samsung Health", "status": "designed", "detail": "Contrato de readiness e mapeamento de dados criado."},
             {"key": "portfolio", "label": "Roteiro de demo e screenshots", "status": "ready", "detail": "Pacote v7.0.0 preparado para apresentação."},
-            {"key": "cloud", "label": "Deploy em cloud pública", "status": "planned", "detail": "Próximo passo fora do repositório local."},
+            {"key": "cloud", "label": "Deploy em cloud pública", "status": "ready", "detail": "Manifestos, variáveis e smoke tests preparados para demo pública."},
         ],
         "recommended_next_targets": [
-            "Publicar backend em Railway, Render ou Fly.io",
-            "Publicar frontend em Vercel ou Netlify",
-            "Usar PostgreSQL gerenciado em ambiente de demonstração",
-            "Configurar domínio e variáveis de produção",
+            "Provisionar PostgreSQL gerenciado para demo",
+            "Publicar backend com domínio HTTPS",
+            "Publicar frontend com domínio público",
+            "Executar smoke tests pós-deploy",
         ],
         "demo_script": [
             "Abrir Dashboard e mostrar score híbrido, foco da semana e mix força/corrida.",
@@ -74,5 +75,52 @@ def get_deployment_checklist() -> dict:
             {"key": "intelligence", "label": "Inteligência e forecasts", "route": "/intelligence"},
             {"key": "deploy", "label": "Deploy e portfólio", "route": "/deploy"},
         ],
-        "portfolio_summary": "Mo² LOG é um app full-stack de treino híbrido com FastAPI, PostgreSQL, React, Docker, execução guiada, inteligência de treino e preparação mobile.",
+        "portfolio_summary": "Mo² LOG é um app full-stack de treino híbrido com FastAPI, PostgreSQL, React, Docker, execução guiada, inteligência de treino, preparação mobile e roteiro cloud demo.",
+    }
+
+
+@router.get("/cloud-demo-readiness")
+def get_cloud_demo_readiness() -> dict:
+    return {
+        "status": "ready",
+        "recommended_stack": {
+            "frontend": "Vercel ou Netlify",
+            "backend": "Render, Railway ou Fly.io",
+            "database": "PostgreSQL gerenciado",
+            "domain": "Subdomínios HTTPS separados para frontend e API",
+        },
+        "required_environment": [
+            {"key": "APP_VERSION", "required": True, "example": "7.1.0"},
+            {"key": "DATABASE_URL", "required": True, "example": "postgresql://user:password@host:5432/mo2log"},
+            {"key": "FRONTEND_ORIGIN", "required": True, "example": "https://demo.mo2log.example"},
+            {"key": "SECRET_KEY", "required": True, "example": "generate-a-long-random-value"},
+            {"key": "ACCESS_TOKEN_EXPIRE_MINUTES", "required": False, "example": "1440"},
+        ],
+        "publish_steps": [
+            "Criar PostgreSQL gerenciado e aplicar DATABASE_URL no provedor do backend.",
+            "Publicar backend usando backend/Dockerfile.prod ou build Python equivalente.",
+            "Executar alembic upgrade head no ambiente backend.",
+            "Publicar frontend usando frontend/Dockerfile.prod ou build Vite.",
+            "Configurar FRONTEND_ORIGIN no backend e apontar o frontend para a API pública.",
+            "Executar smoke tests e registrar URLs no README ou release notes.",
+        ],
+        "smoke_tests": [
+            {"label": "Health", "method": "GET", "path": "/api/v1/health", "expected": "status=ok"},
+            {"label": "Operations", "method": "GET", "path": "/api/v1/ops/status", "expected": "status=operational"},
+            {"label": "Release", "method": "GET", "path": "/api/v1/product/release-notes", "expected": "version=7.1.0"},
+            {"label": "Mobile readiness", "method": "GET", "path": "/api/v1/mobile-sync/readiness", "expected": "status=designed"},
+        ],
+        "rollback_plan": [
+            "Manter a imagem Docker anterior disponível no provedor.",
+            "Validar migrations antes de promover tráfego público.",
+            "Restaurar DATABASE_URL anterior se a demo usar banco dedicado.",
+            "Reverter variáveis FRONTEND_ORIGIN e domínio se houver erro de CORS.",
+        ],
+        "public_demo_checklist": [
+            "Demo login funcionando.",
+            "Dashboard carregando sem dados sensíveis.",
+            "Running Coach gerando plano.",
+            "Painel Deploy exibindo checklist cloud.",
+            "HTTPS ativo no frontend e backend.",
+        ],
     }

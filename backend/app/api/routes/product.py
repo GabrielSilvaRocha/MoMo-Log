@@ -41,14 +41,14 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Deploy cloud de demonstração",
         "App mobile nativo com Health Connect",
+        "Camada social de evolução e provas",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Portfolio Release",
+        "milestone": "Cloud Demo Readiness",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -59,12 +59,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "7.0.0",
-        "title": "Portfolio Release",
+        "version": "7.1.0",
+        "title": "Cloud Demo Readiness",
         "highlights": [
-            "Dashboard híbrido passa a exibir score, foco semanal e mix força/corrida/recuperação.",
-            "Roteiro mobile para Health Connect e Samsung Health foi desenhado com contrato de readiness.",
-            "Painel Deploy inclui checklist de portfólio, demo script e screenshots-alvo.",
-            "Documentação v7 consolida a aplicação como pacote demonstrável de produto full-stack.",
+            "Deploy cloud de demonstração ganhou contrato de readiness com stack recomendada.",
+            "Checklist operacional agora cobre variáveis, smoke tests, domínio HTTPS e rollback.",
+            "Painel Deploy mostra preparação para publicação pública do frontend, backend e PostgreSQL.",
+            "Documentação adiciona guia cloud demo e manifestos de exemplo para Vercel e Render.",
         ],
     }

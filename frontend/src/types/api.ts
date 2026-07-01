@@ -594,6 +594,25 @@ export type DeploymentChecklist = {
   portfolio_summary: string
 }
 
+export type CloudDemoReadiness = {
+  status: string
+  recommended_stack: Record<string, string>
+  required_environment: Array<{
+    key: string
+    required: boolean
+    example: string
+  }>
+  publish_steps: string[]
+  smoke_tests: Array<{
+    label: string
+    method: string
+    path: string
+    expected: string
+  }>
+  rollback_plan: string[]
+  public_demo_checklist: string[]
+}
+
 export type MobileSyncReadiness = {
   status: string
   target_platforms: string[]

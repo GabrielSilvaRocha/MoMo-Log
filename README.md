@@ -4,9 +4,18 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Próximas entregas
 
-- v7.1.0 — Deploy cloud de demonstração com domínio público.
 - v7.2.0 — App mobile nativo com Health Connect em ambiente Android.
 - v7.3.0 — Camada social/compartilhamento de evolução e provas.
+- v7.4.0 — Compartilhamento público de relatórios e snapshots de progresso.
+
+## v7.1.0 — Cloud Demo Readiness
+
+Esta versão prepara a publicação pública do Mo² LOG:
+
+- Rota /api/v1/ops/cloud-demo-readiness com stack recomendada, variáveis, smoke tests e rollback.
+- Painel Deploy exibe cloud demo, domínios, serviços e endpoints de validação.
+- Docker Compose de produção atualizado para fallback APP_VERSION 7.1.0.
+- Documentação docs/deployment/cloud-demo.md e manifestos exemplo para Render e Vercel.
 
 ## v7.0.0 — Portfolio Release
 

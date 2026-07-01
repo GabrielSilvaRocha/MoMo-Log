@@ -4,11 +4,12 @@ import { mo2logApi } from '../api/mo2log'
 import { LoadingState } from '../components/LoadingState'
 import { MetricCard } from '../components/MetricCard'
 import { SectionHeader } from '../components/SectionHeader'
-import type { DeploymentChecklist, MobileSyncReadiness, OpsStatus } from '../types/api'
+import type { CloudDemoReadiness, DeploymentChecklist, MobileSyncReadiness, OpsStatus } from '../types/api'
 
 type DeployState = {
   ops: OpsStatus | null
   checklist: DeploymentChecklist | null
+  cloud: CloudDemoReadiness | null
   mobile: MobileSyncReadiness | null
 }
 
@@ -19,7 +20,7 @@ function statusStyle(status: string) {
 }
 
 export function DeployPage() {
-  const [state, setState] = useState<DeployState>({ ops: null, checklist: null, mobile: null })
+  const [state, setState] = useState<DeployState>({ ops: null, checklist: null, cloud: null, mobile: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -29,9 +30,9 @@ export function DeployPage() {
     async function load() {
       try {
         setLoading(true)
-        const [ops, checklist, mobile] = await Promise.all([mo2logApi.opsStatus(), mo2logApi.deploymentChecklist(), mo2logApi.mobileSyncReadiness()])
+        const [ops, checklist, cloud, mobile] = await Promise.all([mo2logApi.opsStatus(), mo2logApi.deploymentChecklist(), mo2logApi.cloudDemoReadiness(), mo2logApi.mobileSyncReadiness()])
         if (mounted) {
-          setState({ ops, checklist, mobile })
+          setState({ ops, checklist, cloud, mobile })
           setError(null)
         }
       } catch (err) {
@@ -68,11 +69,12 @@ export function DeployPage() {
           title="Prontidão operacional do Mo² LOG"
           description="Esta tela resume o estado técnico da aplicação para demonstração, publicação e apresentação como projeto de portfólio."
         />
-        <div className="mt-6 grid gap-4 md:grid-cols-4">
+        <div className="mt-6 grid gap-4 md:grid-cols-5">
           <MetricCard label="Versão" value={`v${state.ops?.version ?? '-'}`} hint={state.ops?.environment ?? 'ambiente'} icon="🚀" />
           <MetricCard label="Status" value={state.ops?.status ?? '-'} hint="Estado operacional da API" icon="🟢" />
           <MetricCard label="Serviços" value={String(state.ops?.services.length ?? 0)} hint="Backend, banco, frontend e integrações" icon="🧩" />
-          <MetricCard label="Checklist" value={`${readyItems}/${totalItems}`} hint="Itens prontos para deploy" icon="✅" />
+          <MetricCard label="Checklist" value={`${readyItems}/${totalItems}`} hint="Itens prontos para deploy" icon="✓" />
+          <MetricCard label="Cloud demo" value={state.cloud?.status ?? '-'} hint="Stack, domínio e smoke tests" icon="☁" />
         </div>
       </section>
 
@@ -105,6 +107,27 @@ export function DeployPage() {
               </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-mo-border bg-mo-surface p-5">
+        <SectionHeader title="Cloud demo" description="Publicação pública com frontend, API, banco gerenciado e domínio HTTPS." />
+        <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {Object.entries(state.cloud?.recommended_stack ?? {}).map(([key, value]) => (
+            <div key={key} className="rounded-2xl border border-mo-border bg-white/[0.03] p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-mo-primary">{key}</p>
+              <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-2">
+          {(state.cloud?.smoke_tests ?? []).map((test) => (
+            <div key={test.path} className="rounded-2xl border border-mo-border bg-white/[0.03] p-4">
+              <p className="font-semibold text-white">{test.label}</p>
+              <p className="mt-1 text-sm text-mo-muted">{test.method} {test.path}</p>
+              <p className="mt-2 text-xs text-mo-primary">{test.expected}</p>
+            </div>
+          ))}
         </div>
       </section>
 

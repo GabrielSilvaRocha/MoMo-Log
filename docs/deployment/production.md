@@ -43,3 +43,13 @@ GET /api/v1/ops/deployment-checklist
 ## Observações
 
 O fluxo de corrida não depende de integrações externas. O Running Coach gera plano e execução guiada para esteira.
+
+
+## Cloud demo v7.1
+
+Consulte docs/deployment/cloud-demo.md para publicar uma demonstração pública com frontend, backend e PostgreSQL gerenciado.
+
+Manifestos de exemplo:
+
+- infra/render-blueprint.example.yaml
+- infra/vercel.frontend.example.json

@@ -26,5 +26,5 @@ def test_release_notes() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["version"] == "7.0.0"
-    assert data["title"] == "Portfolio Release"
+    assert data["version"] == "7.1.0"
+    assert data["title"] == "Cloud Demo Readiness"
