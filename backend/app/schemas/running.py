@@ -78,6 +78,9 @@ class RunningGoalCreate(BaseModel):
     target_5k_time_seconds: int | None = Field(default=None, gt=0)
     training_location: str = "treadmill"
     available_weekdays: str = "mon,tue,wed,thu,fri"
+    weekly_sessions: int = Field(default=3, ge=2, le=5)
+    progression_style: str = Field(default="balanced", pattern="^(conservative|balanced|aggressive)$")
+    long_run_weekday: str = Field(default="fri", pattern="^(mon|tue|wed|thu|fri|sat|sun)$")
 
 
 class RunningGoalRead(BaseModel):
@@ -90,6 +93,9 @@ class RunningGoalRead(BaseModel):
     target_5k_time_seconds: int | None = None
     training_location: str
     available_weekdays: str
+    weekly_sessions: int
+    progression_style: str
+    long_run_weekday: str
     status: str
     created_at: datetime
     updated_at: datetime

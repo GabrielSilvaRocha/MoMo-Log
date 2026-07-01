@@ -31,10 +31,35 @@ function secondsToTime(seconds?: number | null) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+const WEEKDAY_OPTIONS = [
+  { value: 'mon', short: 'Seg', label: 'Segunda' },
+  { value: 'tue', short: 'Ter', label: 'Terça' },
+  { value: 'wed', short: 'Qua', label: 'Quarta' },
+  { value: 'thu', short: 'Qui', label: 'Quinta' },
+  { value: 'fri', short: 'Sex', label: 'Sexta' },
+  { value: 'sat', short: 'Sáb', label: 'Sábado' },
+  { value: 'sun', short: 'Dom', label: 'Domingo' },
+]
+
+const PROGRESSION_LABELS: Record<string, string> = {
+  conservative: 'Conservadora',
+  balanced: 'Equilibrada',
+  aggressive: 'Agressiva',
+}
+
+const WEEKDAY_LABELS = Object.fromEntries(WEEKDAY_OPTIONS.map((day) => [day.value, day.label]))
+
+function weekdayLabel(value: string) {
+  return WEEKDAY_LABELS[value] ?? value
+}
+
 function stepTypeLabel(type: string) {
   const labels: Record<string, string> = {
     warmup: 'Aquecimento',
     run: 'Corrida',
+    easy: 'Leve',
+    long: 'Longo',
+    tempo: 'Tempo',
     interval: 'Tiro',
     recovery: 'Recuperação',
     rest: 'Descanso',
@@ -95,6 +120,10 @@ export function RunningPage() {
     raceDate: '2026-08-16',
     current5k: '24:58',
     target5k: '23:30',
+    weeklySessions: '3',
+    progressionStyle: 'balanced',
+    availableWeekdays: 'mon,tue,wed,thu,fri',
+    longRunWeekday: 'fri',
   })
 
   async function load() {
@@ -196,7 +225,10 @@ export function RunningPage() {
         current_5k_time_seconds: timeToSeconds(goalForm.current5k),
         target_5k_time_seconds: timeToSeconds(goalForm.target5k),
         training_location: 'treadmill',
-        available_weekdays: 'mon,tue,wed,thu,fri',
+        available_weekdays: goalForm.availableWeekdays,
+        weekly_sessions: Number(goalForm.weeklySessions),
+        progression_style: goalForm.progressionStyle,
+        long_run_weekday: goalForm.longRunWeekday,
       })
       await mo2logApi.generateRunningPlan(createdGoal.id)
       setMessage('Objetivo salvo e plano de esteira gerado com sucesso.')
@@ -327,6 +359,9 @@ export function RunningPage() {
               <p>Tempo atual 5 km: <strong className="text-white">{secondsToTime(goal.current_5k_time_seconds)}</strong></p>
               <p>Meta 5 km: <strong className="text-white">{secondsToTime(goal.target_5k_time_seconds)}</strong></p>
               <p>Local: <strong className="text-white">Esteira</strong></p>
+              <p>Treinos/semana: <strong className="text-white">{goal.weekly_sessions}</strong></p>
+              <p>Progressão: <strong className="text-white">{PROGRESSION_LABELS[goal.progression_style] ?? goal.progression_style}</strong></p>
+              <p>Dia longo: <strong className="text-white">{weekdayLabel(goal.long_run_weekday)}</strong></p>
               <button onClick={regeneratePlan} className="mt-2 rounded-2xl bg-mo-primary px-5 py-3 font-bold text-black shadow-glow">Gerar/atualizar plano</button>
             </div>
           ) : (
@@ -339,6 +374,47 @@ export function RunningPage() {
               </label>
               <label className="block text-sm text-mo-muted">Meta de 5 km
                 <input value={goalForm.target5k} onChange={(event) => setGoalForm((current) => ({ ...current, target5k: event.target.value }))} className="mt-2 w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white" />
+              </label>
+              <label className="block text-sm text-mo-muted">Treinos por semana
+                <select value={goalForm.weeklySessions} onChange={(event) => setGoalForm((current) => ({ ...current, weeklySessions: event.target.value }))} className="mt-2 w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white">
+                  {[2, 3, 4, 5].map((value) => <option key={value} value={value}>{value} treinos</option>)}
+                </select>
+              </label>
+              <label className="block text-sm text-mo-muted">Progressão
+                <select value={goalForm.progressionStyle} onChange={(event) => setGoalForm((current) => ({ ...current, progressionStyle: event.target.value }))} className="mt-2 w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white">
+                  <option value="conservative">Conservadora</option>
+                  <option value="balanced">Equilibrada</option>
+                  <option value="aggressive">Agressiva</option>
+                </select>
+              </label>
+              <div className="text-sm text-mo-muted">
+                <p>Dias disponíveis</p>
+                <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-7">
+                  {WEEKDAY_OPTIONS.map((weekday) => {
+                    const selected = goalForm.availableWeekdays.split(',').includes(weekday.value)
+                    return (
+                      <button
+                        key={weekday.value}
+                        type="button"
+                        onClick={() => setGoalForm((current) => {
+                          const days = current.availableWeekdays.split(',').filter(Boolean)
+                          const next = days.includes(weekday.value)
+                            ? days.filter((day) => day !== weekday.value)
+                            : [...days, weekday.value]
+                          return { ...current, availableWeekdays: next.length ? next.join(',') : current.availableWeekdays }
+                        })}
+                        className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${selected ? 'border-mo-primary bg-mo-primary/15 text-mo-primary' : 'border-mo-border bg-black/30 text-mo-muted'}`}
+                      >
+                        {weekday.short}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <label className="block text-sm text-mo-muted">Dia do treino longo
+                <select value={goalForm.longRunWeekday} onChange={(event) => setGoalForm((current) => ({ ...current, longRunWeekday: event.target.value }))} className="mt-2 w-full rounded-2xl border border-mo-border bg-black/30 px-4 py-3 text-white">
+                  {WEEKDAY_OPTIONS.map((weekday) => <option key={weekday.value} value={weekday.value}>{weekday.label}</option>)}
+                </select>
               </label>
               <button onClick={saveGoalAndGenerate} className="rounded-2xl bg-mo-primary px-5 py-3 font-bold text-black shadow-glow">Salvar objetivo e gerar plano</button>
             </div>

@@ -14,7 +14,7 @@ def get_mvp_status() -> dict:
         {"key": "templates", "label": "Templates", "status": "stable", "description": "Templates reutilizáveis com criação personalizada, arquivamento e agendamento rápido de sessões planejadas."},
         {"key": "workout", "label": "Execução de treino", "status": "stable", "description": "Registro de séries, checklist, volume do treino, RPE, descanso e sugestão de evolução de carga."},
         {"key": "adaptation", "label": "Adaptação", "status": "stable", "description": "Sugestões de substituição com penalidade para equipamento indisponível e bônus para favoritos."},
-        {"key": "running", "label": "Corridas", "status": "stable", "description": "Running Coach com objetivo de 5 km, plano de esteira, execução por distância, ajuste de velocidade e progressão automática."},
+        {"key": "running", "label": "Corridas", "status": "stable", "description": "Running Coach com objetivo de 5 km, preferências de progressão, plano de esteira, execução por distância, ajuste de velocidade e progressão automática."},
         {"key": "history", "label": "Histórico", "status": "stable", "description": "Consulta de sessões por período, status e tipo."},
         {"key": "reports", "label": "Relatórios", "status": "stable", "description": "Resumo por período e exportação CSV."},
         {"key": "analytics", "label": "Estatísticas", "status": "stable", "description": "Metas, recordes pessoais e insights iniciais."},
@@ -32,7 +32,7 @@ def get_mvp_status() -> dict:
         {"key": "schedule_template", "label": "Criar sessão a partir de template", "coverage": 100},
         {"key": "custom_template", "label": "Criar template personalizado", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
-        {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 75},
+        {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 85},
         {"key": "race_forecast", "label": "Prever tempo por distância-alvo", "coverage": 80},
         {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 10},
         {"key": "user_authentication", "label": "Entrar, cadastrar e manter sessão local", "coverage": 100},
@@ -40,14 +40,14 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Personalização da progressão do plano de corrida",
+        "Melhorias no dashboard de evolução híbrida",
         "Health Connect / Samsung Health no app mobile",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Race Distance Forecasts",
+        "milestone": "Running Plan Progression Preferences",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -58,12 +58,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "6.5.0",
-        "title": "Race Distance Forecasts",
+        "version": "6.6.0",
+        "title": "Running Plan Progression Preferences",
         "highlights": [
-            "Previsão de tempo para qualquer distância-alvo informada.",
-            "Forecast clássico de 5 km foi mantido compatível.",
-            "Tela Inteligência alterna entre 5 km, 10 km e meia maratona.",
-            "Modelo ajusta pace recente com fator conservador para provas mais longas.",
+            "Objetivo de corrida agora salva treinos por semana, estilo de progressão e dia do treino longo.",
+            "Gerador do Running Coach monta semanas de 2 a 5 treinos respeitando dias disponíveis.",
+            "Progressões conservadora, equilibrada e agressiva ajustam volume, tiros e ritmo.",
+            "Tela Corridas permite configurar preferências antes de salvar o objetivo.",
         ],
     }

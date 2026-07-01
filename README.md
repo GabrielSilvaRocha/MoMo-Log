@@ -4,10 +4,18 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Próximas entregas
 
-- v6.6.0 — Personalização da progressão do plano de corrida.
 - v6.7.0 — Melhorias no dashboard de evolução híbrida.
 - v6.8.0 — Preparação de integração mobile para Health Connect / Samsung Health.
 - v7.0.0 — Empacotamento de portfólio com screenshots, demo e checklist de deploy.
+
+## v6.6.0 — Running Plan Progression Preferences
+
+Esta versão evolui o Running Coach:
+
+- Objetivo de corrida salva treinos por semana, estilo de progressão e dia do treino longo.
+- Gerador cria semanas com 2 a 5 sessões, respeitando dias disponíveis sempre que possível.
+- Progressões conservadora, equilibrada e agressiva ajustam volume, tiros e ritmo.
+- Tela Corridas permite configurar as preferências antes de gerar o plano.
 
 ## v6.5.0 — Race Distance Forecasts
 

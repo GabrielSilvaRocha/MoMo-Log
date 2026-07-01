@@ -55,6 +55,153 @@ def _ensure_user(db: Session, user_id: int) -> None:
         raise HTTPException(status_code=404, detail="User not found")
 
 
+WEEKDAY_OFFSETS = {
+    "mon": 0,
+    "tue": 1,
+    "wed": 2,
+    "thu": 3,
+    "fri": 4,
+    "sat": 5,
+    "sun": 6,
+}
+
+PROGRESSION_PROFILES = {
+    "conservative": {
+        "easy_step": Decimal("0.15"),
+        "tempo_distance_step": Decimal("0.10"),
+        "long_step": Decimal("0.25"),
+        "interval_rep_step": 1,
+        "max_reps": 6,
+        "interval_pace_step": 1,
+        "tempo_pace_step": 2,
+    },
+    "balanced": {
+        "easy_step": Decimal("0.25"),
+        "tempo_distance_step": Decimal("0.15"),
+        "long_step": Decimal("0.35"),
+        "interval_rep_step": 1,
+        "max_reps": 8,
+        "interval_pace_step": 1,
+        "tempo_pace_step": 4,
+    },
+    "aggressive": {
+        "easy_step": Decimal("0.35"),
+        "tempo_distance_step": Decimal("0.20"),
+        "long_step": Decimal("0.50"),
+        "interval_rep_step": 2,
+        "max_reps": 10,
+        "interval_pace_step": 2,
+        "tempo_pace_step": 6,
+    },
+}
+
+
+def _progression_profile(style: str | None) -> dict:
+    return PROGRESSION_PROFILES.get(style or "balanced", PROGRESSION_PROFILES["balanced"])
+
+
+def _goal_weekday_offsets(goal: RunningGoal) -> list[int]:
+    offsets: list[int] = []
+    for raw_day in (goal.available_weekdays or "mon,tue,wed,thu,fri").split(","):
+        day = raw_day.strip().lower()
+        if day in WEEKDAY_OFFSETS and WEEKDAY_OFFSETS[day] not in offsets:
+            offsets.append(WEEKDAY_OFFSETS[day])
+    return offsets or [0, 2, 4]
+
+
+def _pick_session_offsets(goal: RunningGoal, preferred_offsets: list[int]) -> list[int]:
+    available_offsets = _goal_weekday_offsets(goal)
+    fallback_offsets = [day for day in range(7) if day not in available_offsets]
+    used: set[int] = set()
+    picked: list[int] = []
+    for preferred in preferred_offsets:
+        candidates = sorted(available_offsets, key=lambda day: (abs(day - preferred), day))
+        candidates.extend(sorted(fallback_offsets, key=lambda day: (abs(day - preferred), day)))
+        for candidate in candidates:
+            if candidate not in used:
+                picked.append(candidate)
+                used.add(candidate)
+                break
+    return picked
+
+
+def _interval_reps(week: int, profile: dict) -> int:
+    return min(4 + week * int(profile["interval_rep_step"]), int(profile["max_reps"]))
+
+
+def _interval_pace(week: int, profile: dict) -> int:
+    return max(260, 282 - week * int(profile["interval_pace_step"]))
+
+
+def _session_blueprint(goal: RunningGoal, week: int, profile: dict) -> list[dict]:
+    weekly_sessions = min(max(goal.weekly_sessions or 3, 2), 5)
+    reps = _interval_reps(week, profile)
+    long_offset = WEEKDAY_OFFSETS.get((goal.long_run_weekday or "fri").lower(), 4)
+    easy_distance = (Decimal("4.75") + Decimal(min(week, 6)) * profile["easy_step"]).quantize(Decimal("0.01"))
+    tempo_distance = (Decimal("5.00") + Decimal(min(week, 5)) * profile["tempo_distance_step"]).quantize(Decimal("0.01"))
+    long_distance = (easy_distance + Decimal("1.25") + Decimal(min(week, 5)) * profile["long_step"]).quantize(Decimal("0.01"))
+    interval_distance = (Decimal("1.80") + Decimal(reps) * Decimal("0.40")).quantize(Decimal("0.01"))
+
+    sessions = [
+        {
+            "preferred_offset": 0,
+            "session_type": "easy",
+            "title": "Rodagem leve na esteira",
+            "distance_km": easy_distance,
+            "pace": 335,
+            "description": "Base aeróbica controlada.",
+        }
+    ]
+    if weekly_sessions >= 4:
+        sessions.append(
+            {
+                "preferred_offset": 1,
+                "session_type": "recovery",
+                "title": "Rodagem regenerativa",
+                "distance_km": max(Decimal("3.20"), easy_distance - Decimal("1.20")).quantize(Decimal("0.01")),
+                "pace": 365,
+                "description": "Volume leve para somar consistência sem elevar carga.",
+            }
+        )
+    sessions.append(
+        {
+            "preferred_offset": 2,
+            "session_type": "interval",
+            "title": f"Intervalado {reps}x400m",
+            "distance_km": interval_distance,
+            "pace": _interval_pace(week, profile),
+            "description": "Tiros com recuperação ativa.",
+        }
+    )
+    if weekly_sessions >= 3:
+        sessions.append(
+            {
+                "preferred_offset": 4,
+                "session_type": "tempo",
+                "title": "Tempo run em ritmo controlado",
+                "distance_km": tempo_distance,
+                "pace": max(300, 325 - week * int(profile["tempo_pace_step"])),
+                "description": "Ritmo forte sustentável.",
+            }
+        )
+    if weekly_sessions >= 5:
+        sessions.append(
+            {
+                "preferred_offset": long_offset,
+                "session_type": "long",
+                "title": "Rodagem longa progressiva",
+                "distance_km": long_distance,
+                "pace": 350,
+                "description": "Maior volume da semana em ritmo confortável.",
+            }
+        )
+
+    offsets = _pick_session_offsets(goal, [int(session["preferred_offset"]) for session in sessions])
+    for session, offset in zip(sessions, offsets):
+        session["day_offset"] = offset
+    return sorted(sessions, key=lambda session: int(session["day_offset"]))
+
+
 def _build_default_plan(goal: RunningGoal, db: Session) -> int:
     existing_count = db.execute(
         select(RunningPlanSession).where(RunningPlanSession.goal_id == goal.id)
@@ -62,34 +209,31 @@ def _build_default_plan(goal: RunningGoal, db: Session) -> int:
     if existing_count:
         return 0
 
-    # Estrutura inicial segura: 3 treinos por semana, segunda/quarta/sexta.
     today = datetime.now(timezone.utc)
     current = today + timedelta(days=(0 - today.weekday()) % 7)
     current = current.replace(hour=19, minute=0, second=0, microsecond=0)
     race_date = goal.race_date if goal.race_date.tzinfo else goal.race_date.replace(tzinfo=timezone.utc)
+    profile = _progression_profile(goal.progression_style)
 
     created = 0
     week = 0
     while current.date() <= race_date.date():
         week += 1
-        plan_defs = [
-            (0, "easy", "Rodagem leve na esteira", Decimal("5.00") + Decimal(min(week, 4)) * Decimal("0.25"), 335, "Base aeróbica controlada."),
-            (2, "interval", f"Intervalado {min(4 + week, 8)}x400m", Decimal("5.80"), max(268, 282 - week), "Tiros com recuperação ativa."),
-            (4, "tempo", "Tempo run em ritmo controlado", Decimal("5.50"), max(305, 325 - week), "Ritmo forte sustentável."),
-        ]
-        for day_offset, session_type, title, distance_km, pace, description in plan_defs:
-            scheduled = current + timedelta(days=day_offset)
+        for plan_def in _session_blueprint(goal, week, profile):
+            scheduled = current + timedelta(days=int(plan_def["day_offset"]))
             if scheduled.date() > race_date.date():
                 continue
+            distance_km = plan_def["distance_km"]
+            pace = int(plan_def["pace"])
             speed = _speed_from_pace(pace)
             duration = int((Decimal(pace) * distance_km).to_integral_value(rounding=ROUND_HALF_UP))
             session = RunningPlanSession(
                 user_id=goal.user_id,
                 goal_id=goal.id,
-                session_type=session_type,
-                title=title,
+                session_type=str(plan_def["session_type"]),
+                title=str(plan_def["title"]),
                 scheduled_date=scheduled,
-                description=description,
+                description=str(plan_def["description"]),
                 target_distance_km=distance_km,
                 target_duration_seconds=duration,
                 target_pace_seconds_per_km=pace,
@@ -98,17 +242,21 @@ def _build_default_plan(goal: RunningGoal, db: Session) -> int:
             )
             db.add(session)
             db.flush()
-            if session_type == "interval":
-                db.add_all(_interval_steps(session.id, week))
+            if session.session_type == "interval":
+                db.add_all(_interval_steps(session.id, week, profile))
             else:
-                db.add_all(_continuous_steps(session.id, pace, speed, distance_km, duration, session_type))
+                db.add_all(_continuous_steps(session.id, pace, speed, distance_km, duration, session.session_type))
             created += 1
         current += timedelta(days=7)
     return created
 
 
 def _continuous_steps(session_id: int, pace: int, speed: Decimal | None, distance_km: Decimal, duration: int, session_type: str) -> list[RunningWorkoutStep]:
-    main_title = "Rodagem" if session_type == "easy" else "Bloco principal"
+    main_title = {
+        "easy": "Rodagem",
+        "recovery": "Rodagem regenerativa",
+        "long": "Rodagem longa",
+    }.get(session_type, "Bloco principal")
     return [
         RunningWorkoutStep(
             running_plan_session_id=session_id,
@@ -146,9 +294,10 @@ def _continuous_steps(session_id: int, pace: int, speed: Decimal | None, distanc
     ]
 
 
-def _interval_steps(session_id: int, week: int) -> list[RunningWorkoutStep]:
-    reps = min(4 + week, 8)
-    pace = max(268, 282 - week)
+def _interval_steps(session_id: int, week: int, profile: dict | None = None) -> list[RunningWorkoutStep]:
+    profile = profile or _progression_profile("balanced")
+    reps = _interval_reps(week, profile)
+    pace = _interval_pace(week, profile)
     speed = _speed_from_pace(pace)
     steps = [
         RunningWorkoutStep(

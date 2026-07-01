@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -65,3 +67,79 @@ def test_running_step_completion_advances_to_next_step() -> None:
     assert finish.status_code == 200
     assert finish.json()["session_completed"] is True
     assert finish.json()["execution"]["status"] == "completed"
+
+
+
+def test_running_goal_accepts_progression_preferences() -> None:
+    register = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Running Preferences",
+            "email": f"running-preferences-{uuid4()}@example.com",
+            "password": "password123",
+        },
+    )
+    assert register.status_code == 201
+    user_id = register.json()["user"]["id"]
+
+    response = client.post(
+        "/api/v1/running-goals",
+        json={
+            "user_id": user_id,
+            "race_distance_km": 5,
+            "race_date": "2026-08-16T09:00:00Z",
+            "current_5k_time_seconds": 1498,
+            "target_5k_time_seconds": 1410,
+            "training_location": "treadmill",
+            "available_weekdays": "mon,tue,wed,thu,fri,sat",
+            "weekly_sessions": 4,
+            "progression_style": "aggressive",
+            "long_run_weekday": "sat",
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["weekly_sessions"] == 4
+    assert data["progression_style"] == "aggressive"
+    assert data["long_run_weekday"] == "sat"
+
+
+def test_running_plan_generation_uses_weekly_sessions_preference() -> None:
+    register = client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": "Running Weekly Volume",
+            "email": f"running-volume-{uuid4()}@example.com",
+            "password": "password123",
+        },
+    )
+    assert register.status_code == 201
+    user_id = register.json()["user"]["id"]
+
+    goal = client.post(
+        "/api/v1/running-goals",
+        json={
+            "user_id": user_id,
+            "race_distance_km": 5,
+            "race_date": "2026-08-16T09:00:00Z",
+            "current_5k_time_seconds": 1498,
+            "target_5k_time_seconds": 1410,
+            "training_location": "treadmill",
+            "available_weekdays": "mon,tue,wed,thu,fri,sat",
+            "weekly_sessions": 5,
+            "progression_style": "conservative",
+            "long_run_weekday": "sat",
+        },
+    )
+    assert goal.status_code == 201
+
+    generated = client.post(f"/api/v1/running-goals/{goal.json()['id']}/generate-plan")
+    assert generated.status_code == 200
+    assert generated.json()["created_sessions"] >= 5
+
+    week = client.get(f"/api/v1/running-plan/week?user_id={user_id}&reference_date=2026-07-06T00:00:00Z")
+    assert week.status_code == 200
+    sessions = week.json()
+    assert len(sessions) == 5
+    assert {session["session_type"] for session in sessions} >= {"easy", "interval", "tempo", "long"}

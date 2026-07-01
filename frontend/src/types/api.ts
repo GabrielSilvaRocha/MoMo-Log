@@ -192,6 +192,9 @@ export type RunningGoal = {
   target_5k_time_seconds: number | null
   training_location: string
   available_weekdays: string
+  weekly_sessions: number
+  progression_style: string
+  long_run_weekday: string
   status: string
 }
 
@@ -275,6 +278,9 @@ export type RunningGoalPayload = {
   target_5k_time_seconds?: number | null
   training_location?: string
   available_weekdays?: string
+  weekly_sessions?: number
+  progression_style?: string
+  long_run_weekday?: string
 }
 
 export type RunningPlanGenerateResponse = {
