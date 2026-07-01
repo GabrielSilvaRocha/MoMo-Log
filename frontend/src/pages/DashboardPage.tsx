@@ -108,13 +108,13 @@ export function DashboardPage({ onStartWorkout }: DashboardPageProps) {
         </div>
 
         <div className="rounded-3xl border border-mo-border bg-mo-surface p-6">
-          <p className="text-sm text-mo-muted">Status da API</p>
-          <strong className="mt-2 block text-2xl text-white">{state.health?.status?.toUpperCase()}</strong>
-          <p className="mt-2 text-sm text-mo-muted">Versão {state.health?.version}</p>
+          <p className="text-sm text-mo-muted">Score híbrido</p>
+          <strong className="mt-2 block text-4xl text-white">{formatNumber(dashboard?.hybrid_score ?? 0, 0)}</strong>
+          <p className="mt-2 text-sm text-mo-muted">Versão {state.health?.version} · API {state.health?.status?.toUpperCase()}</p>
           <div className="mt-6 rounded-2xl bg-white/[0.03] p-4">
-            <p className="text-sm text-mo-muted">Corrida</p>
-            <p className="mt-1 font-semibold text-white">Running Coach ativo</p>
-            <p className="mt-2 text-xs text-mo-muted">Plano por objetivo e execução guiada na esteira.</p>
+            <p className="text-sm text-mo-muted">Foco da semana</p>
+            <p className="mt-1 font-semibold text-white">{dashboard?.next_focus}</p>
+            <p className="mt-2 text-xs text-mo-muted">Recuperação: {dashboard?.recovery_balance === 'adequate' ? 'planejada' : 'monitorar carga'}</p>
           </div>
         </div>
       </section>
@@ -139,14 +139,31 @@ export function DashboardPage({ onStartWorkout }: DashboardPageProps) {
           icon="🔥"
         />
         <MetricCard
-          label="Próximos treinos"
-          value={`${dashboard?.upcoming_sessions.length ?? 0}`}
-          hint="Planejamento restante da semana"
-          icon="📅"
+          label="Score híbrido"
+          value={`${formatNumber(dashboard?.hybrid_score ?? 0, 0)}`}
+          hint="Força, corrida, consistência e volume"
+          icon="ðŸ§­"
         />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
+        <section className="rounded-3xl border border-mo-border bg-mo-surface p-5">
+          <h2 className="text-lg font-semibold text-white">Mix híbrido</h2>
+          <div className="mt-5 space-y-4">
+            {(dashboard?.training_mix ?? []).map((item) => {
+              const progress = item.planned ? Math.round((item.completed / item.planned) * 100) : 0
+              return (
+                <div key={item.key}>
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span className="font-semibold text-white">{item.label}</span>
+                    <span className="text-mo-muted">{item.completed}/{item.planned}</span>
+                  </div>
+                  <ProgressBar value={progress} label={item.label} />
+                </div>
+              )
+            })}
+          </div>
+        </section>
         <div className="lg:col-span-2">
           <SessionList
             title="Treinos de hoje"

@@ -18,10 +18,13 @@ def test_product_mvp_status() -> None:
     assert len(data["modules"]) >= 8
     assert isinstance(data["user_flows"], list)
     assert any(flow["key"] == "manual_treadmill_run" for flow in data["user_flows"])
+    assert any(flow["key"] == "portfolio_demo" for flow in data["user_flows"])
 
 
 def test_release_notes() -> None:
     response = client.get("/api/v1/product/release-notes")
 
     assert response.status_code == 200
-    assert "version" in response.json()
+    data = response.json()
+    assert data["version"] == "7.0.0"
+    assert data["title"] == "Portfolio Release"

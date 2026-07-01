@@ -4,11 +4,12 @@ import { mo2logApi } from '../api/mo2log'
 import { LoadingState } from '../components/LoadingState'
 import { MetricCard } from '../components/MetricCard'
 import { SectionHeader } from '../components/SectionHeader'
-import type { DeploymentChecklist, OpsStatus } from '../types/api'
+import type { DeploymentChecklist, MobileSyncReadiness, OpsStatus } from '../types/api'
 
 type DeployState = {
   ops: OpsStatus | null
   checklist: DeploymentChecklist | null
+  mobile: MobileSyncReadiness | null
 }
 
 function statusStyle(status: string) {
@@ -18,7 +19,7 @@ function statusStyle(status: string) {
 }
 
 export function DeployPage() {
-  const [state, setState] = useState<DeployState>({ ops: null, checklist: null })
+  const [state, setState] = useState<DeployState>({ ops: null, checklist: null, mobile: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,9 +29,9 @@ export function DeployPage() {
     async function load() {
       try {
         setLoading(true)
-        const [ops, checklist] = await Promise.all([mo2logApi.opsStatus(), mo2logApi.deploymentChecklist()])
+        const [ops, checklist, mobile] = await Promise.all([mo2logApi.opsStatus(), mo2logApi.deploymentChecklist(), mo2logApi.mobileSyncReadiness()])
         if (mounted) {
-          setState({ ops, checklist })
+          setState({ ops, checklist, mobile })
           setError(null)
         }
       } catch (err) {
@@ -96,11 +97,46 @@ export function DeployPage() {
           <div className="mt-5 space-y-3">
             {(state.checklist?.items ?? []).map((item) => (
               <article key={item.key} className="flex items-center justify-between gap-4 rounded-2xl border border-mo-border bg-white/[0.03] p-4">
-                <p className="font-semibold text-white">{item.label}</p>
+                <div>
+                  <p className="font-semibold text-white">{item.label}</p>
+                  {item.detail && <p className="mt-1 text-sm text-mo-muted">{item.detail}</p>}
+                </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusStyle(item.status)}`}>{item.status}</span>
               </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-3xl border border-mo-border bg-mo-surface p-5">
+          <SectionHeader title="Roteiro mobile" description="Preparação para Health Connect e Samsung Health." />
+          <div className="mt-5 space-y-3">
+            <p className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">Status: <strong className="text-white">{state.mobile?.status}</strong></p>
+            {(state.mobile?.implementation_steps ?? []).map((step) => (
+              <p key={step} className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">{step}</p>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-3xl border border-mo-border bg-mo-surface p-5">
+          <SectionHeader title="Roteiro de demo" description="Sequência pronta para apresentar o projeto." />
+          <div className="mt-5 space-y-3">
+            {(state.checklist?.demo_script ?? []).map((step, index) => (
+              <p key={step} className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">{index + 1}. {step}</p>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-mo-border bg-mo-surface p-5">
+        <SectionHeader title="Screenshots-alvo" description={state.checklist?.portfolio_summary ?? 'Pacote visual para portfólio.'} />
+        <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+          {(state.checklist?.screenshot_targets ?? []).map((target) => (
+            <div key={target.key} className="rounded-2xl border border-mo-border bg-white/[0.03] p-4">
+              <p className="font-semibold text-white">{target.label}</p>
+              <p className="mt-2 text-sm text-mo-muted">{target.route}</p>
+            </div>
+          ))}
         </div>
       </section>
 

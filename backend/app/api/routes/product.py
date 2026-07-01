@@ -32,22 +32,23 @@ def get_mvp_status() -> dict:
         {"key": "schedule_template", "label": "Criar sessão a partir de template", "coverage": 100},
         {"key": "custom_template", "label": "Criar template personalizado", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
-        {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 85},
+        {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 90},
         {"key": "race_forecast", "label": "Prever tempo por distância-alvo", "coverage": 80},
-        {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 10},
+        {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 35},
         {"key": "user_authentication", "label": "Entrar, cadastrar e manter sessão local", "coverage": 100},
         {"key": "user_preferences", "label": "Configurar fonte padrão de corrida e metas semanais", "coverage": 100},
+        {"key": "portfolio_demo", "label": "Apresentar projeto como portfólio", "coverage": 100},
     ]
 
     next_priorities = [
-        "Melhorias no dashboard de evolução híbrida",
-        "Health Connect / Samsung Health no app mobile",
+        "Deploy cloud de demonstração",
+        "App mobile nativo com Health Connect",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Running Plan Progression Preferences",
+        "milestone": "Portfolio Release",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -58,12 +59,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "6.6.0",
-        "title": "Running Plan Progression Preferences",
+        "version": "7.0.0",
+        "title": "Portfolio Release",
         "highlights": [
-            "Objetivo de corrida agora salva treinos por semana, estilo de progressão e dia do treino longo.",
-            "Gerador do Running Coach monta semanas de 2 a 5 treinos respeitando dias disponíveis.",
-            "Progressões conservadora, equilibrada e agressiva ajustam volume, tiros e ritmo.",
-            "Tela Corridas permite configurar preferências antes de salvar o objetivo.",
+            "Dashboard híbrido passa a exibir score, foco semanal e mix força/corrida/recuperação.",
+            "Roteiro mobile para Health Connect e Samsung Health foi desenhado com contrato de readiness.",
+            "Painel Deploy inclui checklist de portfólio, demo script e screenshots-alvo.",
+            "Documentação v7 consolida a aplicação como pacote demonstrável de produto full-stack.",
         ],
     }

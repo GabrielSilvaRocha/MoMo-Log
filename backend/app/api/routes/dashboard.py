@@ -53,6 +53,11 @@ def get_week_dashboard(
         for session in sessions
         if session.scheduled_date > today and session.status not in {"completed", "skipped"}
     ]
+    strength_sessions = [session for session in sessions if session.session_type == "strength"]
+    running_sessions = [session for session in sessions if session.session_type == "running"]
+    rest_sessions = [session for session in sessions if session.session_type == "rest"]
+    completed_strength_sessions = [session for session in strength_sessions if session.status == "completed"]
+    completed_running_sessions = [session for session in running_sessions if session.status == "completed"]
 
     weekly_strength_volume = Decimal("0")
     for session in sessions:
@@ -79,6 +84,45 @@ def get_week_dashboard(
     weekly_running_distance_km = sum(
         (activity.distance_m for activity in running_activities), Decimal("0")
     ) / Decimal("1000")
+    planned_strength = len(strength_sessions)
+    planned_running = len(running_sessions)
+    hybrid_bonus = 0
+    if completed_strength_sessions:
+        hybrid_bonus += 20
+    if weekly_running_distance_km > 0 or completed_running_sessions:
+        hybrid_bonus += 20
+    volume_bonus = min(float(weekly_strength_volume / Decimal("1000")), 30.0)
+    running_bonus = min(float(weekly_running_distance_km) * 2, 30.0)
+    hybrid_score = round(min(100.0, completion_rate * 0.4 + hybrid_bonus + volume_bonus + running_bonus), 2)
+    if completion_rate < 60:
+        next_focus = "Fechar as sessões planejadas restantes da semana."
+    elif not completed_strength_sessions:
+        next_focus = "Adicionar estímulo de força para manter evolução híbrida."
+    elif weekly_running_distance_km <= 0 and not completed_running_sessions:
+        next_focus = "Registrar corrida ou executar o próximo treino do Running Coach."
+    else:
+        next_focus = "Manter consistência e revisar carga/pace na próxima sessão."
+    recovery_balance = "adequate" if rest_sessions else "watch"
+    training_mix = [
+        {
+            "key": "strength",
+            "label": "Força",
+            "planned": planned_strength,
+            "completed": len(completed_strength_sessions),
+        },
+        {
+            "key": "running",
+            "label": "Corrida",
+            "planned": planned_running,
+            "completed": len(completed_running_sessions),
+        },
+        {
+            "key": "recovery",
+            "label": "Recuperação",
+            "planned": len(rest_sessions),
+            "completed": len([session for session in rest_sessions if session.status == "completed"]),
+        },
+    ]
 
     return {
         "user_id": user_id,
@@ -88,4 +132,10 @@ def get_week_dashboard(
         "weekly_strength_volume": weekly_strength_volume,
         "weekly_running_distance_km": weekly_running_distance_km,
         "completion_rate": completion_rate,
+        "weekly_strength_sessions": planned_strength,
+        "weekly_running_sessions": planned_running,
+        "hybrid_score": hybrid_score,
+        "next_focus": next_focus,
+        "recovery_balance": recovery_balance,
+        "training_mix": training_mix,
     }

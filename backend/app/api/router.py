@@ -9,6 +9,7 @@ from app.api.routes.adaptation import router as adaptation_router
 from app.api.routes.goals import router as goals_router
 from app.api.routes.history import router as history_router
 from app.api.routes.intelligence import router as intelligence_router
+from app.api.routes.mobile_sync import router as mobile_sync_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.product import router as product_router
@@ -37,6 +38,7 @@ api_router.include_router(analytics_router)
 api_router.include_router(intelligence_router)
 api_router.include_router(adaptation_router)
 api_router.include_router(history_router)
+api_router.include_router(mobile_sync_router)
 api_router.include_router(reports_router)
 api_router.include_router(product_router)
 api_router.include_router(ops_router)

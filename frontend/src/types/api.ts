@@ -119,6 +119,17 @@ export type WeekDashboard = {
   weekly_strength_volume: string
   weekly_running_distance_km: string
   completion_rate: number
+  weekly_strength_sessions: number
+  weekly_running_sessions: number
+  hybrid_score: number
+  next_focus: string
+  recovery_balance: string
+  training_mix: Array<{
+    key: string
+    label: string
+    planned: number
+    completed: number
+  }>
 }
 
 export type Goal = {
@@ -566,6 +577,7 @@ export type DeploymentChecklistItem = {
   key: string
   label: string
   status: string
+  detail?: string
 }
 
 export type DeploymentChecklist = {
@@ -573,6 +585,31 @@ export type DeploymentChecklist = {
   title: string
   items: DeploymentChecklistItem[]
   recommended_next_targets: string[]
+  demo_script: string[]
+  screenshot_targets: Array<{
+    key: string
+    label: string
+    route: string
+  }>
+  portfolio_summary: string
+}
+
+export type MobileSyncReadiness = {
+  status: string
+  target_platforms: string[]
+  sync_strategy: {
+    direction: string
+    primary_activity_source: string
+    fallback_activity_source: string
+    conflict_policy: string
+  }
+  required_permissions: string[]
+  data_mapping: Array<{
+    external: string
+    mo2log: string
+    status: string
+  }>
+  implementation_steps: string[]
 }
 
 export type WorkoutTemplateExercise = {

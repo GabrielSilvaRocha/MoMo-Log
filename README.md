@@ -4,9 +4,36 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Próximas entregas
 
-- v6.7.0 — Melhorias no dashboard de evolução híbrida.
-- v6.8.0 — Preparação de integração mobile para Health Connect / Samsung Health.
-- v7.0.0 — Empacotamento de portfólio com screenshots, demo e checklist de deploy.
+- v7.1.0 — Deploy cloud de demonstração com domínio público.
+- v7.2.0 — App mobile nativo com Health Connect em ambiente Android.
+- v7.3.0 — Camada social/compartilhamento de evolução e provas.
+
+## v7.0.0 — Portfolio Release
+
+Esta versão consolida as entregas planejadas até v7.0.0:
+
+- Dashboard híbrido com score, foco semanal, recuperação e mix força/corrida.
+- Rota de readiness para Health Connect / Samsung Health com estratégia de sincronização e mapeamento de dados.
+- Painel Deploy ampliado com checklist de portfólio, roteiro de demo e screenshots-alvo.
+- Documento docs/product/portfolio-demo.md com pacote de apresentação do projeto.
+
+## v6.8.0 — Mobile Sync Readiness
+
+Esta versão prepara a futura integração mobile:
+
+- Contrato /api/v1/mobile-sync/readiness descreve plataformas, permissões e mapeamento de dados.
+- Estratégia import-first prioriza Health Connect e mantém registro manual como fallback.
+- Política de conflitos prevê revisão manual para evitar duplicidade de corridas.
+- Painel Deploy passa a exibir o roteiro mobile.
+
+## v6.7.0 — Hybrid Dashboard Evolution
+
+Esta versão evolui o dashboard:
+
+- Score híbrido combina consistência, força, corrida e volume semanal.
+- Mix semanal separa força, corrida e recuperação planejadas/concluídas.
+- Foco da semana orienta a próxima ação com base no estado atual.
+- Métricas principais passam a destacar evolução híbrida em vez de apenas volume bruto.
 
 ## v6.6.0 — Running Plan Progression Preferences
 

@@ -27,3 +27,6 @@ def test_deployment_checklist_route_exists() -> None:
     assert isinstance(data["version"], str)
     assert data["version"]
     assert any(item["key"] == "secrets" for item in data["items"])
+    assert any(item["key"] == "portfolio" for item in data["items"])
+    assert data["demo_script"]
+    assert data["screenshot_targets"]

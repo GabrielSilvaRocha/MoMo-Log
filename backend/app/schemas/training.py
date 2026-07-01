@@ -137,6 +137,12 @@ class WeekDashboardRead(BaseModel):
     weekly_strength_volume: Decimal
     weekly_running_distance_km: Decimal
     completion_rate: float
+    weekly_strength_sessions: int
+    weekly_running_sessions: int
+    hybrid_score: float
+    next_focus: str
+    recovery_balance: str
+    training_mix: list[dict]
 
 
 class StrengthLoadProgressionRead(BaseModel):
