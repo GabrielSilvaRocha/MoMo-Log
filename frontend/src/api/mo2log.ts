@@ -23,6 +23,7 @@ import type {
   PersonalRecord,
   ManualRunningActivityPayload,
   RegisterPayload,
+  RaceForecast,
   RunningActivity,
   RunningGoal,
   RunningGoalPayload,
@@ -75,6 +76,8 @@ export const mo2logApi = {
     apiGet<PlannedVsDone>(`/intelligence/planned-vs-done?user_id=${userId}&reference_date=${referenceDate}`),
   forecast5k: (userId = getCurrentUserId()) =>
     apiGet<FiveKForecast>(`/intelligence/forecast-5k?user_id=${userId}`),
+  forecastRace: (userId = getCurrentUserId(), targetDistanceKm = 5) =>
+    apiGet<RaceForecast>(`/intelligence/forecast-race?user_id=${userId}&target_distance_km=${targetDistanceKm}`),
   reportOverview: (userId = getCurrentUserId(), dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams({ user_id: String(userId) })
     if (dateFrom) params.set('date_from', dateFrom)

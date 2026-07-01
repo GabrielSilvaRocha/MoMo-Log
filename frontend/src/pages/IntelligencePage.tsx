@@ -5,13 +5,15 @@ import { getCurrentUserId } from '../auth/session'
 import { MetricCard } from '../components/MetricCard'
 import { ProgressBar } from '../components/ProgressBar'
 import { LoadingState } from '../components/LoadingState'
-import type { FiveKForecast, PlannedVsDone, WeeklyIntelligence } from '../types/api'
+import type { FiveKForecast, PlannedVsDone, RaceForecast, WeeklyIntelligence } from '../types/api'
 import { formatDate, formatNumber } from '../utils/format'
 
 export function IntelligencePage() {
   const [weekly, setWeekly] = useState<WeeklyIntelligence | null>(null)
   const [plan, setPlan] = useState<PlannedVsDone | null>(null)
   const [forecast, setForecast] = useState<FiveKForecast | null>(null)
+  const [raceForecast, setRaceForecast] = useState<RaceForecast | null>(null)
+  const [targetDistanceKm, setTargetDistanceKm] = useState(10)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -22,15 +24,17 @@ export function IntelligencePage() {
       try {
         setLoading(true)
         const userId = getCurrentUserId()
-        const [weeklyData, planData, forecastData] = await Promise.all([
+        const [weeklyData, planData, forecastData, raceForecastData] = await Promise.all([
           mo2logApi.weeklyIntelligence(userId, '2026-06-29'),
           mo2logApi.plannedVsDone(userId, '2026-06-29'),
           mo2logApi.forecast5k(userId),
+          mo2logApi.forecastRace(userId, 10),
         ])
         if (mounted) {
           setWeekly(weeklyData)
           setPlan(planData)
           setForecast(forecastData)
+          setRaceForecast(raceForecastData)
           setError(null)
         }
       } catch (err) {
@@ -46,6 +50,18 @@ export function IntelligencePage() {
       mounted = false
     }
   }, [])
+
+
+  async function loadRaceForecast(distanceKm: number) {
+    try {
+      setTargetDistanceKm(distanceKm)
+      const data = await mo2logApi.forecastRace(getCurrentUserId(), distanceKm)
+      setRaceForecast(data)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar previsão por distância')
+    }
+  }
 
   return (
     <main className="space-y-6">
@@ -133,17 +149,33 @@ export function IntelligencePage() {
             </div>
 
             <div className="rounded-3xl border border-mo-border bg-mo-surface p-5">
-              <h3 className="text-lg font-semibold text-white">Previsão 5 km</h3>
-              <p className="mt-2 text-sm text-mo-muted">
-                Estimativa inicial baseada nas corridas registradas. Quanto mais corridas de esteira você lançar, melhor fica a leitura.
-              </p>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Previsão por distância</h3>
+                  <p className="mt-2 text-sm text-mo-muted">
+                    Escolha uma prova-alvo e veja a estimativa baseada nas corridas registradas.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[5, 10, 21.1].map((distance) => (
+                    <button
+                      key={distance}
+                      onClick={() => loadRaceForecast(distance)}
+                      className={`rounded-2xl px-4 py-2 text-sm font-semibold ${targetDistanceKm === distance ? 'bg-mo-primary text-black' : 'border border-mo-border text-white'}`}
+                    >
+                      {distance === 21.1 ? '21,1 km' : `${distance} km`}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="mt-5 rounded-3xl border border-mo-primary/30 bg-mo-primary/10 p-5">
-                <p className="text-sm text-mo-muted">Tempo previsto</p>
-                <p className="mt-2 text-4xl font-bold text-mo-primary">{forecast.predicted_5k_time_label}</p>
-                <p className="mt-2 text-sm text-mo-muted">Pace estimado: {forecast.predicted_pace_label}</p>
+                <p className="text-sm text-mo-muted">Tempo previsto para {raceForecast?.target_distance_km ?? '10.00'} km</p>
+                <p className="mt-2 text-4xl font-bold text-mo-primary">{raceForecast?.predicted_time_label ?? forecast.predicted_5k_time_label}</p>
+                <p className="mt-2 text-sm text-mo-muted">Pace estimado: {raceForecast?.predicted_pace_label ?? forecast.predicted_pace_label}</p>
+                <p className="mt-1 text-xs text-mo-muted">Confiança: {raceForecast?.confidence ?? forecast.confidence} · {raceForecast?.based_on_runs ?? forecast.based_on_runs} corrida(s) usadas</p>
               </div>
               <div className="mt-4 space-y-2">
-                {forecast.notes.map((note) => (
+                {(raceForecast?.notes ?? forecast.notes).map((note) => (
                   <p key={note} className="rounded-2xl bg-white/[0.03] p-3 text-sm text-mo-muted">{note}</p>
                 ))}
               </div>

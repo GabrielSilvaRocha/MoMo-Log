@@ -2,6 +2,22 @@
 
 Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
+## Próximas entregas
+
+- v6.6.0 — Personalização da progressão do plano de corrida.
+- v6.7.0 — Melhorias no dashboard de evolução híbrida.
+- v6.8.0 — Preparação de integração mobile para Health Connect / Samsung Health.
+- v7.0.0 — Empacotamento de portfólio com screenshots, demo e checklist de deploy.
+
+## v6.5.0 — Race Distance Forecasts
+
+Esta versão evolui a inteligência de corrida:
+
+- Previsão de tempo para qualquer distância-alvo informada.
+- Compatibilidade mantida com a previsão clássica de 5 km.
+- Tela Inteligência permite alternar rapidamente entre 5 km, 10 km e meia maratona.
+- Forecast usa pace recente e ajusta a projeção pela distância-alvo.
+
 ## v6.4.0 — Strength Load Progression
 
 Esta versão evolui a execução de musculação:
@@ -10,6 +26,7 @@ Esta versão evolui a execução de musculação:
 - Regras simples usando carga recente, RIR e RPE para aumentar, manter ou reduzir.
 - Tela de execução exibe recomendação de carga junto do exercício planejado.
 - API dedicada para consultar progressão de carga sem criar novas tabelas.
+
 ## v6.3.0 — Custom Workout Templates
 
 Esta versão evolui o módulo Templates:
@@ -18,6 +35,7 @@ Esta versão evolui o módulo Templates:
 - Configuração de séries, repetições, descanso e observações por exercício.
 - Arquivamento de templates ativos sem remover histórico ou sessões já criadas.
 - Tela Templates passa a centralizar criação, seleção e agendamento.
+
 ## v6.2.0 — Running Coach Auto Progression
 
 Esta versão evolui a execução guiada do módulo Corridas:
@@ -26,6 +44,7 @@ Esta versão evolui a execução guiada do módulo Corridas:
 - Backend conclui o log da etapa, retorna a próxima etapa e encerra a sessão na etapa final.
 - Painel da esteira permite concluir a etapa atual manualmente quando necessário.
 - Running Coach passa a registrar a execução como fluxo contínuo, sem depender de cliques entre blocos.
+
 ## v6.1.1 — Running Coach Execution Hotfix
 
 Esta versão corrigiu e melhorou a execução guiada do módulo Corridas:

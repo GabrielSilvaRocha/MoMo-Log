@@ -258,8 +258,9 @@ def get_planned_vs_done(
     }
 
 
-@router.get("/forecast-5k")
-def get_5k_forecast(user_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+
+def _running_forecast(user_id: int, target_distance_km: Decimal, db: Session) -> dict[str, Any]:
+    safe_target = max(target_distance_km, Decimal("1.00")).quantize(Decimal("0.01"))
     runs = list(
         db.execute(
             select(RunningActivity)
@@ -277,7 +278,9 @@ def get_5k_forecast(user_id: int, db: Session = Depends(get_db)) -> dict[str, An
         if distance_km <= 0:
             continue
         pace = Decimal(run.moving_time_s) / Decimal("60") / distance_km
-        relevance = "high" if Decimal("3") <= distance_km <= Decimal("10") else "medium"
+        lower_bound = safe_target * Decimal("0.60")
+        upper_bound = safe_target * Decimal("1.80")
+        relevance = "high" if lower_bound <= distance_km <= upper_bound else "medium"
         pace_samples.append(
             {
                 "activity_id": run.id,
@@ -291,23 +294,30 @@ def get_5k_forecast(user_id: int, db: Session = Depends(get_db)) -> dict[str, An
         )
 
     if not pace_samples:
-        baseline_seconds = 30 * 60
+        baseline_pace = Decimal("6.00")
+        predicted_time_s = int((baseline_pace * safe_target * Decimal("60")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         return {
             "user_id": user_id,
+            "target_distance_km": safe_target,
             "confidence": "low",
-            "predicted_5k_time_s": baseline_seconds,
-            "predicted_5k_time_label": _duration_label(baseline_seconds),
-            "predicted_pace_label": "6:00/km",
+            "predicted_time_s": predicted_time_s,
+            "predicted_time_label": _duration_label(predicted_time_s),
+            "predicted_pace_label": _pace_label(baseline_pace),
             "based_on_runs": 0,
-            "notes": ["Sem corridas suficientes. Usando referência inicial de 30 minutos para 5 km."],
+            "notes": ["Sem corridas suficientes. Usando referência inicial de 6:00/km para a distância-alvo."],
             "samples": [],
         }
 
     high_relevance = [sample for sample in pace_samples if sample["relevance"] == "high"] or pace_samples
     best_pace = min((sample["pace"] for sample in high_relevance), default=Decimal("6"))
     average_recent_pace = sum((sample["pace"] for sample in high_relevance), Decimal("0")) / Decimal(len(high_relevance))
-    predicted_pace = (best_pace * Decimal("0.65")) + (average_recent_pace * Decimal("0.35"))
-    predicted_5k_time_s = int((predicted_pace * Decimal("5") * Decimal("60")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    fatigue_factor = Decimal("1.00")
+    if safe_target > Decimal("10"):
+        fatigue_factor += min((safe_target - Decimal("10")) * Decimal("0.012"), Decimal("0.18"))
+    elif safe_target < Decimal("5"):
+        fatigue_factor -= min((Decimal("5") - safe_target) * Decimal("0.01"), Decimal("0.03"))
+    predicted_pace = ((best_pace * Decimal("0.65")) + (average_recent_pace * Decimal("0.35"))) * fatigue_factor
+    predicted_time_s = int((predicted_pace * safe_target * Decimal("60")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     confidence = "low"
     if len(high_relevance) >= 5:
@@ -316,15 +326,17 @@ def get_5k_forecast(user_id: int, db: Session = Depends(get_db)) -> dict[str, An
         confidence = "medium"
 
     notes = [
-        "Previsão simples baseada em pace recente registrado no Mo² LOG.",
-        "Para melhorar a previsão, registre corridas de esteira com distância e tempo reais.",
+        "Previsão baseada em pace recente registrado no Mo² LOG.",
+        "Distâncias maiores recebem ajuste conservador de fadiga.",
+        "Para melhorar a previsão, registre corridas próximas da distância-alvo.",
     ]
 
     return {
         "user_id": user_id,
+        "target_distance_km": safe_target,
         "confidence": confidence,
-        "predicted_5k_time_s": predicted_5k_time_s,
-        "predicted_5k_time_label": _duration_label(predicted_5k_time_s),
+        "predicted_time_s": predicted_time_s,
+        "predicted_time_label": _duration_label(predicted_time_s),
         "predicted_pace_label": _pace_label(predicted_pace),
         "based_on_runs": len(high_relevance),
         "notes": notes,
@@ -332,4 +344,28 @@ def get_5k_forecast(user_id: int, db: Session = Depends(get_db)) -> dict[str, An
             {k: v for k, v in sample.items() if k != "pace"}
             for sample in pace_samples[:8]
         ],
+    }
+
+
+@router.get("/forecast-race")
+def get_race_forecast(
+    user_id: int,
+    target_distance_km: Decimal = Decimal("5.00"),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return _running_forecast(user_id, target_distance_km, db)
+
+
+@router.get("/forecast-5k")
+def get_5k_forecast(user_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    forecast = _running_forecast(user_id, Decimal("5.00"), db)
+    return {
+        "user_id": forecast["user_id"],
+        "confidence": forecast["confidence"],
+        "predicted_5k_time_s": forecast["predicted_time_s"],
+        "predicted_5k_time_label": forecast["predicted_time_label"],
+        "predicted_pace_label": forecast["predicted_pace_label"],
+        "based_on_runs": forecast["based_on_runs"],
+        "notes": forecast["notes"],
+        "samples": forecast["samples"],
     }

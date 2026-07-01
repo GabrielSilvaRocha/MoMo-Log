@@ -18,7 +18,7 @@ def get_mvp_status() -> dict:
         {"key": "history", "label": "Histórico", "status": "stable", "description": "Consulta de sessões por período, status e tipo."},
         {"key": "reports", "label": "Relatórios", "status": "stable", "description": "Resumo por período e exportação CSV."},
         {"key": "analytics", "label": "Estatísticas", "status": "stable", "description": "Metas, recordes pessoais e insights iniciais."},
-        {"key": "intelligence", "label": "Inteligência", "status": "beta", "description": "Insights semanais, comparação planejado vs realizado e previsão simples de 5 km."},
+        {"key": "intelligence", "label": "Inteligência", "status": "beta", "description": "Insights semanais, planejado vs realizado e previsões por distância/prova-alvo."},
         {"key": "auth", "label": "Autenticação", "status": "stable", "description": "Cadastro, login, sessão local, perfil e preferências do usuário."},
     ]
 
@@ -33,6 +33,7 @@ def get_mvp_status() -> dict:
         {"key": "custom_template", "label": "Criar template personalizado", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
         {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 75},
+        {"key": "race_forecast", "label": "Prever tempo por distância-alvo", "coverage": 80},
         {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 10},
         {"key": "user_authentication", "label": "Entrar, cadastrar e manter sessão local", "coverage": 100},
         {"key": "user_preferences", "label": "Configurar fonte padrão de corrida e metas semanais", "coverage": 100},
@@ -40,14 +41,13 @@ def get_mvp_status() -> dict:
 
     next_priorities = [
         "Personalização da progressão do plano de corrida",
-        "Previsões por distância e prova-alvo",
         "Health Connect / Samsung Health no app mobile",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Strength Load Progression",
+        "milestone": "Race Distance Forecasts",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -58,12 +58,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "6.4.0",
-        "title": "Strength Load Progression",
+        "version": "6.5.0",
+        "title": "Race Distance Forecasts",
         "highlights": [
-            "Sugestão de próxima carga por exercício baseada no histórico de séries.",
-            "Regras simples combinam carga recente, RIR e RPE.",
-            "Tela de execução exibe recomendação junto do exercício planejado.",
-            "API dedicada entrega aumento, manutenção, redução ou calibração inicial.",
+            "Previsão de tempo para qualquer distância-alvo informada.",
+            "Forecast clássico de 5 km foi mantido compatível.",
+            "Tela Inteligência alterna entre 5 km, 10 km e meia maratona.",
+            "Modelo ajusta pace recente com fator conservador para provas mais longas.",
         ],
     }

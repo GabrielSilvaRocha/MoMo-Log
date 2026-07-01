@@ -447,6 +447,25 @@ export type PlannedVsDone = {
   }>
 }
 
+export type RaceForecast = {
+  user_id: number
+  target_distance_km: string
+  confidence: string
+  predicted_time_s: number
+  predicted_time_label: string | null
+  predicted_pace_label: string | null
+  based_on_runs: number
+  notes: string[]
+  samples: Array<{
+    activity_id: number
+    name: string
+    source: string
+    distance_km: number
+    pace_label: string | null
+    relevance: string
+  }>
+}
+
 export type FiveKForecast = {
   user_id: number
   confidence: string

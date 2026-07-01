@@ -25,3 +25,15 @@ def test_5k_forecast_route_exists() -> None:
     assert data['user_id'] == 1
     assert 'predicted_5k_time_s' in data
     assert 'confidence' in data
+
+
+def test_race_forecast_route_exists() -> None:
+    response = client.get('/api/v1/intelligence/forecast-race?user_id=1&target_distance_km=10')
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['user_id'] == 1
+    assert data['target_distance_km'] == '10.00'
+    assert 'predicted_time_s' in data
+    assert 'predicted_time_label' in data
+    assert 'confidence' in data
