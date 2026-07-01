@@ -616,19 +616,54 @@ export type CloudDemoReadiness = {
 export type MobileSyncReadiness = {
   status: string
   target_platforms: string[]
+  android_app: {
+    package_name: string
+    min_sdk: number
+    target_sdk: number
+    language: string
+    ui_stack: string
+    sync_worker: string
+  }
   sync_strategy: {
     direction: string
     primary_activity_source: string
     fallback_activity_source: string
     conflict_policy: string
+    dedupe_window_minutes: number
   }
+  permission_groups: Array<{
+    group: string
+    permissions: string[]
+    reason: string
+  }>
   required_permissions: string[]
   data_mapping: Array<{
     external: string
     mo2log: string
     status: string
   }>
+  sync_windows: Array<{
+    key: string
+    label: string
+    lookback_days: number
+  }>
   implementation_steps: string[]
+}
+
+export type AndroidSyncPlan = {
+  status: string
+  modules: Array<{
+    path: string
+    purpose: string
+  }>
+  kotlin_dependencies: string[]
+  api_payload: {
+    endpoint: string
+    method: string
+    source: string
+    fields: string[]
+  }
+  worker_flow: string[]
 }
 
 export type WorkoutTemplateExercise = {

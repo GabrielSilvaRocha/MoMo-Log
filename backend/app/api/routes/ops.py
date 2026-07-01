@@ -107,8 +107,8 @@ def get_cloud_demo_readiness() -> dict:
         "smoke_tests": [
             {"label": "Health", "method": "GET", "path": "/api/v1/health", "expected": "status=ok"},
             {"label": "Operations", "method": "GET", "path": "/api/v1/ops/status", "expected": "status=operational"},
-            {"label": "Release", "method": "GET", "path": "/api/v1/product/release-notes", "expected": "version=7.1.0"},
-            {"label": "Mobile readiness", "method": "GET", "path": "/api/v1/mobile-sync/readiness", "expected": "status=designed"},
+            {"label": "Release", "method": "GET", "path": "/api/v1/product/release-notes", "expected": "version=7.2.0"},
+            {"label": "Mobile readiness", "method": "GET", "path": "/api/v1/mobile-sync/readiness", "expected": "status=android_ready"},
         ],
         "rollback_plan": [
             "Manter a imagem Docker anterior disponível no provedor.",

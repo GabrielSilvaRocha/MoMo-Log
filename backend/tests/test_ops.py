@@ -41,3 +41,4 @@ def test_cloud_demo_readiness_route_exists() -> None:
     assert data["status"] == "ready"
     assert data["recommended_stack"]["database"] == "PostgreSQL gerenciado"
     assert any(test["path"] == "/api/v1/health" for test in data["smoke_tests"])
+    assert any(test["path"] == "/api/v1/mobile-sync/readiness" for test in data["smoke_tests"])

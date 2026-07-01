@@ -34,21 +34,21 @@ def get_mvp_status() -> dict:
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
         {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 90},
         {"key": "race_forecast", "label": "Prever tempo por distância-alvo", "coverage": 80},
-        {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 35},
+        {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 60},
         {"key": "user_authentication", "label": "Entrar, cadastrar e manter sessão local", "coverage": 100},
         {"key": "user_preferences", "label": "Configurar fonte padrão de corrida e metas semanais", "coverage": 100},
         {"key": "portfolio_demo", "label": "Apresentar projeto como portfólio", "coverage": 100},
     ]
 
     next_priorities = [
-        "App mobile nativo com Health Connect",
         "Camada social de evolução e provas",
+        "Compartilhamento público de relatórios e snapshots de progresso",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Cloud Demo Readiness",
+        "milestone": "Android Health Connect App Readiness",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -59,12 +59,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "7.1.0",
-        "title": "Cloud Demo Readiness",
+        "version": "7.2.0",
+        "title": "Android Health Connect App Readiness",
         "highlights": [
-            "Deploy cloud de demonstração ganhou contrato de readiness com stack recomendada.",
-            "Checklist operacional agora cobre variáveis, smoke tests, domínio HTTPS e rollback.",
-            "Painel Deploy mostra preparação para publicação pública do frontend, backend e PostgreSQL.",
-            "Documentação adiciona guia cloud demo e manifestos de exemplo para Vercel e Render.",
+            "Contrato mobile agora descreve app Android nativo em Kotlin, Jetpack Compose e WorkManager.",
+            "Health Connect ganhou plano de permissões, janelas de sincronização e deduplicação.",
+            "Nova rota /mobile-sync/android-plan documenta módulos, dependências e payload para a API.",
+            "Docs mobile adicionam scaffold Android e roteiro de implementação nativa.",
         ],
     }

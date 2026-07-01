@@ -4,9 +4,18 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Próximas entregas
 
-- v7.2.0 — App mobile nativo com Health Connect em ambiente Android.
 - v7.3.0 — Camada social/compartilhamento de evolução e provas.
 - v7.4.0 — Compartilhamento público de relatórios e snapshots de progresso.
+- v7.5.0 — Integração mobile executável com build Android real.
+
+## v7.2.0 — Android Health Connect App Readiness
+
+Esta versão prepara o app Android nativo:
+
+- Mobile sync agora descreve app Kotlin, Jetpack Compose, WorkManager e permissões Health Connect.
+- Nova rota /api/v1/mobile-sync/android-plan expõe módulos, dependências e payload esperado.
+- Painel Deploy exibe grupos de permissões e janelas de sincronização mobile.
+- Documentação docs/mobile/health-connect-android.md e scaffold mobile/android foram adicionados.
 
 ## v7.1.0 — Cloud Demo Readiness
 

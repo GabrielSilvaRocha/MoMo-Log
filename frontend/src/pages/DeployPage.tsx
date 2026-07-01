@@ -136,8 +136,18 @@ export function DeployPage() {
           <SectionHeader title="Roteiro mobile" description="Preparação para Health Connect e Samsung Health." />
           <div className="mt-5 space-y-3">
             <p className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">Status: <strong className="text-white">{state.mobile?.status}</strong></p>
-            {(state.mobile?.implementation_steps ?? []).map((step) => (
-              <p key={step} className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">{step}</p>
+            <p className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">
+              Android: <strong className="text-white">{state.mobile?.android_app.language}</strong> · {state.mobile?.android_app.ui_stack} · {state.mobile?.android_app.sync_worker}
+            </p>
+            {(state.mobile?.permission_groups ?? []).map((group) => (
+              <div key={group.group} className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">
+                <p className="font-semibold text-white">{group.group}</p>
+                <p className="mt-1">{group.reason}</p>
+                <p className="mt-2 text-xs text-mo-primary">{group.permissions.length} permissões</p>
+              </div>
+            ))}
+            {(state.mobile?.sync_windows ?? []).map((window) => (
+              <p key={window.key} className="rounded-2xl bg-white/[0.03] p-4 text-sm text-mo-muted">{window.label}: {window.lookback_days} dias</p>
             ))}
           </div>
         </div>
