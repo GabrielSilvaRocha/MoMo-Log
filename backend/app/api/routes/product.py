@@ -12,7 +12,7 @@ def get_mvp_status() -> dict:
         {"key": "dashboard", "label": "Dashboard", "status": "stable", "description": "Resumo diário e semanal com próximos treinos, progresso, metas e insights."},
         {"key": "planning", "label": "Planejamento", "status": "stable", "description": "Criação, edição e remoção de sessões de musculação, corrida, mobilidade e descanso."},
         {"key": "templates", "label": "Templates", "status": "stable", "description": "Templates reutilizáveis com criação personalizada, arquivamento e agendamento rápido de sessões planejadas."},
-        {"key": "workout", "label": "Execução de treino", "status": "stable", "description": "Registro de séries, checklist, volume do treino, RPE e cronômetro de descanso."},
+        {"key": "workout", "label": "Execução de treino", "status": "stable", "description": "Registro de séries, checklist, volume do treino, RPE, descanso e sugestão de evolução de carga."},
         {"key": "adaptation", "label": "Adaptação", "status": "stable", "description": "Sugestões de substituição com penalidade para equipamento indisponível e bônus para favoritos."},
         {"key": "running", "label": "Corridas", "status": "stable", "description": "Running Coach com objetivo de 5 km, plano de esteira, execução por distância, ajuste de velocidade e progressão automática."},
         {"key": "history", "label": "Histórico", "status": "stable", "description": "Consulta de sessões por período, status e tipo."},
@@ -24,6 +24,7 @@ def get_mvp_status() -> dict:
 
     user_flows = [
         {"key": "execute_strength_workout", "label": "Executar treino de musculação", "coverage": 100},
+        {"key": "strength_load_progression", "label": "Receber sugestão de evolução de carga", "coverage": 80},
         {"key": "swap_exercise", "label": "Trocar exercício por academia cheia", "coverage": 100},
         {"key": "mark_equipment_unavailable", "label": "Marcar equipamento inexistente", "coverage": 100},
         {"key": "manual_treadmill_run", "label": "Registrar corrida na esteira", "coverage": 100},
@@ -39,7 +40,6 @@ def get_mvp_status() -> dict:
 
     next_priorities = [
         "Personalização da progressão do plano de corrida",
-        "Evolução de carga por exercício",
         "Previsões por distância e prova-alvo",
         "Health Connect / Samsung Health no app mobile",
     ]
@@ -47,7 +47,7 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Custom Workout Templates",
+        "milestone": "Strength Load Progression",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -58,12 +58,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "6.3.0",
-        "title": "Custom Workout Templates",
+        "version": "6.4.0",
+        "title": "Strength Load Progression",
         "highlights": [
-            "Criação de templates personalizados com exercícios da biblioteca.",
-            "Configuração de séries, repetições, descanso e observações por exercício.",
-            "Arquivamento de templates ativos sem apagar histórico.",
-            "Tela Templates agora centraliza criação, seleção e agendamento.",
+            "Sugestão de próxima carga por exercício baseada no histórico de séries.",
+            "Regras simples combinam carga recente, RIR e RPE.",
+            "Tela de execução exibe recomendação junto do exercício planejado.",
+            "API dedicada entrega aumento, manutenção, redução ou calibração inicial.",
         ],
     }

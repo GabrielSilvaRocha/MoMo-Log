@@ -2,6 +2,14 @@
 
 Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
+## v6.4.0 — Strength Load Progression
+
+Esta versão evolui a execução de musculação:
+
+- Sugestão de próxima carga por exercício com base no histórico de séries.
+- Regras simples usando carga recente, RIR e RPE para aumentar, manter ou reduzir.
+- Tela de execução exibe recomendação de carga junto do exercício planejado.
+- API dedicada para consultar progressão de carga sem criar novas tabelas.
 ## v6.3.0 — Custom Workout Templates
 
 Esta versão evolui o módulo Templates:

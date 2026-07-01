@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
 import { ProgressBar } from '../components/ProgressBar'
-import type { AdaptationSuggestion, StrengthWorkoutExercise, TrainingSession } from '../types/api'
+import type { AdaptationSuggestion, StrengthLoadProgression, StrengthWorkoutExercise, TrainingSession } from '../types/api'
 import { formatDate, translateStatus } from '../utils/format'
 
 type SetForm = {
@@ -58,6 +58,7 @@ export function WorkoutPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [forms, setForms] = useState<Record<number, SetForm>>({})
+  const [loadProgressions, setLoadProgressions] = useState<Record<number, StrengthLoadProgression>>({})
   const [alternativesState, setAlternativesState] = useState<AlternativesState>(null)
   const [activeRestTimer, setActiveRestTimer] = useState<ActiveRestTimer>(null)
   const [autoStartRestTimer, setAutoStartRestTimer] = useState(true)
@@ -67,6 +68,16 @@ export function WorkoutPage() {
       setLoading(true)
       const data = await mo2logApi.trainingSession(id)
       setSession(data)
+      const progressions = await Promise.all(
+        (data.strength_exercises ?? []).map(async (item) => {
+          try {
+            return [item.id, await mo2logApi.strengthLoadProgression(item.exercise_id)] as const
+          } catch {
+            return null
+          }
+        }),
+      )
+      setLoadProgressions(Object.fromEntries(progressions.filter((item): item is readonly [number, StrengthLoadProgression] => item !== null)))
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar treino')
@@ -350,6 +361,7 @@ export function WorkoutPage() {
         <section className="grid gap-4">
           {strengthExercises.map((item) => {
             const form = forms[item.id] ?? defaultSetForm
+            const progression = loadProgressions[item.id]
             return (
               <article key={item.id} className="rounded-3xl border border-mo-border bg-mo-surface p-5">
                 <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
@@ -366,6 +378,19 @@ export function WorkoutPage() {
                       {item.rest_seconds ? ` · descanso ${item.rest_seconds}s` : ''}
                     </p>
                     {item.notes && <p className="mt-2 text-sm text-mo-muted">{item.notes}</p>}
+                    {progression && (
+                      <div className="mt-3 rounded-2xl border border-mo-primary/30 bg-mo-primary/10 p-3 text-sm">
+                        <p className="font-semibold text-mo-primary">
+                          Próxima carga: {progression.suggested_load ? `${progression.suggested_load} kg` : 'calibrar'}
+                        </p>
+                        <p className="mt-1 text-mo-muted">
+                          {progression.sample_sets > 0
+                            ? `Última: ${progression.latest_load ?? '-'} kg · melhor recente: ${progression.best_recent_load ?? '-'} kg`
+                            : 'Sem histórico para este exercício.'}
+                        </p>
+                        <p className="mt-1 text-mo-muted">{progression.rationale}</p>
+                      </div>
+                    )}
                   </div>
 
                   <button

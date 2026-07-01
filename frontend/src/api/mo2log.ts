@@ -32,6 +32,7 @@ import type {
   RunningStepLog,
   RunningSpeedAdjustment,
   RunningStepAdvance,
+  StrengthLoadProgression,
   StrengthSetLog,
   StrengthWorkoutExercise,
   TrainingSession,
@@ -133,6 +134,7 @@ export const mo2logApi = {
   trainingSession: (sessionId: number) => apiGet<TrainingSession>(`/training-sessions/${sessionId}`),
   startTrainingSession: (sessionId: number) => apiPost<TrainingSession>(`/training-sessions/${sessionId}/start`),
   finishTrainingSession: (sessionId: number) => apiPost<TrainingSession>(`/training-sessions/${sessionId}/finish`),
+  strengthLoadProgression: (exerciseId: number, userId = getCurrentUserId()) => apiGet<StrengthLoadProgression>(`/strength/exercises/${exerciseId}/load-progression?user_id=${userId}`),
   createSetLog: (payload: {
     strength_workout_exercise_id: number
     set_number: number

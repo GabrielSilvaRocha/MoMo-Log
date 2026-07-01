@@ -49,6 +49,21 @@ export type StrengthSetLog = {
   completed_at: string
 }
 
+export type StrengthLoadProgression = {
+  user_id: number
+  exercise_id: number
+  sample_sets: number
+  latest_load: string | null
+  latest_reps: number | null
+  latest_rir: number | null
+  latest_rpe: number | null
+  average_load: string | null
+  best_recent_load: string | null
+  suggested_load: string | null
+  recommendation: 'start' | 'increase' | 'maintain' | 'reduce' | string
+  rationale: string
+}
+
 export type StrengthWorkoutExercise = {
   id: number
   training_session_id: number

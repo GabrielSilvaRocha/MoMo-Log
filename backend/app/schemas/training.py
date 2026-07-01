@@ -137,3 +137,18 @@ class WeekDashboardRead(BaseModel):
     weekly_strength_volume: Decimal
     weekly_running_distance_km: Decimal
     completion_rate: float
+
+
+class StrengthLoadProgressionRead(BaseModel):
+    user_id: int
+    exercise_id: int
+    sample_sets: int
+    latest_load: Decimal | None = None
+    latest_reps: int | None = None
+    latest_rir: int | None = None
+    latest_rpe: int | None = None
+    average_load: Decimal | None = None
+    best_recent_load: Decimal | None = None
+    suggested_load: Decimal | None = None
+    recommendation: str
+    rationale: str

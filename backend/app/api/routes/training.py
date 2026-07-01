@@ -1,5 +1,5 @@
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -19,6 +19,7 @@ from app.schemas.training import (
     ExerciseSwapCreate,
     ExerciseSwapRead,
     StrengthSetLogCreate,
+    StrengthLoadProgressionRead,
     StrengthSetLogRead,
     StrengthWorkoutExerciseCreate,
     StrengthWorkoutExerciseRead,
@@ -45,6 +46,18 @@ def _session_query():
         selectinload(TrainingSession.strength_exercises).joinedload(StrengthWorkoutExercise.exercise),
         selectinload(TrainingSession.running_activity),
     )
+
+
+def _round_load_step(value: Decimal, step: Decimal = Decimal("2.50")) -> Decimal:
+    if value <= 0:
+        return Decimal("0.00")
+    return ((value / step).to_integral_value(rounding=ROUND_HALF_UP) * step).quantize(Decimal("0.01"))
+
+
+def _average_decimal(values: list[Decimal]) -> Decimal | None:
+    if not values:
+        return None
+    return (sum(values, Decimal("0.00")) / Decimal(len(values))).quantize(Decimal("0.01"))
 
 
 @router.get("/training-plans/current", response_model=TrainingPlanRead)
@@ -224,6 +237,78 @@ def reschedule_training_session(
     session.notes = payload.reason or session.notes
     db.commit()
     return get_training_session(session_id, db)
+
+
+
+@router.get("/strength/exercises/{exercise_id}/load-progression", response_model=StrengthLoadProgressionRead)
+def get_strength_load_progression(
+    exercise_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+) -> dict:
+    if db.get(User, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if db.get(Exercise, exercise_id) is None:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+
+    rows = db.execute(
+        select(StrengthSetLog)
+        .join(StrengthWorkoutExercise, StrengthSetLog.strength_workout_exercise_id == StrengthWorkoutExercise.id)
+        .join(TrainingSession, StrengthWorkoutExercise.training_session_id == TrainingSession.id)
+        .where(TrainingSession.user_id == user_id, StrengthWorkoutExercise.exercise_id == exercise_id)
+        .order_by(StrengthSetLog.completed_at.desc(), StrengthSetLog.id.desc())
+        .limit(8)
+    ).scalars().all()
+
+    if not rows:
+        return {
+            "user_id": user_id,
+            "exercise_id": exercise_id,
+            "sample_sets": 0,
+            "recommendation": "start",
+            "rationale": "Sem histórico registrado para este exercício. Use a carga planejada ou uma carga confortável para calibrar.",
+        }
+
+    latest = rows[0]
+    loads = [Decimal(item.load) for item in rows]
+    rirs = [Decimal(item.rir) for item in rows if item.rir is not None]
+    rpes = [Decimal(item.rpe) for item in rows if item.rpe is not None]
+    average_rir = _average_decimal(rirs)
+    average_rpe = _average_decimal(rpes)
+    average_load = _average_decimal(loads)
+    best_recent_load = max(loads)
+    latest_load = Decimal(latest.load)
+    increment = Decimal("2.50")
+
+    recommendation = "maintain"
+    suggested_load = latest_load
+    rationale = "Mantenha a carga atual até registrar mais séries com boa execução."
+
+    if latest_load <= 0:
+        rationale = "Exercício sem carga externa registrada. Mantenha o controle por reps, tempo ou qualidade de execução."
+    elif average_rir is not None and average_rir >= Decimal("2.00") and (average_rpe is None or average_rpe <= Decimal("8.00")):
+        recommendation = "increase"
+        suggested_load = _round_load_step(latest_load + increment)
+        rationale = "Histórico recente mostra margem de repetição e esforço controlado. Pequeno aumento de carga é recomendado."
+    elif (average_rir is not None and average_rir <= Decimal("0.50")) or (average_rpe is not None and average_rpe >= Decimal("9.00")):
+        recommendation = "reduce"
+        suggested_load = _round_load_step(max(Decimal("0.00"), latest_load - increment))
+        rationale = "Esforço recente ficou muito alto. Reduza levemente ou mantenha até estabilizar a execução."
+
+    return {
+        "user_id": user_id,
+        "exercise_id": exercise_id,
+        "sample_sets": len(rows),
+        "latest_load": latest_load,
+        "latest_reps": latest.reps,
+        "latest_rir": latest.rir,
+        "latest_rpe": latest.rpe,
+        "average_load": average_load,
+        "best_recent_load": best_recent_load,
+        "suggested_load": suggested_load,
+        "recommendation": recommendation,
+        "rationale": rationale,
+    }
 
 
 @router.post("/strength/set-logs", response_model=StrengthSetLogRead, status_code=201)
