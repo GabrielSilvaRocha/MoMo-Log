@@ -11,7 +11,7 @@ def get_mvp_status() -> dict:
     modules = [
         {"key": "dashboard", "label": "Dashboard", "status": "stable", "description": "Resumo diário e semanal com próximos treinos, progresso, metas e insights."},
         {"key": "planning", "label": "Planejamento", "status": "stable", "description": "Criação, edição e remoção de sessões de musculação, corrida, mobilidade e descanso."},
-        {"key": "templates", "label": "Templates", "status": "stable", "description": "Biblioteca de treinos reutilizáveis e criação rápida de sessões planejadas."},
+        {"key": "templates", "label": "Templates", "status": "stable", "description": "Templates reutilizáveis com criação personalizada, arquivamento e agendamento rápido de sessões planejadas."},
         {"key": "workout", "label": "Execução de treino", "status": "stable", "description": "Registro de séries, checklist, volume do treino, RPE e cronômetro de descanso."},
         {"key": "adaptation", "label": "Adaptação", "status": "stable", "description": "Sugestões de substituição com penalidade para equipamento indisponível e bônus para favoritos."},
         {"key": "running", "label": "Corridas", "status": "stable", "description": "Running Coach com objetivo de 5 km, plano de esteira, execução por distância, ajuste de velocidade e progressão automática."},
@@ -29,6 +29,7 @@ def get_mvp_status() -> dict:
         {"key": "manual_treadmill_run", "label": "Registrar corrida na esteira", "coverage": 100},
         {"key": "weekly_planning", "label": "Editar planejamento semanal", "coverage": 95},
         {"key": "schedule_template", "label": "Criar sessão a partir de template", "coverage": 100},
+        {"key": "custom_template", "label": "Criar template personalizado", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
         {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 75},
         {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 10},
@@ -37,7 +38,6 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Templates customizáveis criados pelo usuário",
         "Personalização da progressão do plano de corrida",
         "Evolução de carga por exercício",
         "Previsões por distância e prova-alvo",
@@ -47,7 +47,7 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Running Coach Auto Progression",
+        "milestone": "Custom Workout Templates",
         "status": "operational",
         "modules": modules,
         "user_flows": user_flows,
@@ -58,12 +58,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "6.2.0",
-        "title": "Running Coach Auto Progression",
+        "version": "6.3.0",
+        "title": "Custom Workout Templates",
         "highlights": [
-            "Etapas avançam automaticamente quando distância ou tempo chega a zero.",
-            "Backend conclui logs de etapa e encerra a sessão no último bloco.",
-            "Painel da esteira ganhou ação manual para concluir etapa quando necessário.",
-            "Execução guiada ficou contínua entre aquecimento, blocos principais e desaquecimento.",
+            "Criação de templates personalizados com exercícios da biblioteca.",
+            "Configuração de séries, repetições, descanso e observações por exercício.",
+            "Arquivamento de templates ativos sem apagar histórico.",
+            "Tela Templates agora centraliza criação, seleção e agendamento.",
         ],
     }

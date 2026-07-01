@@ -2,6 +2,14 @@
 
 Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
+## v6.3.0 — Custom Workout Templates
+
+Esta versão evolui o módulo Templates:
+
+- Criação de templates personalizados a partir da biblioteca de exercícios.
+- Configuração de séries, repetições, descanso e observações por exercício.
+- Arquivamento de templates ativos sem remover histórico ou sessões já criadas.
+- Tela Templates passa a centralizar criação, seleção e agendamento.
 ## v6.2.0 — Running Coach Auto Progression
 
 Esta versão evolui a execução guiada do módulo Corridas:

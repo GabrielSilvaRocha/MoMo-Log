@@ -547,6 +547,24 @@ export type WorkoutTemplateExercise = {
   exercise: Exercise | null
 }
 
+export type WorkoutTemplateExerciseCreatePayload = {
+  exercise_id: number
+  planned_sets: number
+  planned_reps: string
+  rest_seconds?: number | null
+  notes?: string | null
+}
+
+export type WorkoutTemplateCreatePayload = {
+  user_id: number
+  name: string
+  description?: string | null
+  goal?: string | null
+  difficulty: 'beginner' | 'intermediate' | 'advanced'
+  estimated_duration_minutes?: number | null
+  exercises: WorkoutTemplateExerciseCreatePayload[]
+}
+
 export type WorkoutTemplate = {
   id: number
   user_id: number
