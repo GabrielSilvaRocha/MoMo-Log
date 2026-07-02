@@ -9,6 +9,14 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v8.3.0 - Compartilhamento publico de relatorios e snapshots de progresso.
 - v8.4.0 - Camada social de evolucao, provas e comparativos.
 
+## v8.0.1 - Android Local Network Ready
+
+Esta versao permite usar o app no navegador do Android pela mesma rede Wi-Fi do PC:
+
+- Frontend troca automaticamente a API localhost pelo host aberto no navegador do celular.
+- Backend em desenvolvimento aceita origens de rede local nas faixas 192.168.x.x, 10.x.x.x e 172.16-31.x.x.
+- Documento docs/product/android-local-network.md traz o passo a passo para abrir no smartphone.
+
 ## v8.0.0 - Next Workout Ready
 
 Esta versao deixa o Mo2 LOG pronto para abrir no proximo treino:

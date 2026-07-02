@@ -1,6 +1,28 @@
 import { getAccessToken } from '../auth/session'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
+
+function resolveApiBaseUrl() {
+  if (typeof window === 'undefined') return configuredApiBaseUrl
+
+  const pageHost = window.location.hostname
+  const isRemotePage = pageHost !== 'localhost' && pageHost !== '127.0.0.1'
+  if (!isRemotePage) return configuredApiBaseUrl
+
+  try {
+    const apiUrl = new URL(configuredApiBaseUrl)
+    if (apiUrl.hostname === 'localhost' || apiUrl.hostname === '127.0.0.1') {
+      apiUrl.hostname = pageHost
+      return apiUrl.toString().replace(/\/$/, '')
+    }
+  } catch {
+    return configuredApiBaseUrl
+  }
+
+  return configuredApiBaseUrl
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {

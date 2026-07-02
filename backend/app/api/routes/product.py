@@ -48,9 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Next Workout Ready",
+        "milestone": "Android Local Network Ready",
         "status": "operational",
-        "release_focus": "Abrir o app no treino, carregar a proxima sessao recomendada e registrar series sem procurar IDs.",
+        "release_focus": "Usar o app no navegador do Android pela mesma rede Wi-Fi do PC, mantendo o fluxo de proximo treino pronto.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.0.0",
-        "title": "Next Workout Ready",
+        "version": "8.0.1",
+        "title": "Android Local Network Ready",
         "highlights": [
-            "Nova rota /training-sessions/next-ready encontra a proxima sessao executavel dos proximos 14 dias.",
-            "Tela de treino agora exibe card de proximo treino com checklist, aquecimento e carregamento automatico.",
-            "Documentacao operacional mostra como abrir o app e usar no treino real.",
-            "Release promove o foco de produto para uso pratico no proximo treino.",
+            "Frontend detecta acesso por IP local e troca automaticamente a API localhost pelo host aberto no Android.",
+            "Backend em desenvolvimento aceita origens de rede local para uso no smartphone pela mesma Wi-Fi.",
+            "Novo guia docs/product/android-local-network.md documenta IP do PC, portas e diagnostico.",
+            "Fluxo Next Workout Ready continua disponivel para carregar e executar o proximo treino.",
         ],
     }
