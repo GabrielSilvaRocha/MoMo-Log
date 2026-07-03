@@ -6,9 +6,10 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 - v8.2.0 - Sincronizacao/importacao dos treinos offline para o backend.
 - v8.3.0 - Polimento mobile-first da tela de treino para uso na academia.
-- v8.4.0 - Assistente de ajustes entre series com base em RIR, RPE e carga.
-- v8.5.0 - Compartilhamento publico de relatorios e snapshots de progresso.
-- v8.6.0 - Camada social de evolucao, provas e comparativos.
+- v8.4.0 - Catalogo nativo de exercicios para uso offline no Android.
+- v8.5.0 - Catalogo de exercicios importado com midia remota por link.
+- v8.6.0 - Compartilhamento publico de relatorios e snapshots de progresso.
+- v8.7.0 - Camada social de evolucao, provas e comparativos.
 
 ## v8.1.2 - Android Offline Auto Login
 
@@ -219,6 +220,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 ## v8.4.0 - Catalogo nativo de exercicios
 
 - Aba Exercicios ganha catalogo amplo de exercicios de academia.
-- Cada exercicio exibe animacao nativa de execucao, descricao e alternativas do mesmo musculo.
-- Catalogo pode registrar o exercicio diretamente no historico local.
-- Teste alvo passa a usar o emulador Android aberto via ADB.
+- Cada exercicio inclui animacao nativa, descricao, alternativas e registro rapido.
+- O app Android passa para versionCode 840 / versionName 8.4.0.
+
+## v8.5.0 - Catalogo de exercicios com midia por link
+
+- A aba Exercicios passa a usar o catalogo importado do pacote `catalogo_exercicios_musculacao_links_repo.zip`.
+- O APK inclui 324 exercicios com grupo muscular, equipamento, nivel, musculos primarios/secundarios, cuidados tecnicos e alternativas.
+- As imagens de execucao sao carregadas por link do Free Exercise DB e alternadas no app como frames de demonstracao.
+- Adiciona busca por nome, musculo ou equipamento e filtros por grupo muscular.
+- O app Android passa para versionCode 850 / versionName 8.5.0.

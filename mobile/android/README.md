@@ -47,3 +47,7 @@ Replica os modulos da versao web como telas nativas locais: dashboard, treino, c
 ## v8.4.0
 
 A aba Exercicios inclui catalogo amplo de academia com animacao nativa de execucao, descricao e alternativas por grupo muscular.
+
+## v8.5.0
+
+A aba Exercicios agora usa o catalogo importado com 324 exercicios e links remotos do Free Exercise DB para mostrar frames de execucao, alem de busca, filtros, detalhes tecnicos e alternativas.

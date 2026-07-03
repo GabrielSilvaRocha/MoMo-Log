@@ -4,19 +4,21 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -24,9 +26,11 @@ import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.text.Normalizer
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.net.URL
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -50,108 +54,105 @@ data class NavItem(
 )
 
 data class CatalogExercise(
+    val id: String,
     val name: String,
+    val slug: String,
     val muscle: String,
-    val equipment: String,
+    val subgroup: String,
     val movement: String,
+    val type: String,
+    val level: String,
+    val primary: String,
+    val secondary: String,
+    val equipment: String,
+    val alternatives: String,
     val description: String,
+    val technicalCare: String,
+    val source: String,
+    val sourceId: String,
+    val status: String,
+    val review: String,
+    val links: List<String>,
 )
 
-class ExerciseAnimationView(context: Context, private val movement: String) : View(context) {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+class RemoteExerciseMediaView(context: Context, private val links: List<String>) : LinearLayout(context) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val image = ImageView(context)
+    private val status = TextView(context)
+    private val frames = mutableListOf<Bitmap>()
+    private var frameIndex = 0
 
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val phase = ((System.currentTimeMillis() % 1200L).toFloat() / 1200f)
-        val swing = kotlin.math.sin((phase * Math.PI * 2).toFloat())
-
-        paint.style = Paint.Style.FILL
-        paint.color = Color.rgb(8, 18, 15)
-        canvas.drawRoundRect(RectF(0f, 0f, w, h), 28f, 28f, paint)
-
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 7f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.color = Color.rgb(105, 255, 95)
-
-        val cx = w * 0.48f
-        val headY = h * 0.25f
-        val hipY = h * 0.58f
-        val shoulderY = h * 0.38f
-        val shift = swing * w * 0.08f
-
-        paint.style = Paint.Style.FILL
-        canvas.drawCircle(cx, headY, 18f, paint)
-        paint.style = Paint.Style.STROKE
-
-        when (movement) {
-            "push" -> {
-                canvas.drawLine(cx - 18f, shoulderY, cx + 22f, hipY, paint)
-                canvas.drawLine(cx - 18f, shoulderY, cx - 95f - shift, shoulderY + 10f, paint)
-                canvas.drawLine(cx + 10f, shoulderY + 8f, cx + 95f + shift, shoulderY + 8f, paint)
-                canvas.drawLine(cx + 20f, hipY, cx - 35f, h * 0.82f, paint)
-                canvas.drawLine(cx + 20f, hipY, cx + 55f, h * 0.82f, paint)
-                canvas.drawLine(cx - 120f - shift, shoulderY + 10f, cx + 120f + shift, shoulderY + 8f, paint)
+    private val frameLoop = object : Runnable {
+        override fun run() {
+            if (frames.isNotEmpty()) {
+                image.setImageBitmap(frames[frameIndex % frames.size])
+                frameIndex += 1
             }
-            "pull" -> {
-                canvas.drawLine(cx, shoulderY, cx, hipY, paint)
-                canvas.drawLine(cx - 85f + shift, shoulderY - 10f, cx - 18f, shoulderY + 30f, paint)
-                canvas.drawLine(cx + 85f - shift, shoulderY - 10f, cx + 18f, shoulderY + 30f, paint)
-                canvas.drawLine(cx - 120f, shoulderY - 18f, cx + 120f, shoulderY - 18f, paint)
-                canvas.drawLine(cx, hipY, cx - 50f, h * 0.84f, paint)
-                canvas.drawLine(cx, hipY, cx + 50f, h * 0.84f, paint)
-            }
-            "squat" -> {
-                val kneeY = h * (0.72f + swing * 0.05f)
-                canvas.drawLine(cx, shoulderY, cx + shift, hipY, paint)
-                canvas.drawLine(cx + shift, hipY, cx - 65f, kneeY, paint)
-                canvas.drawLine(cx + shift, hipY, cx + 65f, kneeY, paint)
-                canvas.drawLine(cx - 65f, kneeY, cx - 80f, h * 0.9f, paint)
-                canvas.drawLine(cx + 65f, kneeY, cx + 80f, h * 0.9f, paint)
-                canvas.drawLine(cx - 95f, shoulderY - 8f, cx + 95f, shoulderY - 8f, paint)
-            }
-            "hinge" -> {
-                canvas.drawLine(cx - 10f, shoulderY, cx + 50f + shift, hipY, paint)
-                canvas.drawLine(cx + 50f + shift, hipY, cx - 30f, h * 0.86f, paint)
-                canvas.drawLine(cx + 50f + shift, hipY, cx + 90f, h * 0.86f, paint)
-                canvas.drawLine(cx + 20f + shift, shoulderY + 20f, cx - 95f, h * 0.66f, paint)
-                canvas.drawLine(cx + 20f + shift, shoulderY + 20f, cx + 120f, h * 0.66f, paint)
-            }
-            "core" -> {
-                canvas.drawLine(cx - 120f, hipY, cx + 120f, hipY + shift * 0.2f, paint)
-                canvas.drawLine(cx - 30f, hipY, cx - 70f, h * 0.8f, paint)
-                canvas.drawLine(cx + 50f, hipY, cx + 92f, h * 0.8f, paint)
-                canvas.drawLine(cx - 150f, h * 0.86f, cx + 150f, h * 0.86f, paint)
-            }
-            "cardio" -> {
-                canvas.drawLine(cx, shoulderY, cx + shift, hipY, paint)
-                canvas.drawLine(cx + shift, hipY, cx - 60f - shift, h * 0.86f, paint)
-                canvas.drawLine(cx + shift, hipY, cx + 75f + shift, h * 0.8f, paint)
-                canvas.drawLine(cx, shoulderY + 10f, cx - 72f - shift, h * 0.52f, paint)
-                canvas.drawLine(cx, shoulderY + 10f, cx + 70f + shift, h * 0.48f, paint)
-            }
-            else -> {
-                canvas.drawLine(cx, shoulderY, cx, hipY, paint)
-                canvas.drawLine(cx, shoulderY + 8f, cx - 80f - shift, h * 0.5f, paint)
-                canvas.drawLine(cx, shoulderY + 8f, cx + 80f + shift, h * 0.5f, paint)
-                canvas.drawLine(cx, hipY, cx - 50f, h * 0.84f, paint)
-                canvas.drawLine(cx, hipY, cx + 50f, h * 0.84f, paint)
-            }
+            handler.postDelayed(this, 700L)
         }
+    }
 
-        paint.style = Paint.Style.FILL
-        paint.color = Color.rgb(151, 171, 164)
-        paint.textSize = 26f
-        paint.typeface = Typeface.DEFAULT_BOLD
-        canvas.drawText("execucao animada", 26f, h - 26f, paint)
-        postInvalidateDelayed(80L)
+    init {
+        orientation = VERTICAL
+        setPadding(0, 10, 0, 10)
+        setBackgroundColor(Color.rgb(8, 18, 15))
+
+        image.scaleType = ImageView.ScaleType.FIT_CENTER
+        image.adjustViewBounds = false
+        addView(image, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+
+        status.text = "Carregando frames de execucao..."
+        status.setTextColor(Color.rgb(151, 171, 164))
+        status.textSize = 12f
+        status.gravity = Gravity.CENTER
+        addView(status, LayoutParams(LayoutParams.MATCH_PARENT, 34))
+
+        if (links.isEmpty()) {
+            status.text = "Midia indisponivel para este exercicio"
+        } else {
+            loadFrames()
+        }
+    }
+
+    private fun loadFrames() {
+        Thread {
+            val loaded = links.mapNotNull { link ->
+                try {
+                    val connection = URL(link).openConnection()
+                    connection.connectTimeout = 7000
+                    connection.readTimeout = 9000
+                    connection.getInputStream().use { input -> BitmapFactory.decodeStream(input) }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
+            post {
+                frames.clear()
+                frames.addAll(loaded)
+                if (frames.isNotEmpty()) {
+                    image.setImageBitmap(frames.first())
+                    status.text = "Fonte: Free Exercise DB"
+                } else {
+                    status.text = "Nao foi possivel carregar a midia agora"
+                }
+            }
+        }.start()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        handler.post(frameLoop)
+    }
+
+    override fun onDetachedFromWindow() {
+        handler.removeCallbacks(frameLoop)
+        super.onDetachedFromWindow()
     }
 }
 
 class MainActivity : Activity() {
-    private val versionName = "8.4.0"
+    private val versionName = "8.5.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -164,6 +165,7 @@ class MainActivity : Activity() {
 
     private val prefs by lazy { getSharedPreferences("mo2log_native", Context.MODE_PRIVATE) }
     private val plans by lazy { buildWorkoutPlans() }
+    private val catalog by lazy { loadExerciseCatalog() }
     private val navItems = listOf(
         NavItem("home", "Inicio"),
         NavItem("workout", "Treino"),
@@ -391,17 +393,52 @@ class MainActivity : Activity() {
     }
 
     private fun renderExercises(root: LinearLayout) {
+        syncCatalogPrefs()
         root.addView(sectionTitle("Catalogo de exercicios"))
 
-        val selectedMuscle = prefs.getString("catalog_muscle", "Todos") ?: "Todos"
-        val muscles = listOf("Todos") + exerciseCatalog().map { it.muscle }.distinct().sorted()
+        val catalogItems = catalog
+        if (catalogItems.isEmpty()) {
+            val empty = card()
+            empty.orientation = LinearLayout.VERTICAL
+            empty.addView(label("Catalogo indisponivel", white, 20f, true))
+            empty.addView(label("Nao foi possivel carregar o asset local de exercicios.", muted, 15f, false))
+            root.addView(empty)
+            return
+        }
+
+        val muscleOptions = listOf("Todos") + catalogItems.map { it.muscle }.distinct().sorted()
+        val savedMuscle = prefs.getString("catalog_muscle", "Todos") ?: "Todos"
+        val selectedMuscle = if (muscleOptions.contains(savedMuscle)) savedMuscle else "Todos"
+        val currentQuery = prefs.getString("catalog_query", "") ?: ""
+        val search = input("Buscar por nome, musculo ou equipamento", currentQuery)
+        root.addView(search)
+
+        val searchRow = LinearLayout(this)
+        searchRow.orientation = LinearLayout.HORIZONTAL
+        val applySearch = actionButton("Buscar", green, bg)
+        applySearch.setOnClickListener {
+            prefs.edit().putString("catalog_query", search.textValue()).remove("catalog_selected").apply()
+            hideKeyboard()
+            render()
+        }
+        searchRow.addView(applySearch, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val clearSearch = actionButton("Limpar", surface2, white)
+        clearSearch.setOnClickListener {
+            prefs.edit().remove("catalog_query").remove("catalog_selected").apply()
+            hideKeyboard()
+            render()
+        }
+        searchRow.addView(clearSearch, LinearLayout.LayoutParams(0, dp(50), 1f))
+        root.addView(searchRow)
+
+        val muscles = muscleOptions
         val muscleScroll = HorizontalScrollView(this)
         muscleScroll.isHorizontalScrollBarEnabled = false
         val muscleRow = LinearLayout(this)
         muscleRow.orientation = LinearLayout.HORIZONTAL
         muscles.forEach { muscle ->
             val active = selectedMuscle == muscle
-            val button = pill(muscle, active, 150, 50)
+            val button = pill(muscle, active, 178, 50)
             button.setOnClickListener {
                 prefs.edit().putString("catalog_muscle", muscle).remove("catalog_selected").apply()
                 render()
@@ -411,27 +448,51 @@ class MainActivity : Activity() {
         muscleScroll.addView(muscleRow)
         root.addView(muscleScroll)
 
-        val filtered = exerciseCatalog().filter { selectedMuscle == "Todos" || it.muscle == selectedMuscle }
-        val selectedName = prefs.getString("catalog_selected", null)
-        val selected = filtered.firstOrNull { it.name == selectedName } ?: filtered.first()
+        val filtered = catalogItems
+            .filter { selectedMuscle == "Todos" || it.muscle == selectedMuscle }
+            .filter { matchesCatalogQuery(it, currentQuery) }
+
+        if (filtered.isEmpty()) {
+            val empty = card()
+            empty.orientation = LinearLayout.VERTICAL
+            empty.addView(label("Nenhum exercicio encontrado", white, 20f, true))
+            empty.addView(label("Tente outro grupo muscular ou ajuste a busca.", muted, 15f, false))
+            root.addView(empty)
+            return
+        }
+
+        val selectedId = prefs.getString("catalog_selected", null)
+        val selected = filtered.firstOrNull { it.id == selectedId } ?: filtered.first()
 
         val detail = card()
         detail.orientation = LinearLayout.VERTICAL
-        detail.addView(label("GIF DE EXECUCAO", green, 13f, true))
+        detail.addView(label("MIDIA DE EXECUCAO POR LINK", green, 13f, true))
         detail.addView(label(selected.name, white, 25f, true))
-        detail.addView(label(selected.muscle + " | " + selected.equipment, muted, 14f, false))
-        val animation = ExerciseAnimationView(this, selected.movement)
-        val animationParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190))
-        animationParams.setMargins(0, dp(12), 0, dp(12))
-        detail.addView(animation, animationParams)
-        detail.addView(label("Execucao", green, 14f, true))
-        detail.addView(label(selected.description, white, 15f, false))
+        detail.addView(label(exerciseMeta(selected), muted, 14f, false))
+
+        val media = RemoteExerciseMediaView(this, selected.links)
+        val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(230))
+        mediaParams.setMargins(0, dp(12), 0, dp(12))
+        detail.addView(media, mediaParams)
+
+        detail.addView(label("Descricao", green, 14f, true))
+        detail.addView(label(selected.description.ifBlank { "Exercicio catalogado para " + selected.muscle + " com foco em " + selected.primary + "." }, white, 15f, false))
+
+        if (selected.technicalCare.isNotBlank()) {
+            detail.addView(label("Cuidados", green, 14f, true))
+            detail.addView(label(selected.technicalCare, white, 15f, false))
+        }
+
+        detail.addView(label("Detalhes", green, 14f, true))
+        detail.addView(label("Primario: " + selected.primary.ifBlank { "-" }, white, 14f, false))
+        detail.addView(label("Secundarios: " + selected.secondary.ifBlank { "-" }, muted, 14f, false))
+        detail.addView(label("Nivel: " + selected.level.ifBlank { "-" } + " | Tipo: " + selected.type.ifBlank { "-" }, muted, 14f, false))
 
         detail.addView(label("Alternativos para o mesmo musculo", green, 14f, true))
         alternativesFor(selected).forEach { alternative ->
-            val alt = pill(alternative.name, false, 260, 48)
+            val alt = pill(alternative.name, false, 290, 48)
             alt.setOnClickListener {
-                prefs.edit().putString("catalog_selected", alternative.name).apply()
+                prefs.edit().putString("catalog_selected", alternative.id).apply()
                 render()
             }
             detail.addView(alt)
@@ -451,103 +512,124 @@ class MainActivity : Activity() {
         val list = card()
         list.orientation = LinearLayout.VERTICAL
         list.addView(label("EXERCICIOS DISPONIVEIS (" + filtered.size + ")", green, 13f, true))
-        filtered.forEach { exercise ->
-            val item = card(if (exercise.name == selected.name) surface2 else surface)
+        filtered.take(80).forEach { exercise ->
+            val item = card(if (exercise.id == selected.id) surface2 else surface)
             item.orientation = LinearLayout.VERTICAL
             item.setOnClickListener {
-                prefs.edit().putString("catalog_selected", exercise.name).apply()
+                prefs.edit().putString("catalog_selected", exercise.id).apply()
                 render()
             }
             item.addView(label(exercise.name, white, 17f, true))
-            item.addView(label(exercise.muscle + " | " + exercise.equipment, muted, 13f, false))
+            item.addView(label(exerciseMeta(exercise), muted, 13f, false))
             list.addView(item)
+        }
+        if (filtered.size > 80) {
+            list.addView(label("Mostrando 80 de " + filtered.size + ". Use a busca para refinar.", amber, 14f, true))
         }
         root.addView(list)
     }
 
-    private fun alternativesFor(exercise: CatalogExercise): List<CatalogExercise> {
-        return exerciseCatalog()
-            .filter { it.muscle == exercise.muscle && it.name != exercise.name }
-            .take(8)
+    private fun syncCatalogPrefs() {
+        val catalogVersion = "8.5.0"
+        if (prefs.getString("catalog_source_version", "") != catalogVersion) {
+            prefs.edit()
+                .putString("catalog_source_version", catalogVersion)
+                .remove("catalog_muscle")
+                .remove("catalog_selected")
+                .remove("catalog_query")
+                .apply()
+        }
     }
 
-    private fun exerciseCatalog(): List<CatalogExercise> = listOf(
-        CatalogExercise("Supino reto com barra", "Peitoral", "Barra e banco", "push", "Deite no banco, retraia escapulas, desca a barra ao peito com controle e empurre sem perder a base dos pes."),
-        CatalogExercise("Supino reto com halteres", "Peitoral", "Halteres", "push", "Desca os halteres ate linha do peito, mantenha punhos firmes e suba juntando levemente sem bater os pesos."),
-        CatalogExercise("Supino inclinado com barra", "Peitoral", "Barra e banco inclinado", "push", "Use banco inclinado, desca a barra na parte alta do peito e suba mantendo cotovelos abaixo da linha dos ombros."),
-        CatalogExercise("Supino inclinado com halteres", "Peitoral", "Halteres", "push", "Controle a descida, alongue o peitoral superior e suba com trajetoria levemente diagonal."),
-        CatalogExercise("Crucifixo com halteres", "Peitoral", "Halteres", "push", "Abra os bracos com cotovelos semi-flexionados, sinta alongar o peitoral e feche sem transformar em supino."),
-        CatalogExercise("Crucifixo no cabo", "Peitoral", "Crossover", "push", "Ajuste as polias, incline levemente o tronco e una as maos mantendo tensao constante no peitoral."),
-        CatalogExercise("Peck deck", "Peitoral", "Maquina", "push", "Apoie as costas, una os bracos a frente e retorne devagar sem perder contato com o encosto."),
-        CatalogExercise("Flexao de bracos", "Peitoral", "Peso corporal", "push", "Mantenha corpo alinhado, desca o peito em direcao ao solo e empurre mantendo abdomen firme."),
+    private fun loadExerciseCatalog(): List<CatalogExercise> {
+        return try {
+            val raw = assets.open("exercise_catalog.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val array = JSONArray(raw)
+            (0 until array.length()).map { index ->
+                val item = array.getJSONObject(index)
+                CatalogExercise(
+                    id = item.optString("id"),
+                    name = item.optString("name"),
+                    slug = item.optString("slug"),
+                    muscle = item.optString("muscle"),
+                    subgroup = item.optString("subgroup"),
+                    movement = item.optString("movement"),
+                    type = item.optString("type"),
+                    level = item.optString("level"),
+                    primary = item.optString("primary"),
+                    secondary = item.optString("secondary"),
+                    equipment = item.optString("equipment"),
+                    alternatives = item.optString("alternatives"),
+                    description = item.optString("description"),
+                    technicalCare = item.optString("technicalCare"),
+                    source = item.optString("source"),
+                    sourceId = item.optString("sourceId"),
+                    status = item.optString("status"),
+                    review = item.optString("review"),
+                    links = jsonStringList(item.optJSONArray("links")),
+                )
+            }.filter { it.name.isNotBlank() && it.muscle.isNotBlank() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
 
-        CatalogExercise("Puxada frente", "Costas", "Pulley", "pull", "Segure a barra, puxe os cotovelos para baixo ate a parte alta do peito e retorne alongando as dorsais."),
-        CatalogExercise("Puxada neutra", "Costas", "Pulley", "pull", "Use pegada neutra, mantenha peito aberto e puxe sem balancar o tronco."),
-        CatalogExercise("Barra fixa", "Costas", "Barra", "pull", "Comece pendurado, puxe o corpo ate o queixo passar da barra e desca com controle."),
-        CatalogExercise("Remada curvada", "Costas", "Barra", "pull", "Incline o tronco com coluna neutra, puxe a barra para o abdomen e controle a descida."),
-        CatalogExercise("Remada baixa", "Costas", "Cabo", "pull", "Sente firme, puxe a pegada ao abdomen, una escapulas e volte sem arredondar lombar."),
-        CatalogExercise("Remada unilateral", "Costas", "Halter", "pull", "Apoie uma mao no banco, puxe o halter com o cotovelo junto ao corpo e desca alongando."),
-        CatalogExercise("Remada cavalinho", "Costas", "Maquina ou barra T", "pull", "Mantenha tronco estavel, puxe a carga ao peito baixo e evite roubar com quadril."),
-        CatalogExercise("Pullover no cabo", "Costas", "Cabo", "pull", "Com bracos quase estendidos, leve a barra da altura do rosto ate a coxa sentindo as dorsais."),
+    private fun jsonStringList(array: JSONArray?): List<String> {
+        if (array == null) return emptyList()
+        return (0 until array.length()).mapNotNull { index ->
+            array.optString(index).takeIf { it.isNotBlank() }
+        }
+    }
 
-        CatalogExercise("Desenvolvimento militar", "Ombros", "Barra", "push", "Empurre a barra acima da cabeca, contraia abdomen e evite arquear a lombar."),
-        CatalogExercise("Desenvolvimento com halteres", "Ombros", "Halteres", "push", "Comece com halteres na altura dos ombros e suba ate quase estender os cotovelos."),
-        CatalogExercise("Elevacao lateral", "Ombros", "Halteres", "other", "Eleve os bracos ate a linha dos ombros com cotovelos levemente flexionados e sem embalo."),
-        CatalogExercise("Elevacao frontal", "Ombros", "Halteres ou anilha", "other", "Suba a carga a frente ate a altura dos ombros e controle a descida."),
-        CatalogExercise("Crucifixo inverso", "Ombros", "Halteres ou maquina", "pull", "Incline o tronco ou use maquina e abra os bracos focando deltoide posterior."),
-        CatalogExercise("Face pull", "Ombros", "Cabo", "pull", "Puxe a corda em direcao ao rosto, abrindo cotovelos e girando externamente os ombros."),
-        CatalogExercise("Encolhimento", "Ombros", "Barra ou halteres", "other", "Eleve os ombros para cima sem girar, pause no topo e desca com controle."),
+    private fun alternativesFor(exercise: CatalogExercise): List<CatalogExercise> {
+        val wanted = exercise.alternatives
+            .split(";")
+            .map { normalized(it) }
+            .filter { it.length > 2 }
 
-        CatalogExercise("Agachamento livre", "Quadriceps", "Barra", "squat", "Apoie a barra, desca mantendo joelhos alinhados aos pes e suba empurrando o chao."),
-        CatalogExercise("Agachamento guiado", "Quadriceps", "Smith", "squat", "Posicione os pes, desca com tronco firme e suba sem travar agressivamente os joelhos."),
-        CatalogExercise("Leg press 45", "Quadriceps", "Maquina", "squat", "Desca a plataforma com controle, mantenha lombar apoiada e empurre sem tirar o quadril do banco."),
-        CatalogExercise("Cadeira extensora", "Quadriceps", "Maquina", "squat", "Estenda os joelhos, segure um segundo no topo e retorne devagar."),
-        CatalogExercise("Passada", "Quadriceps", "Halteres", "squat", "Dê um passo a frente, desca ate formar angulos seguros e suba empurrando a perna da frente."),
-        CatalogExercise("Afundo bulgaro", "Quadriceps", "Banco e halteres", "squat", "Apoie o pe de tras no banco, desca verticalmente e suba pela perna da frente."),
-        CatalogExercise("Hack machine", "Quadriceps", "Maquina", "squat", "Apoie costas e ombros, desca mantendo controle e suba empurrando pela sola dos pes."),
-        CatalogExercise("Sissy squat", "Quadriceps", "Peso corporal ou maquina", "squat", "Incline o corpo mantendo quadril estendido e controle forte no quadriceps."),
+        val direct = catalog.filter { candidate ->
+            candidate.id != exercise.id && wanted.any { token ->
+                normalized(candidate.name).contains(token) ||
+                    normalized(candidate.slug).contains(token) ||
+                    normalized(candidate.primary).contains(token)
+            }
+        }
 
-        CatalogExercise("Stiff", "Posterior", "Barra ou halteres", "hinge", "Leve o quadril para tras, mantenha coluna neutra e sinta alongar posteriores antes de subir."),
-        CatalogExercise("Levantamento terra romeno", "Posterior", "Barra", "hinge", "Desca a barra rente ao corpo, preserve leve flexao nos joelhos e suba contraindo gluteos."),
-        CatalogExercise("Mesa flexora", "Posterior", "Maquina", "hinge", "Flexione os joelhos levando os calcanhares ao gluteo e retorne controlando."),
-        CatalogExercise("Cadeira flexora", "Posterior", "Maquina", "hinge", "Ajuste o apoio, flexione os joelhos e evite tirar o quadril do banco."),
-        CatalogExercise("Good morning", "Posterior", "Barra", "hinge", "Com barra nas costas, dobre o quadril para tras e retorne mantendo coluna neutra."),
-        CatalogExercise("Hip thrust", "Gluteos", "Banco e barra", "hinge", "Apoie as costas no banco, suba o quadril contraindo gluteos e pause no topo."),
-        CatalogExercise("Gluteo no cabo", "Gluteos", "Cabo", "hinge", "Prenda a tornozeleira, estenda o quadril para tras sem girar o tronco."),
-        CatalogExercise("Abdutora", "Gluteos", "Maquina", "squat", "Abra as pernas contra a resistencia, pause e retorne sem bater as placas."),
+        val sameMuscle = catalog.filter { candidate ->
+            candidate.id != exercise.id && candidate.muscle == exercise.muscle
+        }
 
-        CatalogExercise("Rosca direta", "Biceps", "Barra", "pull", "Mantenha cotovelos proximos ao corpo, suba a barra sem balancar e desca controlando."),
-        CatalogExercise("Rosca alternada", "Biceps", "Halteres", "pull", "Flexione um braco por vez, supinando o punho e mantendo tronco parado."),
-        CatalogExercise("Rosca martelo", "Biceps", "Halteres", "pull", "Use pegada neutra, suba sem abrir cotovelos e controle a descida."),
-        CatalogExercise("Rosca scott", "Biceps", "Banco scott", "pull", "Apoie os bracos no banco, flexione ate contrair e retorne sem esticar demais."),
-        CatalogExercise("Rosca no cabo", "Biceps", "Cabo", "pull", "Use a polia baixa para manter tensao constante durante toda a repeticao."),
-        CatalogExercise("Rosca concentrada", "Biceps", "Halter", "pull", "Apoie o cotovelo na coxa, flexione com controle e evite giro do tronco."),
+        return (direct + sameMuscle).distinctBy { it.id }.take(8)
+    }
 
-        CatalogExercise("Triceps corda", "Triceps", "Cabo", "push", "Cotovelos fixos ao lado do corpo, estenda e abra a corda no final do movimento."),
-        CatalogExercise("Triceps barra", "Triceps", "Cabo", "push", "Empurre a barra para baixo sem mover os ombros e retorne ate alongar o triceps."),
-        CatalogExercise("Triceps frances", "Triceps", "Halter ou barra", "push", "Leve a carga atras da cabeca, mantenha cotovelos apontados para frente e estenda."),
-        CatalogExercise("Triceps testa", "Triceps", "Barra", "push", "Deitado, desca a barra em direcao a testa e estenda mantendo cotovelos estaveis."),
-        CatalogExercise("Mergulho no banco", "Triceps", "Banco", "push", "Desca o corpo proximo ao banco e suba estendendo cotovelos sem elevar ombros."),
-        CatalogExercise("Paralelas", "Triceps", "Peso corporal", "push", "Desca entre as barras, mantenha controle e suba sem perder estabilidade escapular."),
+    private fun matchesCatalogQuery(exercise: CatalogExercise, query: String): Boolean {
+        val tokens = normalized(query).split(" ").filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return true
+        val haystack = normalized(listOf(
+            exercise.name,
+            exercise.slug,
+            exercise.muscle,
+            exercise.subgroup,
+            exercise.primary,
+            exercise.secondary,
+            exercise.equipment,
+            exercise.movement,
+        ).joinToString(" "))
+        return tokens.all { haystack.contains(it) }
+    }
 
-        CatalogExercise("Panturrilha em pe", "Panturrilhas", "Maquina", "squat", "Suba na ponta dos pes, pause no topo e desca ate alongar panturrilhas."),
-        CatalogExercise("Panturrilha sentado", "Panturrilhas", "Maquina", "squat", "Com joelhos flexionados, eleve calcanhares e controle a fase de descida."),
-        CatalogExercise("Panturrilha no leg press", "Panturrilhas", "Leg press", "squat", "Use a ponta dos pes na plataforma e mova apenas tornozelos com amplitude segura."),
+    private fun exerciseMeta(exercise: CatalogExercise): String {
+        val equipment = exercise.equipment.ifBlank { "equipamento variavel" }
+        val primary = exercise.primary.ifBlank { exercise.subgroup.ifBlank { exercise.muscle } }
+        return exercise.muscle + " | " + equipment + " | " + primary
+    }
 
-        CatalogExercise("Prancha", "Core", "Peso corporal", "core", "Apoie antebracos, mantenha corpo alinhado e contraia abdomen sem prender respiracao."),
-        CatalogExercise("Abdominal crunch", "Core", "Peso corporal", "core", "Flexione o tronco tirando as escapulas do solo e retorne sem relaxar totalmente."),
-        CatalogExercise("Elevacao de pernas", "Core", "Banco ou barra", "core", "Eleve as pernas com controle, evite embalo e mantenha lombar protegida."),
-        CatalogExercise("Abdominal na polia", "Core", "Cabo", "core", "Ajoelhado, flexione a coluna levando cotovelos ao chao contraindo abdomen."),
-        CatalogExercise("Russian twist", "Core", "Anilha ou bola", "core", "Gire o tronco de um lado ao outro mantendo abdomen firme."),
-        CatalogExercise("Prancha lateral", "Core", "Peso corporal", "core", "Apoie antebraco lateral, mantenha quadril elevado e corpo alinhado."),
-
-        CatalogExercise("Esteira caminhada", "Cardio", "Esteira", "cardio", "Caminhe com postura alta, passada natural e controle respiratorio."),
-        CatalogExercise("Esteira corrida", "Cardio", "Esteira", "cardio", "Corra mantendo cadencia estavel e aumente velocidade gradualmente."),
-        CatalogExercise("Bicicleta ergometrica", "Cardio", "Bicicleta", "cardio", "Ajuste o banco, pedale com joelhos alinhados e resistencia progressiva."),
-        CatalogExercise("Eliptico", "Cardio", "Eliptico", "cardio", "Mantenha tronco alto, empurre e puxe as alcas em ritmo constante."),
-        CatalogExercise("Remo indoor", "Cardio", "Remo", "cardio", "Empurre com pernas, finalize com costas e bracos, retorne em ordem inversa.")
-    )
-
+    private fun normalized(text: String): String {
+        return Normalizer.normalize(text.lowercase(Locale("pt", "BR")), Normalizer.Form.NFD)
+            .replace("\\p{Mn}+".toRegex(), "")
+            .replace("[^a-z0-9]+".toRegex(), " ")
+            .trim()
+    }
 
     private fun renderGoals(root: LinearLayout) {
         val weeklyTarget = input("Meta semanal de series", prefs.getString("goal_week_sets", "60") ?: "60")
