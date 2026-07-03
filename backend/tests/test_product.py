@@ -26,5 +26,5 @@ def test_release_notes() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["version"] == "8.2.0"
-    assert data["title"] == "Native Personal Android App"
+    assert data["version"] == "8.4.0"
+    assert data["title"] == "Native Exercise Catalog"

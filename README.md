@@ -206,3 +206,19 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Remove dependencia de backend, login, servidor local e conceitos online/offline no app mobile.
 - Inclui programa A/B/C/D inicial, registro local de series, historico e exportacao via area de transferencia.
 - Adiciona logo nativo ao app Android.
+
+
+## v8.3.0 - App Android nativo completo
+
+- Replica os principais modulos da versao web no Android nativo pessoal.
+- Adiciona abas locais: Inicio, Treino, Corrida, Historico, Stats, Exercicios, Metas, Coach e Perfil.
+- Mantem todos os dados no celular com SharedPreferences e exportacao JSON pela area de transferencia.
+- Mantem programa A/B/C/D embutido e adiciona corrida de esteira, estatisticas, metas e relatorios locais.
+
+
+## v8.4.0 - Catalogo nativo de exercicios
+
+- Aba Exercicios ganha catalogo amplo de exercicios de academia.
+- Cada exercicio exibe animacao nativa de execucao, descricao e alternativas do mesmo musculo.
+- Catalogo pode registrar o exercicio diretamente no historico local.
+- Teste alvo passa a usar o emulador Android aberto via ADB.

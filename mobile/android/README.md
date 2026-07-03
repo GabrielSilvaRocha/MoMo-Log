@@ -39,3 +39,11 @@ O contrato de sincronizacao Health Connect permanece em app/src/main/java/br/com
 ## v8.2.0
 
 O app Android agora e nativo, pessoal e local. A MainActivity em Kotlin guarda treinos e series em SharedPreferences, sem WebView e sem backend.
+
+## v8.3.0
+
+Replica os modulos da versao web como telas nativas locais: dashboard, treino, corrida, historico, stats, exercicios, metas, coach e perfil.
+
+## v8.4.0
+
+A aba Exercicios inclui catalogo amplo de academia com animacao nativa de execucao, descricao e alternativas por grupo muscular.
