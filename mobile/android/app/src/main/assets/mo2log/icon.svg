@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#050807"/>
-  <circle cx="256" cy="256" r="188" fill="#102016" stroke="#77ff6b" stroke-width="24"/>
-  <text x="256" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="120" font-weight="800" fill="#77ff6b">Mo2</text>
-  <text x="256" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#ffffff">LOG</text>
-</svg>

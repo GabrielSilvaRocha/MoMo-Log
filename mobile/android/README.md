@@ -35,3 +35,7 @@ Observacao: este repositorio nao inclui Gradle Wrapper ainda. Se o Android Studi
 - Retrofit/OkHttp API client
 
 O contrato de sincronizacao Health Connect permanece em app/src/main/java/br/com/mo2log/mobile/sync/HealthConnectSyncContract.kt.
+
+## v8.2.0
+
+O app Android agora e nativo, pessoal e local. A MainActivity em Kotlin guarda treinos e series em SharedPreferences, sem WebView e sem backend.

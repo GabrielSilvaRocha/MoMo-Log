@@ -48,9 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Android Offline-Only APK",
+        "milestone": "Native Personal Android App",
         "status": "operational",
-        "release_focus": "Manter o APK Android fechado no modo Academia offline para evitar chamadas acidentais ao backend.",
+        "release_focus": "Portar o Mo2 LOG para um app Android nativo, pessoal e local, sem WebView nem backend.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.1.4",
+        "version": "8.2.0",
         "title": "Android Offline-Only APK",
         "highlights": [
-            "APK Android entra e permanece no modo Academia offline.",
-            "Navegacao online fica escondida no WebView Android para evitar failed to fetch fora de casa.",
-            "Build Android atualizado para versionCode 814.",
-            "Assets Android foram regenerados com o bundle frontend mais recente.",
+            "App Android nativo substitui o WebView e funciona localmente.",
+            "Programa A/B/C/D fica embutido no app para uso pessoal na academia.",
+            "Build Android atualizado para versionCode 820.",
+            "Logo nativo e historico local em SharedPreferences foram adicionados.",
         ],
     }

@@ -198,3 +198,11 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - APK Android fica restrito ao modo Academia offline.
 - Menu online e rotas que dependem do backend ficam escondidos no WebView Android.
 - Reduz o risco de failed to fetch durante treino fora de casa.
+
+
+## v8.2.0 - App Android nativo pessoal
+
+- Substitui o APK WebView por uma MainActivity Android nativa em Kotlin.
+- Remove dependencia de backend, login, servidor local e conceitos online/offline no app mobile.
+- Inclui programa A/B/C/D inicial, registro local de series, historico e exportacao via area de transferencia.
+- Adiciona logo nativo ao app Android.
