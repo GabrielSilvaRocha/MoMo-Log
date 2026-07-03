@@ -191,3 +191,10 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Corrige o menu do shell Android para expor a entrada Academia offline.
 - Desativa service worker no host interno do APK e remove caches legados do WebView.
 - Regera o APK como versao 8.1.3 para evitar bundle preso em instalacoes antigas.
+
+
+## v8.1.4 - Android Offline-Only APK
+
+- APK Android fica restrito ao modo Academia offline.
+- Menu online e rotas que dependem do backend ficam escondidos no WebView Android.
+- Reduz o risco de failed to fetch durante treino fora de casa.

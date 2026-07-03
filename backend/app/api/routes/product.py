@@ -48,9 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Android APK Cache Bypass",
+        "milestone": "Android Offline-Only APK",
         "status": "operational",
-        "release_focus": "Abrir o APK diretamente na Academia offline, com bundle novo e sem cache legado do WebView.",
+        "release_focus": "Manter o APK Android fechado no modo Academia offline para evitar chamadas acidentais ao backend.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.1.3",
-        "title": "Android APK Cache Bypass",
+        "version": "8.1.4",
+        "title": "Android Offline-Only APK",
         "highlights": [
-            "APK entra automaticamente na Academia offline quando abre view=offline-workout.",
-            "WebView desativa service worker no host appassets.androidplatform.net e limpa caches legados.",
-            "Build Android atualizado para versionCode 813.",
+            "APK Android entra e permanece no modo Academia offline.",
+            "Navegacao online fica escondida no WebView Android para evitar failed to fetch fora de casa.",
+            "Build Android atualizado para versionCode 814.",
             "Assets Android foram regenerados com o bundle frontend mais recente.",
         ],
     }

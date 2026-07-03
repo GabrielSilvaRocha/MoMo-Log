@@ -26,5 +26,5 @@ def test_release_notes() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["version"] == "8.1.3"
-    assert data["title"] == "Android APK Cache Bypass"
+    assert data["version"] == "8.1.4"
+    assert data["title"] == "Android Offline-Only APK"

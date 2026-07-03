@@ -26,13 +26,21 @@ export type AppView = 'dashboard' | 'planning' | 'templates' | 'workout' | 'offl
 
 const views: AppView[] = ['dashboard', 'planning', 'templates', 'workout', 'offline-workout', 'running', 'analytics', 'intelligence', 'history', 'reports', 'goals', 'exercises', 'adaptation', 'profile', 'mvp', 'deploy']
 const OFFLINE_BOOT_VIEW: AppView = 'offline-workout'
+const isAndroidAssetHost = window.location.hostname === 'appassets.androidplatform.net'
 
 export default function App() {
-  const [view, setView] = useState<AppView>('dashboard')
+  const [view, setView] = useState<AppView>(() => isAndroidAssetHost ? OFFLINE_BOOT_VIEW : 'dashboard')
   const [user, setUser] = useState<User | null>(getCurrentUser())
   const [authReady, setAuthReady] = useState(false)
 
   useEffect(() => {
+    if (isAndroidAssetHost) {
+      setView(OFFLINE_BOOT_VIEW)
+      setUser(saveOfflineSession())
+      window.history.replaceState({}, '', window.location.pathname)
+      return
+    }
+
     const queryView = new URLSearchParams(window.location.search).get('view')
     if (queryView && views.includes(queryView as AppView)) {
       const nextView = queryView as AppView
@@ -47,6 +55,12 @@ export default function App() {
   useEffect(() => {
     let mounted = true
     async function loadSession() {
+      if (isAndroidAssetHost) {
+        if (mounted) setUser(saveOfflineSession())
+        setAuthReady(true)
+        return
+      }
+
       const queryView = new URLSearchParams(window.location.search).get('view')
       if (queryView === OFFLINE_BOOT_VIEW && !hasAuthSession()) {
         if (mounted) setUser(saveOfflineSession())
@@ -87,9 +101,19 @@ export default function App() {
   }
 
   function handleLogout() {
+    if (isAndroidAssetHost) {
+      setUser(saveOfflineSession())
+      setView(OFFLINE_BOOT_VIEW)
+      return
+    }
+
     clearAuthSession()
     setUser(null)
     setView('dashboard')
+  }
+
+  function handleNavigate(nextView: AppView) {
+    setView(isAndroidAssetHost ? OFFLINE_BOOT_VIEW : nextView)
   }
 
   if (!authReady) {
@@ -101,7 +125,7 @@ export default function App() {
   }
 
   return (
-    <AppShell currentView={view} onNavigate={setView} user={user} onLogout={handleLogout}>
+    <AppShell currentView={view} onNavigate={handleNavigate} user={user} onLogout={handleLogout} offlineOnly={isAndroidAssetHost}>
       {view === 'dashboard' && <DashboardPage onStartWorkout={() => setView('workout')} />}
       {view === 'planning' && <PlanningPage />}
       {view === 'templates' && <TemplatesPage />}

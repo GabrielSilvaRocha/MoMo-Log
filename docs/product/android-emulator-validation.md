@@ -63,3 +63,9 @@ Se aparecer failed to fetch, voce provavelmente tocou em Demo Local ou esta com 
 - APK Android abre diretamente a Academia offline sem depender do backend.
 - Service worker fica desativado no WebView asset host para evitar bundle antigo.
 - Build Android atualizado para versionCode 813 e versionName 8.1.3.
+
+## v8.1.4 - Android Offline-Only APK
+
+- O APK Android deve mostrar apenas a entrada Academia offline no menu.
+- Abas online como Corridas, Deploy e Treino do dia ficam escondidas no WebView Android.
+- Se o usuario abrir o app fora de casa, o fluxo nao deve chamar backend nem exibir failed to fetch.

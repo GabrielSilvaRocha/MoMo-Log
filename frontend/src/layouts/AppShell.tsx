@@ -8,6 +8,7 @@ type AppShellProps = {
   onNavigate: (view: AppView) => void
   user: User
   onLogout: () => void
+  offlineOnly?: boolean
 }
 
 const navItems: Array<{ id: AppView; label: string; icon: string }> = [
@@ -29,7 +30,8 @@ const navItems: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'deploy', label: 'Deploy', icon: '🛠️' },
 ]
 
-export function AppShell({ children, currentView, onNavigate, user, onLogout }: AppShellProps) {
+export function AppShell({ children, currentView, onNavigate, user, onLogout, offlineOnly = false }: AppShellProps) {
+  const visibleNavItems = offlineOnly ? navItems.filter((item) => item.id === 'offline-workout') : navItems
   return (
     <div className="min-h-screen bg-mo-background text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_right,rgba(119,255,107,0.16),transparent_28rem)]" />
@@ -43,13 +45,13 @@ export function AppShell({ children, currentView, onNavigate, user, onLogout }: 
             </div>
             <div className="flex flex-col gap-2 rounded-2xl border border-mo-border bg-black/20 px-4 py-3 text-sm text-mo-muted sm:items-end">
               <span>Usuário: <strong className="text-white">{user.name}</strong></span>
-              <span>Versão: <span className="text-mo-primary">v8.1.3</span></span>
-              <button onClick={onLogout} className="text-left text-xs font-semibold text-mo-primary hover:text-white sm:text-right">Sair</button>
+              <span>Versão: <span className="text-mo-primary">v8.1.4</span></span>
+              {!offlineOnly && <button onClick={onLogout} className="text-left text-xs font-semibold text-mo-primary hover:text-white sm:text-right">Sair</button>}
             </div>
           </div>
 
           <nav className="mt-6 flex flex-wrap gap-3">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const active = currentView === item.id
               return (
                 <button
