@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { AppShell } from './layouts/AppShell'
-import { clearAuthSession, getCurrentUser, hasAuthSession, saveAuthenticatedUser } from './auth/session'
+import { clearAuthSession, getCurrentUser, hasAuthSession, saveAuthenticatedUser, saveOfflineSession } from './auth/session'
 import { AdaptationPage } from './pages/AdaptationPage'
 import { AuthPage } from './pages/AuthPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
@@ -25,6 +25,7 @@ import type { AuthToken, User } from './types/api'
 export type AppView = 'dashboard' | 'planning' | 'templates' | 'workout' | 'offline-workout' | 'running' | 'analytics' | 'intelligence' | 'history' | 'reports' | 'goals' | 'exercises' | 'adaptation' | 'profile' | 'mvp' | 'deploy'
 
 const views: AppView[] = ['dashboard', 'planning', 'templates', 'workout', 'offline-workout', 'running', 'analytics', 'intelligence', 'history', 'reports', 'goals', 'exercises', 'adaptation', 'profile', 'mvp', 'deploy']
+const OFFLINE_BOOT_VIEW: AppView = 'offline-workout'
 
 export default function App() {
   const [view, setView] = useState<AppView>('dashboard')
@@ -34,7 +35,11 @@ export default function App() {
   useEffect(() => {
     const queryView = new URLSearchParams(window.location.search).get('view')
     if (queryView && views.includes(queryView as AppView)) {
-      setView(queryView as AppView)
+      const nextView = queryView as AppView
+      setView(nextView)
+      if (nextView === OFFLINE_BOOT_VIEW && !getCurrentUser()) {
+        setUser(saveOfflineSession())
+      }
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
@@ -42,6 +47,13 @@ export default function App() {
   useEffect(() => {
     let mounted = true
     async function loadSession() {
+      const queryView = new URLSearchParams(window.location.search).get('view')
+      if (queryView === OFFLINE_BOOT_VIEW && !hasAuthSession()) {
+        if (mounted) setUser(saveOfflineSession())
+        setAuthReady(true)
+        return
+      }
+
       if (!hasAuthSession()) {
         setAuthReady(true)
         return

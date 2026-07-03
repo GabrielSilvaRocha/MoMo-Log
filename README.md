@@ -10,6 +10,14 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v8.5.0 - Compartilhamento publico de relatorios e snapshots de progresso.
 - v8.6.0 - Camada social de evolucao, provas e comparativos.
 
+## v8.1.2 - Android Offline Auto Login
+
+Esta versao remove o erro failed to fetch no APK offline:
+
+- APK cria sessao offline automaticamente quando abre view=offline-workout.
+- Usuario nao precisa tocar em Demo Local nem fazer login online.
+- Android versionCode atualizado para 812.
+
 ## v8.1.1 - Android WebView White Screen Fix
 
 Esta versao corrige o APK Android que podia abrir em tela branca:
@@ -177,3 +185,9 @@ http://localhost:8000/docs
 ## Login local
 
 Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repositório.
+
+## v8.1.3 - Android APK sem cache legado
+
+- Corrige o menu do shell Android para expor a entrada Academia offline.
+- Desativa service worker no host interno do APK e remove caches legados do WebView.
+- Regera o APK como versao 8.1.3 para evitar bundle preso em instalacoes antigas.

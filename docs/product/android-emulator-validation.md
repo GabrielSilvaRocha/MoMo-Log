@@ -50,3 +50,16 @@ https://appassets.androidplatform.net/assets/mo2log/index.html?view=offline-work
 ```
 
 Esse caminho evita bloqueios comuns de JavaScript/CSS quando o WebView abre arquivos via file://.
+
+
+## Validacao v8.1.3
+
+Ao abrir o APK, ele deve ir direto para Academia offline sem pedir login.
+
+Se aparecer failed to fetch, voce provavelmente tocou em Demo Local ou esta com build antigo instalado. Reinstale o APK gerado apos a v8.1.3.
+
+### v8.1.3 - Android APK sem cache legado
+
+- APK Android abre diretamente a Academia offline sem depender do backend.
+- Service worker fica desativado no WebView asset host para evitar bundle antigo.
+- Build Android atualizado para versionCode 813 e versionName 8.1.3.

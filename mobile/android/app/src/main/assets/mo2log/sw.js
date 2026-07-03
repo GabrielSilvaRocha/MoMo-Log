@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mo2log-offline-v8-1-0'
+const CACHE_NAME = 'mo2log-offline-v8-1-3'
 const APP_SHELL = ['./', './manifest.webmanifest', './icon.svg']
 
 self.addEventListener('install', (event) => {

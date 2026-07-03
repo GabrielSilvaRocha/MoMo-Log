@@ -48,9 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Android WebView White Screen Fix",
+        "milestone": "Android APK Cache Bypass",
         "status": "operational",
-        "release_focus": "Corrigir tela branca no APK Android e carregar o app offline por WebViewAssetLoader com origem HTTPS local.",
+        "release_focus": "Abrir o APK diretamente na Academia offline, com bundle novo e sem cache legado do WebView.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.1.1",
-        "title": "Android WebView White Screen Fix",
+        "version": "8.1.3",
+        "title": "Android APK Cache Bypass",
         "highlights": [
-            "APK agora carrega assets locais pelo WebViewAssetLoader em appassets.androidplatform.net.",
-            "Tela branca causada por file:// no WebView foi corrigida.",
-            "AndroidX WebKit foi adicionado e o build debug passou novamente.",
-            "Documentacao inclui roteiro para validar primeiro no emulador do Android Studio.",
+            "APK entra automaticamente na Academia offline quando abre view=offline-workout.",
+            "WebView desativa service worker no host appassets.androidplatform.net e limpa caches legados.",
+            "Build Android atualizado para versionCode 813.",
+            "Assets Android foram regenerados com o bundle frontend mais recente.",
         ],
     }
