@@ -3,6 +3,7 @@
 
     <application
         android:allowBackup="true"
+        android:usesCleartextTraffic="false"
         android:label="Mo2 LOG"
         android:theme="@style/AppTheme">
         <activity

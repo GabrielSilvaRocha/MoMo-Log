@@ -44,7 +44,7 @@ mobile/android/app/src/main/assets/mo2log
 O APK abre diretamente:
 
 ```text
-file:///android_asset/mo2log/index.html?view=offline-workout
+https://appassets.androidplatform.net/assets/mo2log/index.html?view=offline-workout
 ```
 
 ## Limite atual
@@ -54,3 +54,14 @@ Os dados ficam locais no Android/localStorage. Ainda nao ha sincronizacao automa
 ## Alternativa cloud
 
 Para ter o Mo2 LOG completo fora de casa, com historico centralizado e sem depender do PC, publique frontend, backend e banco em cloud com HTTPS. O modo offline continua util como fallback quando a internet da academia falhar.
+
+
+## Correcao WebView
+
+O APK carrega os assets pelo WebViewAssetLoader em:
+
+```text
+https://appassets.androidplatform.net/assets/mo2log/index.html?view=offline-workout
+```
+
+Isso evita tela branca causada por restricoes de JavaScript/CSS carregados via file:// no WebView.

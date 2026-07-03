@@ -48,9 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Android Offline Gym Mode",
+        "milestone": "Android WebView White Screen Fix",
         "status": "operational",
-        "release_focus": "Usar o Mo2 LOG no Android fora de casa, sem PC ligado, registrando treino offline no armazenamento local do aparelho.",
+        "release_focus": "Corrigir tela branca no APK Android e carregar o app offline por WebViewAssetLoader com origem HTTPS local.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.1.0",
-        "title": "Android Offline Gym Mode",
+        "version": "8.1.1",
+        "title": "Android WebView White Screen Fix",
         "highlights": [
-            "Nova tela Academia offline registra series, carga, RIR, RPE e observacoes no armazenamento local do celular.",
-            "Login ganhou entrada de modo offline para usar o app sem backend, PC ou rede Wi-Fi de casa.",
-            "Frontend virou PWA basica com manifest, service worker e base relativa para empacotamento Android.",
-            "Scaffold Android WebView foi adicionado para gerar APK que carrega o build local do Mo2 LOG.",
+            "APK agora carrega assets locais pelo WebViewAssetLoader em appassets.androidplatform.net.",
+            "Tela branca causada por file:// no WebView foi corrigida.",
+            "AndroidX WebKit foi adicionado e o build debug passou novamente.",
+            "Documentacao inclui roteiro para validar primeiro no emulador do Android Studio.",
         ],
     }

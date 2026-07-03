@@ -26,5 +26,5 @@ def test_release_notes() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["version"] == "8.1.0"
-    assert data["title"] == "Android Offline Gym Mode"
+    assert data["version"] == "8.1.1"
+    assert data["title"] == "Android WebView White Screen Fix"

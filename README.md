@@ -10,6 +10,15 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v8.5.0 - Compartilhamento publico de relatorios e snapshots de progresso.
 - v8.6.0 - Camada social de evolucao, provas e comparativos.
 
+## v8.1.1 - Android WebView White Screen Fix
+
+Esta versao corrige o APK Android que podia abrir em tela branca:
+
+- WebView troca file:// por WebViewAssetLoader em https://appassets.androidplatform.net.
+- AndroidX WebKit foi adicionado ao projeto Android.
+- Build debug gera APK corrigido em mobile/android/app/build/outputs/apk/debug/app-debug.apk.
+- Documento docs/product/android-emulator-validation.md descreve a validacao no emulador antes do celular.
+
 ## v8.1.0 - Android Offline Gym Mode
 
 Esta versao prepara o uso na academia fora de casa, com PC desligado:
