@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 
 import { mo2logApi } from '../api/mo2log'
-import { saveAuthSession } from '../auth/session'
+import { saveAuthSession, saveOfflineSession } from '../auth/session'
 import type { AuthToken } from '../types/api'
 
 type AuthPageProps = {
@@ -36,6 +36,15 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleOfflineLogin() {
+    const user = saveOfflineSession()
+    onAuthenticated({
+      access_token: 'offline-local-token',
+      token_type: 'bearer',
+      user,
+    })
   }
 
   async function handleDemoLogin() {
@@ -109,6 +118,10 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
 
           <button type="button" disabled={loading} onClick={handleDemoLogin} className="mt-3 w-full rounded-2xl border border-mo-border bg-white/[0.03] px-5 py-3 font-semibold text-white hover:border-mo-primary disabled:opacity-60">
             Entrar como Demo Local
+          </button>
+
+          <button type="button" disabled={loading} onClick={handleOfflineLogin} className="mt-3 w-full rounded-2xl border border-mo-primary/50 bg-mo-primary/10 px-5 py-3 font-semibold text-mo-primary hover:bg-mo-primary hover:text-black disabled:opacity-60">
+            Usar modo academia offline
           </button>
         </form>
       </section>

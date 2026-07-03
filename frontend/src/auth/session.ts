@@ -9,6 +9,20 @@ export function saveAuthSession(auth: AuthToken) {
   localStorage.setItem(USER_KEY, JSON.stringify(auth.user))
 }
 
+export function saveOfflineSession() {
+  const user: AuthToken['user'] = {
+    id: 1,
+    name: 'Modo Offline',
+    email: 'offline@mo2log.local',
+    avatar_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  localStorage.setItem(TOKEN_KEY, 'offline-local-token')
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  return user
+}
+
 export function saveAuthenticatedUser(authenticated: AuthenticatedUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(authenticated.user))
   if (authenticated.preferences) {

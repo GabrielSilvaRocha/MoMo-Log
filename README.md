@@ -4,10 +4,21 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Proximas entregas
 
-- v8.1.0 - Polimento mobile-first da tela de treino para uso na academia.
-- v8.2.0 - Assistente de ajustes entre series com base em RIR, RPE e carga.
-- v8.3.0 - Compartilhamento publico de relatorios e snapshots de progresso.
-- v8.4.0 - Camada social de evolucao, provas e comparativos.
+- v8.2.0 - Sincronizacao/importacao dos treinos offline para o backend.
+- v8.3.0 - Polimento mobile-first da tela de treino para uso na academia.
+- v8.4.0 - Assistente de ajustes entre series com base em RIR, RPE e carga.
+- v8.5.0 - Compartilhamento publico de relatorios e snapshots de progresso.
+- v8.6.0 - Camada social de evolucao, provas e comparativos.
+
+## v8.1.0 - Android Offline Gym Mode
+
+Esta versao prepara o uso na academia fora de casa, com PC desligado:
+
+- Nova tela Academia offline registra series diretamente no armazenamento local do Android.
+- Login permite entrar em modo offline quando a API nao esta disponivel.
+- Frontend ganhou manifest, service worker e base relativa para PWA/APK WebView.
+- Scaffold Android WebView carrega o build local em file:///android_asset/mo2log/index.html.
+- Documento docs/product/android-offline-gym-mode.md explica os caminhos PWA, APK e cloud.
 
 ## v8.0.1 - Android Local Network Ready
 

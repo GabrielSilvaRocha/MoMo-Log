@@ -1,8 +1,32 @@
-# Mo² LOG Android Scaffold
+# Mo2 LOG Android
 
-This folder documents the native Android direction for v7.2. It is intentionally lightweight: the production app should be created from this scaffold in Android Studio.
+Este diretorio agora cobre dois caminhos Android:
 
-## Planned Stack
+1. APK WebView offline para abrir o build local do frontend dentro do celular.
+2. Trilha nativa futura com Kotlin, Jetpack Compose, Health Connect e WorkManager.
+
+## APK WebView offline
+
+O objetivo e usar na academia mesmo com o PC desligado. O APK carrega arquivos estaticos do frontend e a tela Academia offline salva series no armazenamento local do app.
+
+Passos no PC:
+
+1. Gere o frontend.
+
+```bash
+cd frontend
+npm run build
+```
+
+2. Copie o conteudo de frontend/dist para mobile/android/app/src/main/assets/mo2log.
+
+3. Abra mobile/android no Android Studio.
+
+4. Gere o APK em Build > Build Bundle(s) / APK(s) > Build APK(s).
+
+Observacao: este repositorio nao inclui Gradle Wrapper ainda. Se o Android Studio criar ou baixar o Gradle, o projeto passa a gerar o APK localmente.
+
+## Trilha nativa futura
 
 - Kotlin
 - Jetpack Compose
@@ -10,10 +34,4 @@ This folder documents the native Android direction for v7.2. It is intentionally
 - WorkManager sync
 - Retrofit/OkHttp API client
 
-## First Implementation Steps
-
-1. Create an Android Studio project with package br.com.mo2log.mobile.
-2. Add Health Connect and WorkManager dependencies.
-3. Copy the sync contract from app/src/main/java/br/com/mo2log/mobile/sync/HealthConnectSyncContract.kt.
-4. Implement token storage and API base URL configuration.
-5. Connect imported activities to /api/v1/running-activities.
+O contrato de sincronizacao Health Connect permanece em app/src/main/java/br/com/mo2log/mobile/sync/HealthConnectSyncContract.kt.

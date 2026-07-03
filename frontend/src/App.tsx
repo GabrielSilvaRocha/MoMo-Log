@@ -18,12 +18,13 @@ import { PlanningPage } from './pages/PlanningPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RunningPage } from './pages/RunningPage'
 import { WorkoutPage } from './pages/WorkoutPage'
+import { OfflineWorkoutPage } from './pages/OfflineWorkoutPage'
 import { mo2logApi } from './api/mo2log'
 import type { AuthToken, User } from './types/api'
 
-export type AppView = 'dashboard' | 'planning' | 'templates' | 'workout' | 'running' | 'analytics' | 'intelligence' | 'history' | 'reports' | 'goals' | 'exercises' | 'adaptation' | 'profile' | 'mvp' | 'deploy'
+export type AppView = 'dashboard' | 'planning' | 'templates' | 'workout' | 'offline-workout' | 'running' | 'analytics' | 'intelligence' | 'history' | 'reports' | 'goals' | 'exercises' | 'adaptation' | 'profile' | 'mvp' | 'deploy'
 
-const views: AppView[] = ['dashboard', 'planning', 'templates', 'workout', 'running', 'analytics', 'intelligence', 'history', 'reports', 'goals', 'exercises', 'adaptation', 'profile', 'mvp', 'deploy']
+const views: AppView[] = ['dashboard', 'planning', 'templates', 'workout', 'offline-workout', 'running', 'analytics', 'intelligence', 'history', 'reports', 'goals', 'exercises', 'adaptation', 'profile', 'mvp', 'deploy']
 
 export default function App() {
   const [view, setView] = useState<AppView>('dashboard')
@@ -52,8 +53,13 @@ export default function App() {
           setUser(data.user)
         }
       } catch {
-        clearAuthSession()
-        if (mounted) setUser(null)
+        const cachedUser = getCurrentUser()
+        if (mounted && cachedUser) {
+          setUser(cachedUser)
+        } else {
+          clearAuthSession()
+          if (mounted) setUser(null)
+        }
       } finally {
         if (mounted) setAuthReady(true)
       }
@@ -88,6 +94,7 @@ export default function App() {
       {view === 'planning' && <PlanningPage />}
       {view === 'templates' && <TemplatesPage />}
       {view === 'workout' && <WorkoutPage />}
+      {view === 'offline-workout' && <OfflineWorkoutPage />}
       {view === 'running' && <RunningPage />}
       {view === 'analytics' && <AnalyticsPage />}
       {view === 'intelligence' && <IntelligencePage />}

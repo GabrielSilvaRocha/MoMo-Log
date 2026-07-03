@@ -48,9 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Android Local Network Ready",
+        "milestone": "Android Offline Gym Mode",
         "status": "operational",
-        "release_focus": "Usar o app no navegador do Android pela mesma rede Wi-Fi do PC, mantendo o fluxo de proximo treino pronto.",
+        "release_focus": "Usar o Mo2 LOG no Android fora de casa, sem PC ligado, registrando treino offline no armazenamento local do aparelho.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.0.1",
-        "title": "Android Local Network Ready",
+        "version": "8.1.0",
+        "title": "Android Offline Gym Mode",
         "highlights": [
-            "Frontend detecta acesso por IP local e troca automaticamente a API localhost pelo host aberto no Android.",
-            "Backend em desenvolvimento aceita origens de rede local para uso no smartphone pela mesma Wi-Fi.",
-            "Novo guia docs/product/android-local-network.md documenta IP do PC, portas e diagnostico.",
-            "Fluxo Next Workout Ready continua disponivel para carregar e executar o proximo treino.",
+            "Nova tela Academia offline registra series, carga, RIR, RPE e observacoes no armazenamento local do celular.",
+            "Login ganhou entrada de modo offline para usar o app sem backend, PC ou rede Wi-Fi de casa.",
+            "Frontend virou PWA basica com manifest, service worker e base relativa para empacotamento Android.",
+            "Scaffold Android WebView foi adicionado para gerar APK que carrega o build local do Mo2 LOG.",
         ],
     }
