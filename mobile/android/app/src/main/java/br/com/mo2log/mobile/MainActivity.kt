@@ -152,7 +152,7 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "8.7.0"
+    private val versionName = "8.8.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -471,11 +471,12 @@ class MainActivity : Activity() {
         summary.orientation = LinearLayout.VERTICAL
         summary.addView(label("BIBLIOTECA DO TREINO", green, 13f, true))
         val favoriteIds = favoriteCatalogIds()
+        val hiddenIds = hiddenCatalogIds()
         summary.addView(label(catalogItems.size.toString() + " exercicios", white, 25f, true))
-        summary.addView(label(favoriteIds.size.toString() + " favoritos salvos. Busque por nome, musculo ou equipamento.", muted, 15f, false))
+        summary.addView(label(favoriteIds.size.toString() + " favoritos | " + hiddenIds.size + " ocultos. Busque por nome, musculo ou equipamento.", muted, 15f, false))
         root.addView(summary)
 
-        val muscleOptions = listOf("Todos", "Favoritos") + catalogItems.map { it.muscle }.distinct().sorted()
+        val muscleOptions = listOf("Todos", "Favoritos", "Ocultos") + catalogItems.map { it.muscle }.distinct().sorted()
         val savedMuscle = prefs.getString("catalog_muscle", "Todos") ?: "Todos"
         val selectedMuscle = if (muscleOptions.contains(savedMuscle)) savedMuscle else "Todos"
         val currentQuery = prefs.getString("catalog_query", "") ?: ""
@@ -520,11 +521,13 @@ class MainActivity : Activity() {
         val filtered = catalogItems
             .filter {
                 when (selectedMuscle) {
-                    "Todos" -> true
-                    "Favoritos" -> favoriteIds.contains(it.id)
+                    "Todos" -> !hiddenIds.contains(it.id)
+                    "Favoritos" -> favoriteIds.contains(it.id) && !hiddenIds.contains(it.id)
+                    "Ocultos" -> hiddenIds.contains(it.id)
                     else -> it.muscle == selectedMuscle
                 }
             }
+            .filter { selectedMuscle == "Ocultos" || !hiddenIds.contains(it.id) }
             .filter { matchesCatalogQuery(it, currentQuery) }
 
         if (filtered.isEmpty()) {
@@ -544,10 +547,15 @@ class MainActivity : Activity() {
         detail.addView(label("MIDIA DE EXECUCAO POR LINK", green, 13f, true))
         detail.addView(label(selected.name, white, 25f, true))
         detail.addView(label(exerciseMeta(selected), muted, 14f, false))
+        detail.addView(label(mediaHealthLabel(selected), muted, 13f, false))
         val favorite = favoriteIds.contains(selected.id)
         val favoriteButton = actionButton(if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos", if (favorite) amber else surface2, if (favorite) bg else white)
         favoriteButton.setOnClickListener { toggleFavorite(selected) }
         detail.addView(buttonParams(favoriteButton))
+        val hidden = hiddenIds.contains(selected.id)
+        val hideButton = actionButton(if (hidden) "Restaurar no catalogo" else "Ocultar exercicio/midia", surface2, if (hidden) green else amber)
+        hideButton.setOnClickListener { toggleHiddenCatalogExercise(selected) }
+        detail.addView(buttonParams(hideButton))
 
         val media = RemoteExerciseMediaView(this, selected.links)
         val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(230))
@@ -567,14 +575,25 @@ class MainActivity : Activity() {
         detail.addView(label("Secundarios: " + selected.secondary.ifBlank { "-" }, muted, 14f, false))
         detail.addView(label("Nivel: " + selected.level.ifBlank { "-" } + " | Tipo: " + selected.type.ifBlank { "-" }, muted, 14f, false))
 
+        val preferred = preferredAlternativeFor(selected)
         detail.addView(label("Alternativos para o mesmo musculo", green, 14f, true))
+        if (preferred != null) {
+            detail.addView(label("Preferido: " + preferred.name, amber, 14f, true))
+        }
         alternativesFor(selected).forEach { alternative ->
-            val alt = pill(alternative.name, false, 290, 48)
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            val activePreferred = preferred?.id == alternative.id
+            val alt = pill((if (activePreferred) "[pref] " else "") + alternative.name, false, 220, 48)
             alt.setOnClickListener {
                 prefs.edit().putString("catalog_selected", alternative.id).apply()
                 render()
             }
-            detail.addView(alt)
+            row.addView(alt, LinearLayout.LayoutParams(0, dp(48), 1f))
+            val prefer = actionButton("Preferir", surface2, if (activePreferred) amber else white)
+            prefer.setOnClickListener { setPreferredAlternative(selected, alternative) }
+            row.addView(prefer, LinearLayout.LayoutParams(dp(108), dp(48)))
+            detail.addView(spacedRow(row))
         }
 
         val reps = input("Reps", "10")
@@ -598,7 +617,8 @@ class MainActivity : Activity() {
                 prefs.edit().putString("catalog_selected", exercise.id).apply()
                 render()
             }
-            item.addView(label((if (favoriteIds.contains(exercise.id)) "[fav] " else "") + exercise.name, white, 17f, true))
+            val prefix = (if (favoriteIds.contains(exercise.id)) "[fav] " else "") + (if (hiddenIds.contains(exercise.id)) "[oculto] " else "")
+            item.addView(label(prefix + exercise.name, white, 17f, true))
             item.addView(label(exerciseMeta(exercise), muted, 13f, false))
             list.addView(item)
         }
@@ -701,6 +721,12 @@ class MainActivity : Activity() {
         val equipment = exercise.equipment.ifBlank { "equipamento variavel" }
         val primary = exercise.primary.ifBlank { exercise.subgroup.ifBlank { exercise.muscle } }
         return exercise.muscle + " | " + equipment + " | " + primary
+    }
+
+    private fun mediaHealthLabel(exercise: CatalogExercise): String {
+        val frames = if (exercise.links.isEmpty()) "sem frames remotos" else exercise.links.size.toString() + " frames remotos"
+        val status = exercise.status.ifBlank { "fonte externa" }
+        return "Midia: " + frames + " | " + status
     }
 
     private fun normalized(text: String): String {
@@ -944,9 +970,17 @@ class MainActivity : Activity() {
 
     private fun safeArray(key: String): JSONArray {
         return try {
-            JSONArray(prefs.getString(key, "[]"))
+            JSONArray(prefs.getString(key, "[]") ?: "[]")
         } catch (_: Exception) {
             JSONArray()
+        }
+    }
+
+    private fun safeObject(key: String): JSONObject {
+        return try {
+            JSONObject(prefs.getString(key, "{}") ?: "{}")
+        } catch (_: Exception) {
+            JSONObject()
         }
     }
 
@@ -984,6 +1018,53 @@ class MainActivity : Activity() {
         val ids = favoriteCatalogIds()
         if (ids.isEmpty()) return emptyList()
         return catalog.filter { ids.contains(it.id) }
+    }
+
+    private fun hiddenCatalogIds(): MutableSet<String> {
+        val ids = mutableSetOf<String>()
+        val array = safeArray("hidden_catalog_ids")
+        for (i in 0 until array.length()) {
+            val id = array.optString(i)
+            if (id.isNotBlank()) ids.add(id)
+        }
+        return ids
+    }
+
+    private fun saveHiddenCatalogIds(ids: Set<String>) {
+        val array = JSONArray()
+        ids.sorted().forEach { id -> array.put(id) }
+        prefs.edit().putString("hidden_catalog_ids", array.toString()).apply()
+    }
+
+    private fun toggleHiddenCatalogExercise(exercise: CatalogExercise) {
+        val hiddenIds = hiddenCatalogIds()
+        val favoriteIds = favoriteCatalogIds()
+        val hidden = if (hiddenIds.contains(exercise.id)) {
+            hiddenIds.remove(exercise.id)
+            false
+        } else {
+            hiddenIds.add(exercise.id)
+            favoriteIds.remove(exercise.id)
+            saveFavoriteCatalogIds(favoriteIds)
+            true
+        }
+        saveHiddenCatalogIds(hiddenIds)
+        Toast.makeText(this, if (hidden) "Exercicio oculto do catalogo." else "Exercicio restaurado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun preferredAlternativeFor(exercise: CatalogExercise): CatalogExercise? {
+        val preferredId = safeObject("preferred_catalog_alternatives").optString(exercise.id)
+        if (preferredId.isBlank()) return null
+        return catalog.firstOrNull { it.id == preferredId }
+    }
+
+    private fun setPreferredAlternative(exercise: CatalogExercise, alternative: CatalogExercise) {
+        val map = safeObject("preferred_catalog_alternatives")
+        map.put(exercise.id, alternative.id)
+        prefs.edit().putString("preferred_catalog_alternatives", map.toString()).apply()
+        Toast.makeText(this, "Substituto preferido salvo.", Toast.LENGTH_SHORT).show()
+        render()
     }
 
     private fun todayLogs(): JSONArray {

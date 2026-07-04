@@ -59,3 +59,7 @@ Atualizacao visual da interface nativa mantendo a paleta verde/escura: novo head
 ## v8.7.0
 
 UX pessoal para uso rapido na academia: favoritos no catalogo, atalhos na tela inicial, repetir ultima serie, progressao rapida de carga e avanco automatico para o proximo exercicio.
+
+## v8.8.0
+
+Catalogo avancado para uso pessoal: ocultar/restaurar exercicios com midia problematica, filtro Ocultos, substituto preferido por exercicio e status resumido da midia remota.

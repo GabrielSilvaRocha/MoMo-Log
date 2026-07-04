@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Evoluir o catalogo com cache de imagens e ocultar midias quebradas",
+        "Adicionar cache local de imagens ja abertas no catalogo",
         "Adicionar timer de descanso, edicao e desfazer serie no treino",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Personal Workout UX",
+        "milestone": "Advanced Exercise Catalog",
         "status": "operational",
-        "release_focus": "Acelerar o uso pessoal na academia com favoritos, atalhos e registro rapido de series.",
+        "release_focus": "Melhorar o catalogo pessoal com ocultos, substitutos preferidos e visibilidade da midia remota.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.7.0",
-        "title": "Personal Workout UX",
+        "version": "8.8.0",
+        "title": "Advanced Exercise Catalog",
         "highlights": [
-            "Catalogo de exercicios agora permite favoritar e filtrar favoritos.",
-            "Inicio exibe atalhos para os exercicios favoritos quando existirem.",
-            "Tela de treino ganhou repetir ultima serie, progressao rapida de carga e avanco automatico.",
-            "Build Android atualizado para versionCode 870.",
+            "Catalogo agora permite ocultar exercicios ou midias problematicas e restaurar pela aba Ocultos.",
+            "Alternativas podem ser marcadas como substituto preferido por exercicio.",
+            "Detalhe do exercicio exibe status resumido da midia remota.",
+            "Build Android atualizado para versionCode 880.",
         ],
     }
