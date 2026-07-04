@@ -8,8 +8,8 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v8.3.0 - Polimento mobile-first da tela de treino para uso na academia.
 - v8.4.0 - Catalogo nativo de exercicios para uso offline no Android.
 - v8.5.0 - Catalogo de exercicios importado com midia remota por link.
-- v8.6.0 - Compartilhamento publico de relatorios e snapshots de progresso.
-- v8.7.0 - Camada social de evolucao, provas e comparativos.
+- v8.6.0 - Atualizacao visual da interface Android nativa.
+- v8.7.0 - UX pessoal para favoritos, atalhos e fluxo de treino mais rapido.
 
 ## v8.1.2 - Android Offline Auto Login
 
@@ -230,3 +230,12 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - As imagens de execucao sao carregadas por link do Free Exercise DB e alternadas no app como frames de demonstracao.
 - Adiciona busca por nome, musculo ou equipamento e filtros por grupo muscular.
 - O app Android passa para versionCode 850 / versionName 8.5.0.
+
+## v8.6.0 - Interface Android mais bonita e intuitiva
+
+- Remove do roadmap imediato as entregas de compartilhamento publico e camada social.
+- Mantem a paleta verde/escura do Mo2 LOG, mas refina header, navegacao, cards, botoes e campos.
+- Inicio passa a destacar resumo do dia, atalhos para Treino, Catalogo e Corrida, e o proximo treino.
+- Aba Treino ganha cartao de contexto para orientar o registro durante a academia.
+- Aba Exercicios ganha resumo da biblioteca antes da busca e dos filtros.
+- O app Android passa para versionCode 860 / versionName 8.6.0.

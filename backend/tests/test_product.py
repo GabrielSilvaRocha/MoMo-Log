@@ -26,5 +26,5 @@ def test_release_notes() -> None:
 
     assert response.status_code == 200
     data = response.json()
-    assert data["version"] == "8.5.0"
-    assert data["title"] == "Linked Exercise Media Catalog"
+    assert data["version"] == "8.6.0"
+    assert data["title"] == "Native Interface Refresh"

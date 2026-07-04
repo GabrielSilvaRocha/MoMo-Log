@@ -51,3 +51,7 @@ A aba Exercicios inclui catalogo amplo de academia com animacao nativa de execuc
 ## v8.5.0
 
 A aba Exercicios agora usa o catalogo importado com 324 exercicios e links remotos do Free Exercise DB para mostrar frames de execucao, alem de busca, filtros, detalhes tecnicos e alternativas.
+
+## v8.6.0
+
+Atualizacao visual da interface nativa mantendo a paleta verde/escura: novo header, navegacao com titulo de secao, home com atalhos, cards mais compactos e contexto melhor nas abas Treino e Exercicios.

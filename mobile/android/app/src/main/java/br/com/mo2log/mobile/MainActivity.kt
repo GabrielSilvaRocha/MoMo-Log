@@ -152,10 +152,11 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "8.5.0"
+    private val versionName = "8.6.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
+    private val surface3 = Color.rgb(8, 31, 24)
     private val border = Color.rgb(35, 58, 49)
     private val green = Color.rgb(105, 255, 95)
     private val muted = Color.rgb(151, 171, 164)
@@ -219,7 +220,8 @@ class MainActivity : Activity() {
     }
 
     private fun header(): View {
-        val box = card()
+        val stats = computeStats(allLogs())
+        val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
 
         val top = LinearLayout(this)
@@ -232,29 +234,44 @@ class MainActivity : Activity() {
         logo.setTextColor(bg)
         logo.textSize = 18f
         logo.typeface = Typeface.DEFAULT_BOLD
-        logo.background = rounded(green, dp(16))
-        top.addView(logo, LinearLayout.LayoutParams(dp(52), dp(52)))
+        logo.background = rounded(green, dp(8))
+        top.addView(logo, LinearLayout.LayoutParams(dp(50), dp(50)))
 
         val titleBox = LinearLayout(this)
         titleBox.orientation = LinearLayout.VERTICAL
         titleBox.setPadding(dp(14), 0, 0, 0)
-        titleBox.addView(label("MO2 LOG", green, 14f, true))
-        titleBox.addView(label("Treino pessoal Android", white, 25f, true))
-        titleBox.addView(label("App local nativo | v" + versionName, muted, 14f, false))
+        titleBox.addView(label("MO2 LOG", green, 13f, true))
+        titleBox.addView(label("Treino pessoal", white, 25f, true))
+        titleBox.addView(label("Android offline | v" + versionName, muted, 14f, false))
         top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(statusChip("Local"))
         box.addView(top)
+
+        val summary = LinearLayout(this)
+        summary.orientation = LinearLayout.HORIZONTAL
+        summary.setPadding(0, dp(14), 0, 0)
+        summary.addView(compactMetric("Hoje", todayLogs().length().toString() + " series"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        summary.addView(compactMetric("Semana", stats.optInt("week_sets").toString() + " series"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        summary.addView(compactMetric("Volume", stats.optInt("today_volume").toString() + " kg"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(summary)
 
         return box
     }
 
     private fun navBar(): View {
+        val wrap = LinearLayout(this)
+        wrap.orientation = LinearLayout.VERTICAL
+        val title = label(currentSectionTitle(), white, 19f, true)
+        title.setPadding(0, dp(8), 0, dp(6))
+        wrap.addView(title)
+
         val scroll = HorizontalScrollView(this)
         scroll.isHorizontalScrollBarEnabled = false
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         navItems.forEach { item ->
             val active = currentTab == item.id
-            val button = pill(item.title, active, 124, 50)
+            val button = pill(item.title, active, 124, 46)
             button.setOnClickListener {
                 currentTab = item.id
                 prefs.edit().putString("current_tab", currentTab).apply()
@@ -263,23 +280,45 @@ class MainActivity : Activity() {
             row.addView(button)
         }
         scroll.addView(row)
-        return scroll
+        wrap.addView(scroll)
+        return wrap
     }
 
     private fun renderHome(root: LinearLayout) {
         val logs = todayLogs()
         val stats = computeStats(allLogs())
-        root.addView(heroCard("Resumo de hoje", logs.length().toString() + " series", "Volume hoje: " + stats.optInt("today_volume") + " kg | RPE medio: " + stats.optString("avg_rpe")))
-
         val next = currentPlan()
+
+        val hero = card(surface3)
+        hero.orientation = LinearLayout.VERTICAL
+        hero.addView(label("RESUMO DE HOJE", green, 13f, true))
+        hero.addView(label(logs.length().toString() + " series registradas", white, 28f, true))
+        hero.addView(label("Volume: " + stats.optInt("today_volume") + " kg | RPE medio: " + stats.optString("avg_rpe"), muted, 15f, false))
+        val heroActions = LinearLayout(this)
+        heroActions.orientation = LinearLayout.HORIZONTAL
+        val start = actionButton("Abrir treino", green, bg)
+        start.setOnClickListener { switchTab("workout") }
+        heroActions.addView(start, LinearLayout.LayoutParams(0, dp(52), 1f))
+        val catalogButton = actionButton("Catalogo", surface2, white)
+        catalogButton.setOnClickListener { switchTab("exercises") }
+        heroActions.addView(catalogButton, LinearLayout.LayoutParams(0, dp(52), 1f))
+        hero.addView(spacedRow(heroActions))
+        root.addView(hero)
+
         val nextBox = card()
         nextBox.orientation = LinearLayout.VERTICAL
         nextBox.addView(label("PROXIMO TREINO", green, 13f, true))
-        nextBox.addView(label(next.title + " - " + next.focus, white, 24f, true))
-        nextBox.addView(label(next.exercises.size.toString() + " exercicios carregados. Toque em Treino para registrar.", muted, 15f, false))
-        val start = actionButton("Abrir treino", green, bg)
-        start.setOnClickListener { switchTab("workout") }
-        nextBox.addView(buttonParams(start))
+        nextBox.addView(label(next.title + " - " + next.focus, white, 23f, true))
+        nextBox.addView(label(next.exercises.size.toString() + " exercicios prontos. O primeiro toque ja leva ao registro.", muted, 15f, false))
+        val nextActions = LinearLayout(this)
+        nextActions.orientation = LinearLayout.HORIZONTAL
+        val workout = actionButton("Registrar", green, bg)
+        workout.setOnClickListener { switchTab("workout") }
+        nextActions.addView(workout, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val run = actionButton("Corrida", surface2, white)
+        run.setOnClickListener { switchTab("running") }
+        nextActions.addView(run, LinearLayout.LayoutParams(0, dp(50), 1f))
+        nextBox.addView(spacedRow(nextActions))
         root.addView(nextBox)
 
         root.addView(metricGrid(listOf(
@@ -292,11 +331,13 @@ class MainActivity : Activity() {
         val insightBox = card()
         insightBox.orientation = LinearLayout.VERTICAL
         insightBox.addView(label("INSIGHTS", green, 13f, true))
-        localInsights().forEach { insight -> insightBox.addView(label("• " + insight, white, 15f, false)) }
+        localInsights().forEach { insight -> insightBox.addView(label("- " + insight, white, 15f, false)) }
         root.addView(insightBox)
     }
 
     private fun renderWorkout(root: LinearLayout) {
+        val plan = currentPlan()
+        root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Toque no exercicio, confira a meta e registre a serie no painel abaixo."))
         root.addView(sectionTitle("Programa de treinos"))
         root.addView(planSelector())
         root.addView(sectionTitle("Exercicios do treino"))
@@ -405,6 +446,13 @@ class MainActivity : Activity() {
             root.addView(empty)
             return
         }
+
+        val summary = card(surface3)
+        summary.orientation = LinearLayout.VERTICAL
+        summary.addView(label("BIBLIOTECA DO TREINO", green, 13f, true))
+        summary.addView(label(catalogItems.size.toString() + " exercicios", white, 25f, true))
+        summary.addView(label("Busque por nome, musculo ou equipamento. Abra um exercicio para ver execucao, cuidados e alternativas.", muted, 15f, false))
+        root.addView(summary)
 
         val muscleOptions = listOf("Todos") + catalogItems.map { it.muscle }.distinct().sorted()
         val savedMuscle = prefs.getString("catalog_muscle", "Todos") ?: "Todos"
@@ -664,7 +712,7 @@ class MainActivity : Activity() {
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("COACH LOCAL", green, 13f, true))
         box.addView(label("Inteligencia, relatorios e adaptacao", white, 24f, true))
-        localInsights().forEach { insight -> box.addView(label("• " + insight, white, 15f, false)) }
+        localInsights().forEach { insight -> box.addView(label("- " + insight, white, 15f, false)) }
         root.addView(box)
 
         val report = card()
@@ -991,6 +1039,41 @@ class MainActivity : Activity() {
         render()
     }
 
+    private fun currentSectionTitle(): String {
+        return navItems.firstOrNull { it.id == currentTab }?.title ?: "Inicio"
+    }
+
+    private fun statusChip(text: String): TextView {
+        val view = label(text.uppercase(Locale("pt", "BR")), green, 12f, true)
+        view.gravity = Gravity.CENTER
+        view.setPadding(dp(10), 0, dp(10), 0)
+        view.background = rounded(surface, dp(8), border)
+        return view
+    }
+
+    private fun compactMetric(title: String, value: String): View {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(8), dp(8), dp(8), dp(8))
+        box.background = rounded(surface, dp(8), border)
+        box.addView(label(title.uppercase(Locale("pt", "BR")), muted, 10f, true))
+        box.addView(label(value, white, 14f, true))
+        return box
+    }
+
+    private fun spacedRow(row: LinearLayout): View {
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        params.setMargins(0, dp(12), 0, 0)
+        row.layoutParams = params
+        for (index in 0 until row.childCount) {
+            val child = row.getChildAt(index)
+            val childParams = child.layoutParams as LinearLayout.LayoutParams
+            childParams.setMargins(if (index == 0) 0 else dp(8), 0, 0, 0)
+            child.layoutParams = childParams
+        }
+        return row
+    }
+
     private fun metricGrid(metrics: List<Pair<String, String>>): View {
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
@@ -1001,7 +1084,7 @@ class MainActivity : Activity() {
                 val card = card()
                 card.orientation = LinearLayout.VERTICAL
                 card.addView(label(item.first.uppercase(Locale("pt", "BR")), muted, 12f, true))
-                card.addView(label(item.second, white, 22f, true))
+                card.addView(label(item.second, white, 20f, true))
                 row.addView(card, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             }
             box.addView(row)
@@ -1015,7 +1098,7 @@ class MainActivity : Activity() {
     }
 
     private fun heroCard(kicker: String, title: String, subtitle: String): View {
-        val box = card()
+        val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
         box.addView(label(kicker.uppercase(Locale("pt", "BR")), green, 13f, true))
         box.addView(label(title, white, 30f, true))
@@ -1032,7 +1115,7 @@ class MainActivity : Activity() {
         input.setHintTextColor(muted)
         input.textSize = 16f
         input.setPadding(dp(14), 0, dp(14), 0)
-        input.background = rounded(surface2, dp(14), border)
+        input.background = rounded(surface2, dp(8), border)
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54))
         params.setMargins(0, dp(8), 0, 0)
         input.layoutParams = params
@@ -1043,7 +1126,7 @@ class MainActivity : Activity() {
 
     private fun sectionTitle(text: String): TextView {
         val view = label(text.uppercase(Locale("pt", "BR")), green, 14f, true)
-        view.setPadding(0, dp(18), 0, dp(8))
+        view.setPadding(0, dp(20), 0, dp(8))
         return view
     }
 
@@ -1061,7 +1144,7 @@ class MainActivity : Activity() {
         val view = label(text, if (active) bg else white, 14f, true)
         view.gravity = Gravity.CENTER
         view.setPadding(dp(12), 0, dp(12), 0)
-        view.background = rounded(if (active) green else surface, dp(18), border)
+        view.background = rounded(if (active) green else surface, dp(8), if (active) green else border)
         val params = LinearLayout.LayoutParams(dp(width), dp(height))
         params.setMargins(0, 0, dp(10), dp(10))
         view.layoutParams = params
@@ -1074,7 +1157,7 @@ class MainActivity : Activity() {
         button.textSize = 14f
         button.typeface = Typeface.DEFAULT_BOLD
         button.setTextColor(textColor)
-        button.background = rounded(color, dp(16), if (color == green) green else border)
+        button.background = rounded(color, dp(8), if (color == green) green else border)
         button.isAllCaps = false
         return button
     }
@@ -1089,7 +1172,7 @@ class MainActivity : Activity() {
     private fun card(color: Int = surface): LinearLayout {
         val box = LinearLayout(this)
         box.setPadding(dp(16), dp(16), dp(16), dp(16))
-        box.background = rounded(color, dp(22), border)
+        box.background = rounded(color, dp(8), border)
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         params.setMargins(0, dp(8), 0, dp(8))
         box.layoutParams = params

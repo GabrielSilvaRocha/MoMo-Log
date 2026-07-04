@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Camada social de evolução e provas",
-        "Compartilhamento público de relatórios e snapshots de progresso",
+        "Refinar a experiencia visual do app Android pessoal",
+        "Melhorar atalhos, favoritos e fluxo de registro durante o treino",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Native Exercise Catalog",
+        "milestone": "Native Interface Refresh",
         "status": "operational",
-        "release_focus": "Adicionar catalogo nativo de exercicios com execucao animada, descricao e alternativas.",
+        "release_focus": "Atualizar a interface nativa para uso mais bonito, claro e intuitivo mantendo a paleta Mo2 LOG.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,13 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.4.0",
-        "title": "Native Exercise Catalog",
+        "version": "8.6.0",
+        "title": "Native Interface Refresh",
         "highlights": [
-            "A aba Exercicios passa a ter catalogo amplo de academia, filtros por musculo e animacao nativa.",
-            "Cada exercicio mostra descricao de execucao e alternativas do mesmo grupo muscular.",
-            "Build Android atualizado para versionCode 840.",
+            "Header, navegacao, home e cartoes principais foram redesenhados com a mesma paleta verde e escura.",
+            "Inicio agora destaca resumo do dia, atalhos para treino/catalogo/corrida e proximo treino.",
+            "Treino e Catalogo ganharam cartoes de contexto para deixar o uso na academia mais direto.",
+            "Build Android atualizado para versionCode 860.",
             "Exercicios do catalogo podem ser registrados diretamente no historico local.",
         ],
     }
