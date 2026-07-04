@@ -31,7 +31,7 @@ This guide prepares Mo² LOG for a public demo deployment with separate frontend
 
 - GET /api/v1/health should return status=ok.
 - GET /api/v1/ops/status should return status=operational.
-- GET /api/v1/product/release-notes should return version=8.6.0.
+- GET /api/v1/product/release-notes should return version=8.7.0.
 - GET /api/v1/mobile-sync/readiness should return status=designed.
 
 ## Rollback

@@ -152,7 +152,7 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "8.6.0"
+    private val versionName = "8.7.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -321,6 +321,26 @@ class MainActivity : Activity() {
         nextBox.addView(spacedRow(nextActions))
         root.addView(nextBox)
 
+        val favorites = favoriteCatalogExercises()
+        if (favorites.isNotEmpty()) {
+            val favBox = card()
+            favBox.orientation = LinearLayout.VERTICAL
+            favBox.addView(label("ATALHOS FAVORITOS", green, 13f, true))
+            favBox.addView(label("Abra seus exercicios mais usados com um toque.", muted, 15f, false))
+            favorites.take(3).forEach { exercise ->
+                val shortcut = actionButton(exercise.name, surface2, white)
+                shortcut.setOnClickListener {
+                    prefs.edit()
+                        .putString("catalog_muscle", "Todos")
+                        .putString("catalog_selected", exercise.id)
+                        .apply()
+                    switchTab("exercises")
+                }
+                favBox.addView(buttonParams(shortcut))
+            }
+            root.addView(favBox)
+        }
+
         root.addView(metricGrid(listOf(
             Pair("Semana", stats.optInt("week_sets").toString() + " series"),
             Pair("Volume total", stats.optInt("total_volume").toString() + " kg"),
@@ -450,11 +470,12 @@ class MainActivity : Activity() {
         val summary = card(surface3)
         summary.orientation = LinearLayout.VERTICAL
         summary.addView(label("BIBLIOTECA DO TREINO", green, 13f, true))
+        val favoriteIds = favoriteCatalogIds()
         summary.addView(label(catalogItems.size.toString() + " exercicios", white, 25f, true))
-        summary.addView(label("Busque por nome, musculo ou equipamento. Abra um exercicio para ver execucao, cuidados e alternativas.", muted, 15f, false))
+        summary.addView(label(favoriteIds.size.toString() + " favoritos salvos. Busque por nome, musculo ou equipamento.", muted, 15f, false))
         root.addView(summary)
 
-        val muscleOptions = listOf("Todos") + catalogItems.map { it.muscle }.distinct().sorted()
+        val muscleOptions = listOf("Todos", "Favoritos") + catalogItems.map { it.muscle }.distinct().sorted()
         val savedMuscle = prefs.getString("catalog_muscle", "Todos") ?: "Todos"
         val selectedMuscle = if (muscleOptions.contains(savedMuscle)) savedMuscle else "Todos"
         val currentQuery = prefs.getString("catalog_query", "") ?: ""
@@ -497,7 +518,13 @@ class MainActivity : Activity() {
         root.addView(muscleScroll)
 
         val filtered = catalogItems
-            .filter { selectedMuscle == "Todos" || it.muscle == selectedMuscle }
+            .filter {
+                when (selectedMuscle) {
+                    "Todos" -> true
+                    "Favoritos" -> favoriteIds.contains(it.id)
+                    else -> it.muscle == selectedMuscle
+                }
+            }
             .filter { matchesCatalogQuery(it, currentQuery) }
 
         if (filtered.isEmpty()) {
@@ -517,6 +544,10 @@ class MainActivity : Activity() {
         detail.addView(label("MIDIA DE EXECUCAO POR LINK", green, 13f, true))
         detail.addView(label(selected.name, white, 25f, true))
         detail.addView(label(exerciseMeta(selected), muted, 14f, false))
+        val favorite = favoriteIds.contains(selected.id)
+        val favoriteButton = actionButton(if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos", if (favorite) amber else surface2, if (favorite) bg else white)
+        favoriteButton.setOnClickListener { toggleFavorite(selected) }
+        detail.addView(buttonParams(favoriteButton))
 
         val media = RemoteExerciseMediaView(this, selected.links)
         val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(230))
@@ -567,7 +598,7 @@ class MainActivity : Activity() {
                 prefs.edit().putString("catalog_selected", exercise.id).apply()
                 render()
             }
-            item.addView(label(exercise.name, white, 17f, true))
+            item.addView(label((if (favoriteIds.contains(exercise.id)) "[fav] " else "") + exercise.name, white, 17f, true))
             item.addView(label(exerciseMeta(exercise), muted, 13f, false))
             list.addView(item)
         }
@@ -786,24 +817,53 @@ class MainActivity : Activity() {
 
     private fun registerPanel(): View {
         val exercise = currentExercise()
+        val lastSet = lastSetFor(exercise.name)
+        val defaultReps = if ((lastSet?.optInt("reps") ?: 0) > 0) (lastSet?.optInt("reps") ?: 10).toString() else "10"
+        val defaultLoad = lastLoadFor(exercise.name)
+        val defaultRir = if (lastSet?.has("rir") == true && !lastSet.isNull("rir")) lastSet.optInt("rir").toString() else "2"
+        val defaultRpe = if (lastSet?.has("rpe") == true && !lastSet.isNull("rpe")) {
+            val value = lastSet.optDouble("rpe")
+            if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()
+        } else {
+            "8"
+        }
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("REGISTRAR SERIE", green, 13f, true))
         box.addView(label(exercise.name, white, 24f, true))
-        val reps = input("Reps", "10")
-        val load = input("Carga kg", lastLoadFor(exercise.name))
-        val rir = input("RIR", "2")
-        val rpe = input("RPE", "8")
+        if (lastSet != null) box.addView(label("Ultima serie: " + defaultReps + " reps | " + defaultLoad + " kg | RPE " + defaultRpe, muted, 14f, false))
+        val reps = input("Reps", defaultReps)
+        val load = input("Carga kg", defaultLoad)
+        val rir = input("RIR", defaultRir)
+        val rpe = input("RPE", defaultRpe)
         val notes = input("Observacao", "")
         box.addView(reps)
         box.addView(load)
         box.addView(rir)
         box.addView(rpe)
         box.addView(notes)
+
+        val quickRow = LinearLayout(this)
+        quickRow.orientation = LinearLayout.HORIZONTAL
+        val repeat = actionButton("Repetir ultima", surface2, white)
+        repeat.setOnClickListener {
+            hideKeyboard()
+            saveSet(exercise.name, defaultReps, defaultLoad, defaultRir, defaultRpe, "Atalho: repetir ultima", true)
+        }
+        quickRow.addView(repeat, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val addLoad = actionButton("+2,5 kg", surface2, green)
+        addLoad.setOnClickListener {
+            hideKeyboard()
+            val nextLoad = ((defaultLoad.replace(',', '.').toDoubleOrNull() ?: 0.0) + 2.5).toString()
+            saveSet(exercise.name, defaultReps, nextLoad, defaultRir, defaultRpe, "Atalho: progressao de carga", true)
+        }
+        quickRow.addView(addLoad, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(quickRow))
+
         val save = actionButton("Salvar serie", green, bg)
         save.setOnClickListener {
             hideKeyboard()
-            saveSet(exercise.name, reps.textValue(), load.textValue(), rir.textValue(), rpe.textValue(), notes.textValue())
+            saveSet(exercise.name, reps.textValue(), load.textValue(), rir.textValue(), rpe.textValue(), notes.textValue(), true)
         }
         box.addView(buttonParams(save))
         val finish = actionButton("Finalizar treino de hoje", surface2, green)
@@ -815,7 +875,7 @@ class MainActivity : Activity() {
         return box
     }
 
-    private fun saveSet(exercise: String, repsRaw: String, loadRaw: String, rirRaw: String, rpeRaw: String, notes: String) {
+    private fun saveSet(exercise: String, repsRaw: String, loadRaw: String, rirRaw: String, rpeRaw: String, notes: String, autoAdvance: Boolean = false) {
         val reps = repsRaw.toIntOrNull() ?: 0
         val load = loadRaw.replace(',', '.').toDoubleOrNull() ?: 0.0
         val rir = rirRaw.toIntOrNull()
@@ -834,8 +894,13 @@ class MainActivity : Activity() {
             .put("notes", notes.trim())
         val logs = allLogs()
         logs.put(log)
-        prefs.edit().putString("set_logs", logs.toString()).apply()
-        Toast.makeText(this, "Serie salva no celular.", Toast.LENGTH_SHORT).show()
+        val editor = prefs.edit().putString("set_logs", logs.toString())
+        if (autoAdvance && selectedExerciseIndex < currentPlan().exercises.lastIndex) {
+            selectedExerciseIndex += 1
+            editor.putInt("selected_exercise", selectedExerciseIndex)
+        }
+        editor.apply()
+        Toast.makeText(this, if (autoAdvance) "Serie salva. Proximo exercicio pronto." else "Serie salva no celular.", Toast.LENGTH_SHORT).show()
         render()
     }
 
@@ -883,6 +948,42 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
             JSONArray()
         }
+    }
+
+    private fun favoriteCatalogIds(): MutableSet<String> {
+        val ids = mutableSetOf<String>()
+        val array = safeArray("favorite_catalog_ids")
+        for (i in 0 until array.length()) {
+            val id = array.optString(i)
+            if (id.isNotBlank()) ids.add(id)
+        }
+        return ids
+    }
+
+    private fun saveFavoriteCatalogIds(ids: Set<String>) {
+        val array = JSONArray()
+        ids.sorted().forEach { id -> array.put(id) }
+        prefs.edit().putString("favorite_catalog_ids", array.toString()).apply()
+    }
+
+    private fun toggleFavorite(exercise: CatalogExercise) {
+        val ids = favoriteCatalogIds()
+        val added = if (ids.contains(exercise.id)) {
+            ids.remove(exercise.id)
+            false
+        } else {
+            ids.add(exercise.id)
+            true
+        }
+        saveFavoriteCatalogIds(ids)
+        Toast.makeText(this, if (added) "Exercicio favoritado." else "Favorito removido.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun favoriteCatalogExercises(): List<CatalogExercise> {
+        val ids = favoriteCatalogIds()
+        if (ids.isEmpty()) return emptyList()
+        return catalog.filter { ids.contains(it.id) }
     }
 
     private fun todayLogs(): JSONArray {
@@ -972,6 +1073,15 @@ class MainActivity : Activity() {
             }
         }
         return "0"
+    }
+
+    private fun lastSetFor(exercise: String): JSONObject? {
+        val logs = allLogs()
+        for (i in logs.length() - 1 downTo 0) {
+            val item = logs.getJSONObject(i)
+            if (item.optString("exercise") == exercise) return item
+        }
+        return null
     }
 
     private fun currentPlan() = plans[selectedPlanIndex.coerceIn(plans.indices)]

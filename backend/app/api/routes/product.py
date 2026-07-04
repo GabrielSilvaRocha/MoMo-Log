@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Refinar a experiencia visual do app Android pessoal",
-        "Melhorar atalhos, favoritos e fluxo de registro durante o treino",
+        "Evoluir o catalogo com cache de imagens e ocultar midias quebradas",
+        "Adicionar timer de descanso, edicao e desfazer serie no treino",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Native Interface Refresh",
+        "milestone": "Personal Workout UX",
         "status": "operational",
-        "release_focus": "Atualizar a interface nativa para uso mais bonito, claro e intuitivo mantendo a paleta Mo2 LOG.",
+        "release_focus": "Acelerar o uso pessoal na academia com favoritos, atalhos e registro rapido de series.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,13 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.6.0",
-        "title": "Native Interface Refresh",
+        "version": "8.7.0",
+        "title": "Personal Workout UX",
         "highlights": [
-            "Header, navegacao, home e cartoes principais foram redesenhados com a mesma paleta verde e escura.",
-            "Inicio agora destaca resumo do dia, atalhos para treino/catalogo/corrida e proximo treino.",
-            "Treino e Catalogo ganharam cartoes de contexto para deixar o uso na academia mais direto.",
-            "Build Android atualizado para versionCode 860.",
-            "Exercicios do catalogo podem ser registrados diretamente no historico local.",
+            "Catalogo de exercicios agora permite favoritar e filtrar favoritos.",
+            "Inicio exibe atalhos para os exercicios favoritos quando existirem.",
+            "Tela de treino ganhou repetir ultima serie, progressao rapida de carga e avanco automatico.",
+            "Build Android atualizado para versionCode 870.",
         ],
     }

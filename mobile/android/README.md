@@ -55,3 +55,7 @@ A aba Exercicios agora usa o catalogo importado com 324 exercicios e links remot
 ## v8.6.0
 
 Atualizacao visual da interface nativa mantendo a paleta verde/escura: novo header, navegacao com titulo de secao, home com atalhos, cards mais compactos e contexto melhor nas abas Treino e Exercicios.
+
+## v8.7.0
+
+UX pessoal para uso rapido na academia: favoritos no catalogo, atalhos na tela inicial, repetir ultima serie, progressao rapida de carga e avanco automatico para o proximo exercicio.
