@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Transformar a tela Treino em execucao guiada por exercicio",
+        "Adicionar resumo final da sessao com volume, series e exercicios concluidos",
         "Adicionar editor local para alterar treinos A/B/C/D",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Premium Workout Flow",
+        "milestone": "Workout Exercise Media",
         "status": "operational",
-        "release_focus": "Evoluir o treino Android com timer de descanso, edicao/desfazer serie, painel de sessao e cache de midia.",
+        "release_focus": "Mostrar midia de execucao do exercicio selecionado diretamente na aba Treino.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,13 +60,13 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.0.0",
-        "title": "Premium Workout Flow",
+        "version": "9.1.0",
+        "title": "Workout Exercise Media",
         "highlights": [
-            "Treino ganhou painel de sessao com progresso, series do dia e navegacao anterior/proximo.",
-            "Registro de serie inicia timer de descanso automatico e permite iniciar, somar 30s ou parar manualmente.",
-            "Ultima serie do exercicio pode ser editada e a ultima serie salva pode ser desfeita.",
-            "Catalogo salva frames remotos em cache local para abrir midias ja vistas com mais velocidade.",
-            "Build Android atualizado para versionCode 900.",
+            "Aba Treino agora mostra a midia de execucao do exercicio selecionado.",
+            "Matching por aliases conecta exercicios planejados genericos aos itens corretos do catalogo.",
+            "Painel de execucao usa o mesmo cache local de frames remotos do catalogo.",
+            "Botao Abrir no catalogo leva direto ao detalhe completo do exercicio sugerido.",
+            "Build Android atualizado para versionCode 910.",
         ],
     }

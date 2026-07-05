@@ -75,3 +75,7 @@ Correcao de area segura para aparelhos Android edge-to-edge: menu inferior respe
 ## v9.0.0
 
 Treino premium no Android nativo: painel de sessao, timer de descanso automatico, controles para iniciar/+30s/parar, editar ultima serie, desfazer ultima serie e cache local de frames do catalogo.
+
+## v9.1.0
+
+A aba Treino mostra a midia de execucao do exercicio selecionado, usando aliases para conectar o programa A/B/C/D aos itens do catalogo e reaproveitando o cache local de frames.

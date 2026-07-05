@@ -177,7 +177,7 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.0.0"
+    private val versionName = "9.1.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -499,6 +499,7 @@ class MainActivity : Activity() {
         root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Siga o exercicio atual, registre a serie e use o descanso automatico entre blocos."))
         root.addView(workoutProgressPanel())
         root.addView(restTimerPanel())
+        root.addView(selectedExerciseMediaPanel())
         root.addView(sectionTitle("Programa de treinos"))
         root.addView(planSelector())
         root.addView(sectionTitle("Exercicios do treino"))
@@ -574,6 +575,45 @@ class MainActivity : Activity() {
         stop.setOnClickListener { clearRestTimer() }
         row.addView(stop, LinearLayout.LayoutParams(0, dp(50), 1f))
         box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun selectedExerciseMediaPanel(): View {
+        val planned = currentExercise()
+        val matched = catalogMatchForWorkoutExercise(planned.name)
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("EXECUCAO DO EXERCICIO", green, 13f, true))
+        box.addView(label(planned.name, white, 24f, true))
+
+        if (matched == null) {
+            box.addView(label("Ainda nao encontrei uma midia confiavel no catalogo para este item do treino.", muted, 15f, false))
+            box.addView(label("Use a aba Exercicios para buscar uma alternativa quando necessario.", muted, 14f, false))
+            return box
+        }
+
+        box.addView(label("Midia sugerida: " + matched.name, white, 17f, true))
+        box.addView(label(exerciseMeta(matched), muted, 14f, false))
+        box.addView(label(mediaHealthLabel(matched), muted, 13f, false))
+
+        if (matched.links.isNotEmpty()) {
+            val media = RemoteExerciseMediaView(this, matched.links)
+            val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
+            mediaParams.setMargins(0, dp(12), 0, dp(12))
+            box.addView(media, mediaParams)
+        } else {
+            box.addView(label("Este exercicio existe no catalogo, mas ainda nao tem frames remotos.", amber, 14f, true))
+        }
+
+        val open = actionButton("Abrir no catalogo", surface2, green)
+        open.setOnClickListener {
+            prefs.edit()
+                .putString("catalog_muscle", matched.muscle)
+                .putString("catalog_selected", matched.id)
+                .apply()
+            switchTab("exercises")
+        }
+        box.addView(buttonParams(open))
         return box
     }
 
@@ -931,6 +971,81 @@ class MainActivity : Activity() {
             exercise.movement,
         ).joinToString(" "))
         return tokens.all { haystack.contains(it) }
+    }
+
+    private fun catalogMatchForWorkoutExercise(name: String): CatalogExercise? {
+        val hidden = hiddenCatalogIds()
+        val available = catalog.filter { !hidden.contains(it.id) }
+        val aliases = workoutCatalogAliases(name)
+        return bestCatalogMatch(aliases, available.filter { it.links.isNotEmpty() })
+            ?: bestCatalogMatch(aliases, available)
+    }
+
+    private fun bestCatalogMatch(aliases: List<String>, candidates: List<CatalogExercise>): CatalogExercise? {
+        var best: CatalogExercise? = null
+        var bestScore = 0
+        aliases.forEach { alias ->
+            val aliasNorm = normalized(alias)
+            val tokens = aliasNorm.split(" ").filter { it.length > 2 && it !in listOf("com", "para", "sem") }
+            candidates.forEach { candidate ->
+                val nameNorm = normalized(candidate.name)
+                val haystack = normalized(listOf(
+                    candidate.name,
+                    candidate.slug,
+                    candidate.muscle,
+                    candidate.subgroup,
+                    candidate.primary,
+                    candidate.secondary,
+                    candidate.equipment,
+                    candidate.movement,
+                ).joinToString(" "))
+                var score = 0
+                if (nameNorm == aliasNorm) score += 120
+                if (nameNorm.contains(aliasNorm) || aliasNorm.contains(nameNorm)) score += 70
+                score += tokens.count { haystack.contains(it) } * 14
+                if (candidate.links.isNotEmpty()) score += 4
+                if (score > bestScore) {
+                    bestScore = score
+                    best = candidate
+                }
+            }
+        }
+        return best.takeIf { bestScore >= 28 }
+    }
+
+    private fun workoutCatalogAliases(name: String): List<String> {
+        val key = normalized(name)
+        val manual = mapOf(
+            normalized("Supino reto ou maquina peitoral") to listOf("Supino reto na maquina", "Supino reto com barra", "Supino reto com halteres", "Chest press horizontal"),
+            normalized("Supino maquina") to listOf("Supino reto na maquina", "Chest press horizontal", "Supino reto com barra"),
+            normalized("Supino inclinado com halteres") to listOf("Supino inclinado com halteres", "Supino inclinado com barra", "Supino inclinado na maquina"),
+            normalized("Desenvolvimento de ombros") to listOf("Desenvolvimento na maquina", "Desenvolvimento com halteres", "Desenvolvimento militar com barra"),
+            normalized("Elevacao lateral") to listOf("Elevacao lateral com halteres", "Elevacao lateral na maquina", "Elevacao lateral na polia"),
+            normalized("Triceps corda") to listOf("Triceps corda na polia", "Triceps barra V na polia", "Triceps barra reta na polia"),
+            normalized("Prancha") to listOf("Prancha frontal", "Prancha com toque no ombro", "Prancha lateral"),
+            normalized("Puxada frente") to listOf("Puxada frente pegada aberta", "Puxada frente pegada neutra", "Puxada articulada na maquina"),
+            normalized("Puxada ou remada") to listOf("Puxada frente pegada aberta", "Remada baixa com triangulo", "Remada sentado na maquina"),
+            normalized("Remada baixa") to listOf("Remada baixa com triangulo", "Remada baixa com barra reta", "Remada sentado na maquina"),
+            normalized("Remada unilateral") to listOf("Remada unilateral com halter", "Remada baixa unilateral", "Remada serrote"),
+            normalized("Face pull") to listOf("Face pull", "Crucifixo inverso na polia", "Remada alta para posterior de ombro"),
+            normalized("Rosca direta") to listOf("Rosca direta com barra reta", "Rosca direta com barra W", "Rosca direta com halteres"),
+            normalized("Rosca martelo") to listOf("Rosca martelo com halteres", "Rosca martelo na corda", "Rosca martelo cruzada"),
+            normalized("Leg press") to listOf("Leg press 45", "Leg press horizontal", "Leg press vertical"),
+            normalized("Leg press leve") to listOf("Leg press 45", "Leg press horizontal", "Leg press vertical"),
+            normalized("Agachamento livre ou guiado") to listOf("Agachamento livre com barra", "Agachamento no Smith", "Agachamento hack"),
+            normalized("Cadeira extensora") to listOf("Cadeira extensora bilateral", "Cadeira extensora com pausa", "Cadeira extensora unilateral"),
+            normalized("Mesa flexora") to listOf("Mesa flexora", "Cadeira flexora", "Flexora unilateral"),
+            normalized("Stiff") to listOf("Stiff com barra", "Stiff com halteres", "Levantamento terra romeno"),
+            normalized("Panturrilha") to listOf("Panturrilha em pe na maquina", "Panturrilha no leg press", "Panturrilha sentada na maquina"),
+            normalized("Abdominal ou prancha") to listOf("Abdominal crunch no solo", "Prancha frontal", "Abdominal remador"),
+            normalized("Mobilidade final") to listOf("Bird dog", "Dead bug", "Pallof press"),
+        )
+
+        val aliases = mutableListOf<String>()
+        aliases.addAll(manual[key].orEmpty())
+        aliases.add(name)
+        name.split(" ou ", ignoreCase = true).map { it.trim() }.filter { it.length > 3 }.forEach { aliases.add(it) }
+        return aliases.distinctBy { normalized(it) }
     }
 
     private fun exerciseMeta(exercise: CatalogExercise): String {
@@ -1524,7 +1639,7 @@ class MainActivity : Activity() {
     private fun currentSectionSubtitle(): String {
         return when (currentTab) {
             "home" -> "Resumo rapido para abrir o treino certo no menor numero de toques."
-            "workout" -> "Registro guiado com timer de descanso, edicao e desfazer serie."
+            "workout" -> "Registro guiado com timer, midia de execucao, edicao e desfazer serie."
             "running" -> "Corrida de esteira, distancia, velocidade e historico no celular."
             "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
             "exercises" -> "Catalogo completo com busca, midia por link, favoritos e alternativas."
