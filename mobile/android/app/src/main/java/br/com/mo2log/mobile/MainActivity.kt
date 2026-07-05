@@ -27,6 +27,7 @@ import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.text.Normalizer
 import java.util.Date
@@ -118,28 +119,50 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 
     private fun loadFrames() {
         Thread {
-            val loaded = links.mapNotNull { link ->
-                try {
-                    val connection = URL(link).openConnection()
-                    connection.connectTimeout = 7000
-                    connection.readTimeout = 9000
-                    connection.getInputStream().use { input -> BitmapFactory.decodeStream(input) }
-                } catch (_: Exception) {
-                    null
-                }
-            }
+            val loaded = links.mapNotNull { link -> loadFrameWithCache(link) }
+            val cachedCount = loaded.count { it.second }
 
             post {
                 frames.clear()
-                frames.addAll(loaded)
+                frames.addAll(loaded.map { it.first })
                 if (frames.isNotEmpty()) {
                     image.setImageBitmap(frames.first())
-                    status.text = "Fonte: Free Exercise DB"
+                    status.text = when {
+                        cachedCount == frames.size -> "Fonte: cache local"
+                        cachedCount > 0 -> "Fonte: Free Exercise DB + cache"
+                        else -> "Fonte: Free Exercise DB"
+                    }
                 } else {
                     status.text = "Nao foi possivel carregar a midia agora"
                 }
             }
         }.start()
+    }
+
+    private fun loadFrameWithCache(link: String): Pair<Bitmap, Boolean>? {
+        return try {
+            val dir = File(context.cacheDir, "exercise_media")
+            dir.mkdirs()
+            val file = File(dir, Integer.toHexString(link.hashCode()) + ".img")
+            if (file.exists() && file.length() > 0L) {
+                val cached = BitmapFactory.decodeFile(file.absolutePath)
+                if (cached != null) return Pair(cached, true)
+            }
+
+            val connection = URL(link).openConnection()
+            connection.connectTimeout = 7000
+            connection.readTimeout = 9000
+            val bytes = connection.getInputStream().use { input -> input.readBytes() }
+            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            if (decoded != null) {
+                file.writeBytes(bytes)
+                Pair(decoded, false)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     override fun onAttachedToWindow() {
@@ -154,7 +177,7 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "8.9.1"
+    private val versionName = "9.0.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -188,6 +211,18 @@ class MainActivity : Activity() {
     private var currentTab = "home"
     private var selectedPlanIndex = 0
     private var selectedExerciseIndex = 0
+    private val restTimerHandler = Handler(Looper.getMainLooper())
+    private var restTimerText: TextView? = null
+    private val restTimerRunnable = object : Runnable {
+        override fun run() {
+            restTimerText?.let { view ->
+                view.text = restTimerDisplay()
+                if (restTimerRemainingSeconds() > 0L) {
+                    restTimerHandler.postDelayed(this, 1000L)
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -197,7 +232,15 @@ class MainActivity : Activity() {
         render()
     }
 
+    override fun onDestroy() {
+        restTimerHandler.removeCallbacks(restTimerRunnable)
+        super.onDestroy()
+    }
+
     private fun render() {
+        restTimerHandler.removeCallbacks(restTimerRunnable)
+        restTimerText = null
+
         val page = LinearLayout(this)
         page.orientation = LinearLayout.VERTICAL
         page.setBackgroundColor(bg)
@@ -453,12 +496,85 @@ class MainActivity : Activity() {
 
     private fun renderWorkout(root: LinearLayout) {
         val plan = currentPlan()
-        root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Toque no exercicio, confira a meta e registre a serie no painel abaixo."))
+        root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Siga o exercicio atual, registre a serie e use o descanso automatico entre blocos."))
+        root.addView(workoutProgressPanel())
+        root.addView(restTimerPanel())
         root.addView(sectionTitle("Programa de treinos"))
         root.addView(planSelector())
         root.addView(sectionTitle("Exercicios do treino"))
         root.addView(exerciseList())
         root.addView(registerPanel())
+    }
+
+    private fun workoutProgressPanel(): View {
+        val plan = currentPlan()
+        val exercise = currentExercise()
+        val logs = allLogs()
+        var planSetsToday = 0
+        var exerciseSetsToday = 0
+        for (i in 0 until logs.length()) {
+            val item = logs.getJSONObject(i)
+            if (item.optString("day") == dayKey() && item.optString("plan") == plan.title) {
+                planSetsToday += 1
+                if (item.optString("exercise") == exercise.name) exerciseSetsToday += 1
+            }
+        }
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("SESSAO DE HOJE", green, 13f, true))
+        box.addView(label("Exercicio " + (selectedExerciseIndex + 1) + " de " + plan.exercises.size, white, 24f, true))
+        box.addView(label(exercise.name, white, 18f, true))
+        box.addView(label(planSetsToday.toString() + " series no treino hoje | " + exerciseSetsToday + " neste exercicio", muted, 14f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val previous = actionButton("Anterior", surface2, white)
+        previous.setOnClickListener {
+            if (selectedExerciseIndex > 0) {
+                selectedExerciseIndex -= 1
+                prefs.edit().putInt("selected_exercise", selectedExerciseIndex).apply()
+                render()
+            }
+        }
+        row.addView(previous, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val next = actionButton("Proximo", green, bg)
+        next.setOnClickListener {
+            if (selectedExerciseIndex < plan.exercises.lastIndex) {
+                selectedExerciseIndex += 1
+                prefs.edit().putInt("selected_exercise", selectedExerciseIndex).apply()
+                render()
+            }
+        }
+        row.addView(next, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun restTimerPanel(): View {
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        val active = restTimerRemainingSeconds() > 0L
+        box.addView(label("DESCANSO", green, 13f, true))
+        val timer = label(restTimerDisplay(), if (active) amber else white, 32f, true)
+        restTimerText = timer
+        box.addView(timer)
+        box.addView(label(restTimerSubtitle(), muted, 14f, false))
+        if (active) restTimerHandler.post(restTimerRunnable)
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val start = actionButton("Iniciar", green, bg)
+        start.setOnClickListener { startRestTimerForCurrentExercise() }
+        row.addView(start, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val add = actionButton("+30s", surface2, green)
+        add.setOnClickListener { addRestTime(30) }
+        row.addView(add, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val stop = actionButton("Parar", surface2, danger)
+        stop.setOnClickListener { clearRestTimer() }
+        row.addView(stop, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
     }
 
     private fun renderRunning(root: LinearLayout) {
@@ -570,6 +686,10 @@ class MainActivity : Activity() {
         val hiddenIds = hiddenCatalogIds()
         summary.addView(label(catalogItems.size.toString() + " exercicios", white, 25f, true))
         summary.addView(label(favoriteIds.size.toString() + " favoritos | " + hiddenIds.size + " ocultos. Busque por nome, musculo ou equipamento.", muted, 15f, false))
+        summary.addView(label(mediaCacheFileCount().toString() + " frames salvos em cache local para abrir mais rapido.", muted, 14f, false))
+        val clearCache = actionButton("Limpar cache de imagens", surface2, white)
+        clearCache.setOnClickListener { clearMediaCache() }
+        summary.addView(buttonParams(clearCache))
         root.addView(summary)
 
         val muscleOptions = listOf("Todos", "Favoritos", "Ocultos") + catalogItems.map { it.muscle }.distinct().sorted()
@@ -988,6 +1108,25 @@ class MainActivity : Activity() {
             saveSet(exercise.name, reps.textValue(), load.textValue(), rir.textValue(), rpe.textValue(), notes.textValue(), true)
         }
         box.addView(buttonParams(save))
+
+        val editRow = LinearLayout(this)
+        editRow.orientation = LinearLayout.HORIZONTAL
+        val update = actionButton("Editar ultima", surface2, green)
+        update.setOnClickListener {
+            hideKeyboard()
+            val id = lastSet?.optString("id").orEmpty()
+            if (id.isBlank()) {
+                Toast.makeText(this, "Nenhuma serie deste exercicio para editar.", Toast.LENGTH_SHORT).show()
+            } else {
+                updateSet(id, reps.textValue(), load.textValue(), rir.textValue(), rpe.textValue(), notes.textValue())
+            }
+        }
+        editRow.addView(update, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val undo = actionButton("Desfazer ultima", surface2, danger)
+        undo.setOnClickListener { undoLastSet() }
+        editRow.addView(undo, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(editRow))
+
         val finish = actionButton("Finalizar treino de hoje", surface2, green)
         finish.setOnClickListener {
             prefs.edit().putString("last_finished_day", dayKey()).apply()
@@ -1017,12 +1156,64 @@ class MainActivity : Activity() {
         val logs = allLogs()
         logs.put(log)
         val editor = prefs.edit().putString("set_logs", logs.toString())
+        val restSeconds = restSecondsFor(exercise)
+        if (restSeconds > 0) {
+            editor
+                .putLong("rest_timer_end_at", System.currentTimeMillis() + restSeconds * 1000L)
+                .putInt("rest_timer_duration_secs", restSeconds)
+                .putString("rest_timer_exercise", exercise)
+        }
         if (autoAdvance && selectedExerciseIndex < currentPlan().exercises.lastIndex) {
             selectedExerciseIndex += 1
             editor.putInt("selected_exercise", selectedExerciseIndex)
         }
         editor.apply()
-        Toast.makeText(this, if (autoAdvance) "Serie salva. Proximo exercicio pronto." else "Serie salva no celular.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, if (autoAdvance) "Serie salva. Descanso iniciado." else "Serie salva no celular.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun updateSet(id: String, repsRaw: String, loadRaw: String, rirRaw: String, rpeRaw: String, notesRaw: String) {
+        val logs = allLogs()
+        for (i in 0 until logs.length()) {
+            val item = logs.getJSONObject(i)
+            if (item.optString("id") == id) {
+                val notes = notesRaw.ifBlank { item.optString("notes") }
+                item
+                    .put("reps", repsRaw.toIntOrNull() ?: item.optInt("reps"))
+                    .put("load", loadRaw.replace(',', '.').toDoubleOrNull() ?: item.optDouble("load"))
+                    .put("rir", rirRaw.toIntOrNull())
+                    .put("rpe", rpeRaw.replace(',', '.').toDoubleOrNull())
+                    .put("notes", notes.trim())
+                    .put("edited_at", timestamp())
+                logs.put(i, item)
+                prefs.edit().putString("set_logs", logs.toString()).apply()
+                Toast.makeText(this, "Ultima serie atualizada.", Toast.LENGTH_SHORT).show()
+                render()
+                return
+            }
+        }
+        Toast.makeText(this, "Serie nao encontrada para edicao.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun undoLastSet() {
+        val logs = allLogs()
+        if (logs.length() == 0) {
+            Toast.makeText(this, "Nenhuma serie para desfazer.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val removed = logs.getJSONObject(logs.length() - 1)
+        logs.remove(logs.length() - 1)
+        val planIndex = plans.indexOfFirst { it.title == removed.optString("plan") }
+        if (planIndex >= 0) {
+            selectedPlanIndex = planIndex
+            selectedExerciseIndex = plans[planIndex].exercises.indexOfFirst { it.name == removed.optString("exercise") }.coerceAtLeast(0)
+        }
+        prefs.edit()
+            .putString("set_logs", logs.toString())
+            .putInt("selected_plan", selectedPlanIndex)
+            .putInt("selected_exercise", selectedExerciseIndex)
+            .apply()
+        Toast.makeText(this, "Ultima serie desfeita.", Toast.LENGTH_SHORT).show()
         render()
     }
 
@@ -1333,7 +1524,7 @@ class MainActivity : Activity() {
     private fun currentSectionSubtitle(): String {
         return when (currentTab) {
             "home" -> "Resumo rapido para abrir o treino certo no menor numero de toques."
-            "workout" -> "Registro de musculacao com seu plano pessoal e atalhos de serie."
+            "workout" -> "Registro guiado com timer de descanso, edicao e desfazer serie."
             "running" -> "Corrida de esteira, distancia, velocidade e historico no celular."
             "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
             "exercises" -> "Catalogo completo com busca, midia por link, favoritos e alternativas."
@@ -1344,6 +1535,91 @@ class MainActivity : Activity() {
             "profile" -> "Configuracoes locais, exportacao e versao instalada."
             else -> "Resumo rapido para abrir o treino certo no menor numero de toques."
         }
+    }
+
+    private fun startRestTimerForCurrentExercise() {
+        val exercise = currentExercise()
+        startRestTimer(restSecondsFor(exercise.name), exercise.name)
+    }
+
+    private fun startRestTimer(seconds: Int, exercise: String) {
+        if (seconds <= 0) return
+        prefs.edit()
+            .putLong("rest_timer_end_at", System.currentTimeMillis() + seconds * 1000L)
+            .putInt("rest_timer_duration_secs", seconds)
+            .putString("rest_timer_exercise", exercise)
+            .apply()
+        Toast.makeText(this, "Descanso iniciado: " + formatDuration(seconds.toLong()), Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun addRestTime(seconds: Int) {
+        val now = System.currentTimeMillis()
+        val currentEnd = prefs.getLong("rest_timer_end_at", 0L)
+        val base = max(now, currentEnd)
+        prefs.edit()
+            .putLong("rest_timer_end_at", base + seconds * 1000L)
+            .putString("rest_timer_exercise", prefs.getString("rest_timer_exercise", currentExercise().name) ?: currentExercise().name)
+            .apply()
+        Toast.makeText(this, "+30s no descanso.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun clearRestTimer() {
+        prefs.edit()
+            .remove("rest_timer_end_at")
+            .remove("rest_timer_duration_secs")
+            .remove("rest_timer_exercise")
+            .apply()
+        Toast.makeText(this, "Descanso parado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun restTimerRemainingSeconds(): Long {
+        val endAt = prefs.getLong("rest_timer_end_at", 0L)
+        if (endAt <= 0L) return 0L
+        return max(0L, ((endAt - System.currentTimeMillis()) + 999L) / 1000L)
+    }
+
+    private fun restTimerDisplay(): String {
+        val remaining = restTimerRemainingSeconds()
+        return if (remaining <= 0L) "Pronto" else formatDuration(remaining)
+    }
+
+    private fun restTimerSubtitle(): String {
+        val exercise = prefs.getString("rest_timer_exercise", currentExercise().name) ?: currentExercise().name
+        val duration = prefs.getInt("rest_timer_duration_secs", restSecondsFor(currentExercise().name))
+        return if (restTimerRemainingSeconds() > 0L) {
+            "Descanso de " + formatDuration(duration.toLong()) + " para " + exercise + "."
+        } else {
+            "Ao salvar uma serie, o descanso do exercicio atual inicia automaticamente."
+        }
+    }
+
+    private fun restSecondsFor(exerciseName: String): Int {
+        val rest = currentPlan().exercises.firstOrNull { it.name == exerciseName }?.rest ?: currentExercise().rest
+        val value = Regex("(\\d+)").find(rest)?.value?.toIntOrNull() ?: return 90
+        return if (rest.lowercase(Locale.US).contains("min")) value * 60 else value
+    }
+
+    private fun formatDuration(seconds: Long): String {
+        val mins = seconds / 60L
+        val secs = seconds % 60L
+        return mins.toString().padStart(2, '0') + ":" + secs.toString().padStart(2, '0')
+    }
+
+    private fun mediaCacheDir(): File = File(cacheDir, "exercise_media")
+
+    private fun mediaCacheFileCount(): Int {
+        return mediaCacheDir().listFiles()?.count { it.isFile && it.length() > 0L } ?: 0
+    }
+
+    private fun clearMediaCache() {
+        mediaCacheDir().listFiles()?.forEach { file ->
+            if (file.isFile) file.delete()
+        }
+        Toast.makeText(this, "Cache de imagens limpo.", Toast.LENGTH_SHORT).show()
+        render()
     }
 
     private fun statusChip(text: String): TextView {

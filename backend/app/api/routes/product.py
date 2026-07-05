@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar timer de descanso, edicao e desfazer serie no treino",
-        "Adicionar cache local de imagens ja abertas no catalogo",
+        "Transformar a tela Treino em execucao guiada por exercicio",
+        "Adicionar editor local para alterar treinos A/B/C/D",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Android Navigation Safe Area",
+        "milestone": "Premium Workout Flow",
         "status": "operational",
-        "release_focus": "Corrigir a area segura do menu inferior para nao sobrepor os botoes de navegacao do Android.",
+        "release_focus": "Evoluir o treino Android com timer de descanso, edicao/desfazer serie, painel de sessao e cache de midia.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,13 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.9.1",
-        "title": "Android Navigation Safe Area",
+        "version": "9.0.0",
+        "title": "Premium Workout Flow",
         "highlights": [
-            "Menu inferior agora respeita os insets da barra de navegacao do Android.",
-            "Conteudo superior tambem recebe margem segura para status bar em aparelhos edge-to-edge.",
-            "Botoes Home, Treino, Corrida e Mais ficam acima dos botoes virtuais/gestos do sistema.",
-            "Build Android atualizado para versionCode 891.",
+            "Treino ganhou painel de sessao com progresso, series do dia e navegacao anterior/proximo.",
+            "Registro de serie inicia timer de descanso automatico e permite iniciar, somar 30s ou parar manualmente.",
+            "Ultima serie do exercicio pode ser editada e a ultima serie salva pode ser desfeita.",
+            "Catalogo salva frames remotos em cache local para abrir midias ja vistas com mais velocidade.",
+            "Build Android atualizado para versionCode 900.",
         ],
     }

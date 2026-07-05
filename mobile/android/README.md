@@ -71,3 +71,7 @@ Redesign completo da navegacao nativa: menu inferior fixo com Home, Treino, Corr
 ## v8.9.1
 
 Correcao de area segura para aparelhos Android edge-to-edge: menu inferior respeita a barra de navegacao do sistema e nao fica mais embaixo dos botoes virtuais/gestos.
+
+## v9.0.0
+
+Treino premium no Android nativo: painel de sessao, timer de descanso automatico, controles para iniciar/+30s/parar, editar ultima serie, desfazer ultima serie e cache local de frames do catalogo.

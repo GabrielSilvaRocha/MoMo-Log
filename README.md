@@ -14,6 +14,12 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v8.9.0 - Redesign Android com menu inferior fixo e central Mais.
 - v8.9.1 - Correcao da area segura do menu inferior no Android.
 - v9.0.0 - Treino premium com timer, editar/desfazer serie, descanso e cache de imagens.
+- v9.1.0 - Treino guiado por exercicio com resumo final da sessao.
+- v9.2.0 - Editor local dos treinos A/B/C/D.
+- v9.3.0 - Historico avancado com filtros e evolucao por exercicio.
+- v9.4.0 - Corrida melhorada com metas e progresso de esteira.
+- v9.5.0 - Backup pessoal por exportacao/importacao JSON.
+- v10.0.0 - Versao pessoal madura para uso continuo na academia.
 
 ## v8.1.2 - Android Offline Auto Login
 
@@ -276,3 +282,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Botoes Home, Treino, Corrida e Mais ficam acima dos botoes virtuais ou area de gestos do sistema.
 - Conteudo superior tambem recebe margem segura para evitar sobreposicao com a status bar.
 - O app Android passa para versionCode 891 / versionName 8.9.1.
+
+## v9.0.0 - Treino premium
+
+- Tela Treino ganha painel de sessao com progresso do exercicio atual, series do dia e botoes Anterior/Proximo.
+- Registro de serie inicia automaticamente um timer de descanso com base no descanso planejado do exercicio.
+- Timer permite iniciar manualmente, somar +30s e parar quando necessario.
+- Painel de registro permite editar a ultima serie do exercicio e desfazer a ultima serie salva.
+- Catalogo salva frames remotos em cache local para acelerar midias ja abertas.
+- Aba Exercicios mostra quantos frames estao em cache e permite limpar o cache de imagens.
+- O app Android passa para versionCode 900 / versionName 9.0.0.
