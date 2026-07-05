@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar cache local de imagens ja abertas no catalogo",
         "Adicionar timer de descanso, edicao e desfazer serie no treino",
+        "Adicionar cache local de imagens ja abertas no catalogo",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Advanced Exercise Catalog",
+        "milestone": "Bottom Navigation Redesign",
         "status": "operational",
-        "release_focus": "Melhorar o catalogo pessoal com ocultos, substitutos preferidos e visibilidade da midia remota.",
+        "release_focus": "Redesenhar a navegacao Android com menu inferior fixo e central Mais para ferramentas secundarias.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.8.0",
-        "title": "Advanced Exercise Catalog",
+        "version": "8.9.0",
+        "title": "Bottom Navigation Redesign",
         "highlights": [
-            "Catalogo agora permite ocultar exercicios ou midias problematicas e restaurar pela aba Ocultos.",
-            "Alternativas podem ser marcadas como substituto preferido por exercicio.",
-            "Detalhe do exercicio exibe status resumido da midia remota.",
-            "Build Android atualizado para versionCode 880.",
+            "App Android ganhou menu inferior fixo com Home, Treino, Corrida e Mais.",
+            "Historico, Stats, Exercicios, Metas, Coach e Perfil foram organizados dentro da central Mais.",
+            "Cabecalho de cada tela ganhou contexto curto para orientar o uso durante o treino.",
+            "Build Android atualizado para versionCode 890.",
         ],
     }

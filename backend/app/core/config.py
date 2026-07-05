@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Mo² LOG"
     app_env: str = "development"
-    app_version: str = "8.8.0"
+    app_version: str = "8.9.0"
     database_url: str
     frontend_origin: str = "http://localhost:5173"
     secret_key: str = "development-only-not-a-secret"

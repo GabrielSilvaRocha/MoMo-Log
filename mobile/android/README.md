@@ -63,3 +63,7 @@ UX pessoal para uso rapido na academia: favoritos no catalogo, atalhos na tela i
 ## v8.8.0
 
 Catalogo avancado para uso pessoal: ocultar/restaurar exercicios com midia problematica, filtro Ocultos, substituto preferido por exercicio e status resumido da midia remota.
+
+## v8.9.0
+
+Redesign completo da navegacao nativa: menu inferior fixo com Home, Treino, Corrida e Mais, central Mais para telas secundarias e cabecalhos contextuais mantendo a paleta verde/escura.

@@ -152,7 +152,7 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "8.8.0"
+    private val versionName = "8.9.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -167,17 +167,21 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("mo2log_native", Context.MODE_PRIVATE) }
     private val plans by lazy { buildWorkoutPlans() }
     private val catalog by lazy { loadExerciseCatalog() }
-    private val navItems = listOf(
-        NavItem("home", "Inicio"),
+    private val primaryNavItems = listOf(
+        NavItem("home", "Home"),
         NavItem("workout", "Treino"),
         NavItem("running", "Corrida"),
+        NavItem("more", "Mais"),
+    )
+    private val secondaryNavItems = listOf(
+        NavItem("exercises", "Exercicios"),
         NavItem("history", "Historico"),
         NavItem("stats", "Stats"),
-        NavItem("exercises", "Exercicios"),
         NavItem("goals", "Metas"),
         NavItem("coach", "Coach"),
         NavItem("profile", "Perfil"),
     )
+    private val navItems = primaryNavItems + secondaryNavItems
 
     private var currentTab = "home"
     private var selectedPlanIndex = 0
@@ -192,21 +196,26 @@ class MainActivity : Activity() {
     }
 
     private fun render() {
+        val page = LinearLayout(this)
+        page.orientation = LinearLayout.VERTICAL
+        page.setBackgroundColor(bg)
+
         val scroll = ScrollView(this)
         scroll.setBackgroundColor(bg)
 
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(18), dp(18), dp(18), dp(28))
+        root.setPadding(dp(18), dp(18), dp(18), dp(18))
         scroll.addView(root)
 
         root.addView(header())
-        root.addView(navBar())
+        root.addView(pageIntro())
 
         when (currentTab) {
             "home" -> renderHome(root)
             "workout" -> renderWorkout(root)
             "running" -> renderRunning(root)
+            "more" -> renderMore(root)
             "history" -> renderHistory(root)
             "stats" -> renderStats(root)
             "exercises" -> renderExercises(root)
@@ -216,7 +225,9 @@ class MainActivity : Activity() {
             else -> renderHome(root)
         }
 
-        setContentView(scroll)
+        page.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        page.addView(bottomNav())
+        setContentView(page)
     }
 
     private fun header(): View {
@@ -258,30 +269,91 @@ class MainActivity : Activity() {
         return box
     }
 
-    private fun navBar(): View {
+    private fun pageIntro(): View {
         val wrap = LinearLayout(this)
         wrap.orientation = LinearLayout.VERTICAL
-        val title = label(currentSectionTitle(), white, 19f, true)
-        title.setPadding(0, dp(8), 0, dp(6))
-        wrap.addView(title)
+        wrap.setPadding(0, dp(18), 0, dp(6))
 
-        val scroll = HorizontalScrollView(this)
-        scroll.isHorizontalScrollBarEnabled = false
+        val title = label(currentSectionTitle(), white, 26f, true)
+        wrap.addView(title)
+        wrap.addView(label(currentSectionSubtitle(), muted, 14f, false))
+        return wrap
+    }
+
+    private fun bottomNav(): View {
+        val wrap = LinearLayout(this)
+        wrap.orientation = LinearLayout.VERTICAL
+        wrap.setPadding(dp(10), dp(8), dp(10), dp(10))
+        wrap.background = rounded(surface3, dp(8), border)
+
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
-        navItems.forEach { item ->
-            val active = currentTab == item.id
-            val button = pill(item.title, active, 124, 46)
-            button.setOnClickListener {
-                currentTab = item.id
-                prefs.edit().putString("current_tab", currentTab).apply()
-                render()
-            }
-            row.addView(button)
+        primaryNavItems.forEach { item ->
+            val active = isBottomNavActive(item.id)
+            val button = label(item.title, if (active) bg else white, 13f, true)
+            button.gravity = Gravity.CENTER
+            button.setPadding(dp(6), 0, dp(6), 0)
+            button.background = rounded(if (active) green else surface, dp(8), if (active) green else border)
+            button.setOnClickListener { switchTab(item.id) }
+            val params = LinearLayout.LayoutParams(0, dp(54), 1f)
+            params.setMargins(dp(4), 0, dp(4), 0)
+            row.addView(button, params)
         }
-        scroll.addView(row)
-        wrap.addView(scroll)
+        wrap.addView(row)
         return wrap
+    }
+
+    private fun isBottomNavActive(id: String): Boolean {
+        return if (id == "more") {
+            currentTab == "more" || secondaryNavItems.any { it.id == currentTab }
+        } else {
+            currentTab == id
+        }
+    }
+
+    private fun renderMore(root: LinearLayout) {
+        val hub = card(surface3)
+        hub.orientation = LinearLayout.VERTICAL
+        hub.addView(label("CENTRAL DO APP", green, 13f, true))
+        hub.addView(label("Ferramentas extras em um lugar so", white, 25f, true))
+        hub.addView(label("Historico, estatisticas, catalogo, metas, coach e perfil ficam aqui para deixar o uso diario mais direto.", muted, 15f, false))
+        root.addView(hub)
+
+        val shortcuts = listOf(
+            Triple("exercises", "Exercicios", "Catalogo com midia, favoritos e alternativas."),
+            Triple("history", "Historico", "Series e corridas registradas no celular."),
+            Triple("stats", "Stats", "Volume, cargas, semana e melhores marcas."),
+            Triple("goals", "Metas", "Objetivos semanais de treino e corrida."),
+            Triple("coach", "Coach", "Insights simples para ajustar a rotina."),
+            Triple("profile", "Perfil", "Dados locais, versao e exportacao."),
+        )
+
+        shortcuts.chunked(2).forEach { rowItems ->
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            rowItems.forEachIndexed { index, item ->
+                val shortcut = moreShortcut(item.first, item.second, item.third)
+                val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                params.setMargins(if (index == 0) 0 else dp(8), dp(8), 0, 0)
+                row.addView(shortcut, params)
+            }
+            if (rowItems.size == 1) {
+                val spacer = View(this)
+                row.addView(spacer, LinearLayout.LayoutParams(0, 1, 1f))
+            }
+            root.addView(row)
+        }
+        root.addView(heroCard("Proxima tela", "Treino sempre a um toque", "Use a barra inferior para voltar rapido ao treino ou registrar corrida sem atravessar menus."))
+    }
+
+    private fun moreShortcut(id: String, title: String, subtitle: String): View {
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.minimumHeight = dp(116)
+        box.setOnClickListener { switchTab(id) }
+        box.addView(label(title, white, 18f, true))
+        box.addView(label(subtitle, muted, 13f, false))
+        return box
     }
 
     private fun renderHome(root: LinearLayout) {
@@ -1232,6 +1304,22 @@ class MainActivity : Activity() {
 
     private fun currentSectionTitle(): String {
         return navItems.firstOrNull { it.id == currentTab }?.title ?: "Inicio"
+    }
+
+    private fun currentSectionSubtitle(): String {
+        return when (currentTab) {
+            "home" -> "Resumo rapido para abrir o treino certo no menor numero de toques."
+            "workout" -> "Registro de musculacao com seu plano pessoal e atalhos de serie."
+            "running" -> "Corrida de esteira, distancia, velocidade e historico no celular."
+            "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
+            "exercises" -> "Catalogo completo com busca, midia por link, favoritos e alternativas."
+            "history" -> "Linha do tempo dos registros feitos no app."
+            "stats" -> "Indicadores de volume, frequencia e melhores cargas."
+            "goals" -> "Metas semanais para manter treino e corrida em movimento."
+            "coach" -> "Leitura simples do seu momento para ajustar a proxima sessao."
+            "profile" -> "Configuracoes locais, exportacao e versao instalada."
+            else -> "Resumo rapido para abrir o treino certo no menor numero de toques."
+        }
     }
 
     private fun statusChip(text: String): TextView {
