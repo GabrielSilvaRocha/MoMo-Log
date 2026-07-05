@@ -67,3 +67,7 @@ Catalogo avancado para uso pessoal: ocultar/restaurar exercicios com midia probl
 ## v8.9.0
 
 Redesign completo da navegacao nativa: menu inferior fixo com Home, Treino, Corrida e Mais, central Mais para telas secundarias e cabecalhos contextuais mantendo a paleta verde/escura.
+
+## v8.9.1
+
+Correcao de area segura para aparelhos Android edge-to-edge: menu inferior respeita a barra de navegacao do sistema e nao fica mais embaixo dos botoes virtuais/gestos.

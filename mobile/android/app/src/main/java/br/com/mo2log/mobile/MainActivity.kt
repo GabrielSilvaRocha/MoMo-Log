@@ -9,11 +9,13 @@ import android.graphics.Typeface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
@@ -152,7 +154,7 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "8.9.0"
+    private val versionName = "8.9.1"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -226,7 +228,9 @@ class MainActivity : Activity() {
         }
 
         page.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        page.addView(bottomNav())
+        val navigation = bottomNav()
+        page.addView(navigation)
+        applySystemBarInsets(page, root, navigation)
         setContentView(page)
     }
 
@@ -301,6 +305,26 @@ class MainActivity : Activity() {
         }
         wrap.addView(row)
         return wrap
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applySystemBarInsets(page: View, content: LinearLayout, navigation: View) {
+        page.setOnApplyWindowInsetsListener { _, insets ->
+            val topInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                insets.getInsets(WindowInsets.Type.statusBars()).top
+            } else {
+                insets.systemWindowInsetTop
+            }
+            val bottomInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            } else {
+                insets.systemWindowInsetBottom
+            }
+            content.setPadding(dp(18), dp(18) + topInset, dp(18), dp(18))
+            navigation.setPadding(dp(10), dp(8), dp(10), dp(10) + bottomInset)
+            insets
+        }
+        page.requestApplyInsets()
     }
 
     private fun isBottomNavActive(id: String): Boolean {

@@ -11,8 +11,8 @@ android {
         applicationId "br.com.mo2log.mobile"
         minSdk 26
         targetSdk 35
-        versionCode 890
-        versionName "8.9.0"
+        versionCode 891
+        versionName "8.9.1"
     }
 
     compileOptions {

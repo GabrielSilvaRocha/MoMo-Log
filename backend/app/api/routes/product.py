@@ -48,9 +48,9 @@ def get_mvp_status() -> dict:
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Bottom Navigation Redesign",
+        "milestone": "Android Navigation Safe Area",
         "status": "operational",
-        "release_focus": "Redesenhar a navegacao Android com menu inferior fixo e central Mais para ferramentas secundarias.",
+        "release_focus": "Corrigir a area segura do menu inferior para nao sobrepor os botoes de navegacao do Android.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,12 +60,12 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "8.9.0",
-        "title": "Bottom Navigation Redesign",
+        "version": "8.9.1",
+        "title": "Android Navigation Safe Area",
         "highlights": [
-            "App Android ganhou menu inferior fixo com Home, Treino, Corrida e Mais.",
-            "Historico, Stats, Exercicios, Metas, Coach e Perfil foram organizados dentro da central Mais.",
-            "Cabecalho de cada tela ganhou contexto curto para orientar o uso durante o treino.",
-            "Build Android atualizado para versionCode 890.",
+            "Menu inferior agora respeita os insets da barra de navegacao do Android.",
+            "Conteudo superior tambem recebe margem segura para status bar em aparelhos edge-to-edge.",
+            "Botoes Home, Treino, Corrida e Mais ficam acima dos botoes virtuais/gestos do sistema.",
+            "Build Android atualizado para versionCode 891.",
         ],
     }
