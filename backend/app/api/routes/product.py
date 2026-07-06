@@ -42,15 +42,15 @@ def get_mvp_status() -> dict:
 
     next_priorities = [
         "Adicionar resumo final da sessao com volume, series e exercicios concluidos",
-        "Adicionar editor local para alterar treinos A/B/C/D",
+        "Adicionar editor local para alterar o plano pessoal no celular",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Workout Exercise Media",
+        "milestone": "Personal Hybrid Training Plan",
         "status": "operational",
-        "release_focus": "Mostrar midia de execucao do exercicio selecionado diretamente na aba Treino.",
+        "release_focus": "Atualizar o Android com plano pessoal noturno: musculacao 3x/semana e corrida para prova de 5 km.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,13 +60,13 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.1.0",
-        "title": "Workout Exercise Media",
+        "version": "9.2.0",
+        "title": "Personal Hybrid Training Plan",
         "highlights": [
-            "Aba Treino agora mostra a midia de execucao do exercicio selecionado.",
-            "Matching por aliases conecta exercicios planejados genericos aos itens corretos do catalogo.",
-            "Painel de execucao usa o mesmo cache local de frames remotos do catalogo.",
-            "Botao Abrir no catalogo leva direto ao detalhe completo do exercicio sugerido.",
-            "Build Android atualizado para versionCode 910.",
+            "Programa de musculacao agora segue 3 dias semanais: terca, quinta e sabado.",
+            "Segunda fica dedicada ao treino forte de corrida para 5 km, sem musculacao.",
+            "Aba Corrida mostra a estrutura semanal com tiros, corrida leve, ritmo e longo leve.",
+            "Home ganhou card do plano hibrido semanal para orientar a rotina noturna.",
+            "Build Android atualizado para versionCode 920.",
         ],
     }

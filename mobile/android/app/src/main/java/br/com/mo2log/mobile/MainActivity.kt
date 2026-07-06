@@ -177,7 +177,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.1.0"
+    private val versionName = "9.2.0"
+    private val trainingPlanVersion = "9.2.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -227,6 +228,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         currentTab = prefs.getString("current_tab", "home") ?: "home"
+        syncTrainingPlanVersion()
         selectedPlanIndex = prefs.getInt("selected_plan", todayPlanIndex())
         selectedExerciseIndex = prefs.getInt("selected_exercise", 0)
         render()
@@ -235,6 +237,17 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         restTimerHandler.removeCallbacks(restTimerRunnable)
         super.onDestroy()
+    }
+
+    private fun syncTrainingPlanVersion() {
+        if (prefs.getString("training_plan_version", "") == trainingPlanVersion) return
+        val editor = prefs.edit()
+            .putString("training_plan_version", trainingPlanVersion)
+            .putInt("selected_plan", todayPlanIndex())
+            .putInt("selected_exercise", 0)
+        if (!prefs.contains("run_distance")) editor.putString("run_distance", "5.0")
+        if (!prefs.contains("run_speed")) editor.putString("run_speed", "8.0")
+        editor.apply()
     }
 
     private fun render() {
@@ -460,6 +473,8 @@ class MainActivity : Activity() {
         nextBox.addView(spacedRow(nextActions))
         root.addView(nextBox)
 
+        root.addView(weeklyHybridPlanPanel())
+
         val favorites = favoriteCatalogExercises()
         if (favorites.isNotEmpty()) {
             val favBox = card()
@@ -493,6 +508,43 @@ class MainActivity : Activity() {
         localInsights().forEach { insight -> insightBox.addView(label("- " + insight, white, 15f, false)) }
         root.addView(insightBox)
     }
+
+    private fun weeklyHybridPlanPanel(): View {
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("PLANO HIBRIDO DA SEMANA", green, 13f, true))
+        box.addView(label("Musculacao 3x/semana + corrida para 5 km", white, 22f, true))
+        hybridWeekLines().forEach { line -> box.addView(label(line, white, 14f, false)) }
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val workout = actionButton("Treino", green, bg)
+        workout.setOnClickListener { switchTab("workout") }
+        row.addView(workout, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val running = actionButton("Corrida 5 km", surface2, white)
+        running.setOnClickListener { switchTab("running") }
+        row.addView(running, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun hybridWeekLines(): List<String> = listOf(
+        "Segunda: corrida forte 5 km, sem musculacao.",
+        "Terca: Treino A + corrida leve 15-25 min.",
+        "Quarta: descanso ou mobilidade.",
+        "Quinta: Treino B pernas/core + corrida leve 10-15 min.",
+        "Sexta: descanso.",
+        "Sabado: Treino C costas/biceps + corrida ritmo.",
+        "Domingo: corrida longa leve 35-50 min.",
+    )
+
+    private fun runningWeekLines(): List<String> = listOf(
+        "Segunda: 10 min leve + 6x400 m forte + 8-10 min leve.",
+        "Terca: depois do Treino A, 15-25 min bem confortavel.",
+        "Quinta: depois de pernas, 10-15 min leve para soltar.",
+        "Sabado: 10 min leve + 15-20 min ritmo RPE 7 + 5 min leve.",
+        "Domingo: 35-50 min leve para construir base aerobica.",
+        "Quarta e sexta: descanso, mobilidade ou caminhada leve.",
+    )
 
     private fun renderWorkout(root: LinearLayout) {
         val plan = currentPlan()
@@ -621,8 +673,8 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RUNNING COACH", green, 13f, true))
-        box.addView(label("Plano de esteira 5 km", white, 26f, true))
-        box.addView(label("Calcula tempo por velocidade e salva sessoes de corrida localmente.", muted, 15f, false))
+        box.addView(label("Plano 5 km noturno", white, 26f, true))
+        box.addView(label("Segunda e o treino forte de corrida. Nos dias com musculacao, a corrida vem depois e respeita a fadiga.", muted, 15f, false))
 
         val speed = input("Velocidade km/h", prefs.getString("run_speed", "8.0") ?: "8.0")
         val distance = input("Distancia km", prefs.getString("run_distance", "5.0") ?: "5.0")
@@ -646,12 +698,19 @@ class MainActivity : Activity() {
 
         val plan = card()
         plan.orientation = LinearLayout.VERTICAL
-        plan.addView(label("ESTRUTURA SUGERIDA", green, 13f, true))
-        plan.addView(label("1. Aquecimento: 5 min leve", white, 15f, false))
-        plan.addView(label("2. Bloco principal: mantenha ritmo constante", white, 15f, false))
-        plan.addView(label("3. Final: 3 min desacelerando", white, 15f, false))
+        plan.addView(label("PLANO SEMANAL PARA 5 KM", green, 13f, true))
+        runningWeekLines().forEach { line -> plan.addView(label(line, white, 15f, false)) }
         plan.addView(label("Tempo estimado: " + estimatedRunTime(distance.textValue(), speed.textValue()), amber, 16f, true))
         root.addView(plan)
+
+        val progression = card()
+        progression.orientation = LinearLayout.VERTICAL
+        progression.addView(label("PROGRESSAO DE 6 SEMANAS", green, 13f, true))
+        progression.addView(label("Semanas 1-2: 6x400 m na segunda, 15 min ritmo no sabado, 35-40 min leve no domingo.", white, 14f, false))
+        progression.addView(label("Semanas 3-4: 8x400 m ou 5x600 m, 20 min ritmo, 40-45 min leve.", white, 14f, false))
+        progression.addView(label("Semanas 5-6: 4x800 m ou 3x1 km, 20-25 min ritmo, 45-50 min leve.", white, 14f, false))
+        progression.addView(label("Semana de prova: reduza volume, mantenha poucos tiros curtos e priorize descanso.", muted, 14f, false))
+        root.addView(progression)
 
         val history = card()
         history.orientation = LinearLayout.VERTICAL
@@ -1571,24 +1630,16 @@ class MainActivity : Activity() {
     private fun currentExercise() = currentPlan().exercises[selectedExerciseIndex.coerceIn(currentPlan().exercises.indices)]
 
     private fun buildWorkoutPlans(): List<WorkoutPlan> = listOf(
-        WorkoutPlan("a", "Treino A", "Peito/Ombro/Triceps", listOf(
-            ExercisePlan("Supino reto ou maquina peitoral", "4 x 8-10", "90s", "Priorize controle e amplitude."),
-            ExercisePlan("Supino inclinado com halteres", "3 x 10", "90s", "Suba carga quando fechar reps."),
+        WorkoutPlan("a", "Treino A", "Terca - Peito/Ombro/Triceps + corrida leve", listOf(
+            ExercisePlan("Supino reto ou maquina peitoral", "4 x 8-10", "90s", "Controle e amplitude. Depois faca 15-25 min de corrida leve."),
+            ExercisePlan("Supino inclinado com halteres", "3 x 10", "90s", "Suba carga quando fechar reps com tecnica limpa."),
             ExercisePlan("Desenvolvimento de ombros", "3 x 8-10", "90s", "Evite compensar com lombar."),
             ExercisePlan("Elevacao lateral", "3 x 12-15", "60s", "Cadencia limpa, sem embalo."),
             ExercisePlan("Triceps corda", "3 x 10-12", "60s", "Trave cotovelos perto do corpo."),
             ExercisePlan("Prancha", "3 x 45s", "45s", "Respiracao constante."),
         )),
-        WorkoutPlan("b", "Treino B", "Costas/Biceps", listOf(
-            ExercisePlan("Puxada frente", "4 x 8-10", "90s", "Puxe com cotovelos, nao com as maos."),
-            ExercisePlan("Remada baixa", "4 x 10", "90s", "Pausa curta na contracao."),
-            ExercisePlan("Remada unilateral", "3 x 10 cada", "75s", "Mantenha tronco firme."),
-            ExercisePlan("Face pull", "3 x 12-15", "60s", "Foco em deltoide posterior."),
-            ExercisePlan("Rosca direta", "3 x 8-10", "60s", "Controle na descida."),
-            ExercisePlan("Rosca martelo", "3 x 10-12", "60s", "Punho neutro."),
-        )),
-        WorkoutPlan("c", "Treino C", "Pernas/Core", listOf(
-            ExercisePlan("Leg press", "4 x 10", "120s", "Amplitude segura e constante."),
+        WorkoutPlan("b", "Treino B", "Quinta - Pernas/Core + corrida curta", listOf(
+            ExercisePlan("Leg press", "4 x 10", "120s", "Amplitude segura e constante. Depois faca so 10-15 min leve."),
             ExercisePlan("Agachamento livre ou guiado", "3 x 8", "120s", "Priorize tecnica antes de carga."),
             ExercisePlan("Cadeira extensora", "3 x 12", "75s", "Segure um segundo no topo."),
             ExercisePlan("Mesa flexora", "3 x 10-12", "75s", "Controle total na volta."),
@@ -1596,26 +1647,26 @@ class MainActivity : Activity() {
             ExercisePlan("Panturrilha", "4 x 12-15", "45s", "Pausa no alongamento."),
             ExercisePlan("Abdominal ou prancha", "3 series", "45s", "Escolha a variacao do dia."),
         )),
-        WorkoutPlan("d", "Treino D", "Full body leve", listOf(
-            ExercisePlan("Esteira inclinada", "10-15 min", "livre", "Aquecimento progressivo."),
-            ExercisePlan("Supino maquina", "3 x 12", "75s", "Carga moderada."),
-            ExercisePlan("Puxada ou remada", "3 x 12", "75s", "Movimento limpo."),
-            ExercisePlan("Leg press leve", "3 x 12", "90s", "Sem buscar falha."),
-            ExercisePlan("Elevacao lateral", "2 x 15", "45s", "Bombeamento."),
-            ExercisePlan("Mobilidade final", "5 min", "livre", "Quadril, ombro e respiracao."),
+        WorkoutPlan("c", "Treino C", "Sabado - Costas/Biceps + corrida ritmo", listOf(
+            ExercisePlan("Puxada frente", "4 x 8-10", "90s", "Puxe com cotovelos, nao com as maos."),
+            ExercisePlan("Remada baixa", "4 x 10", "90s", "Pausa curta na contracao."),
+            ExercisePlan("Remada unilateral", "3 x 10 cada", "75s", "Mantenha tronco firme."),
+            ExercisePlan("Face pull", "3 x 12-15", "60s", "Foco em deltoide posterior."),
+            ExercisePlan("Rosca direta", "3 x 8-10", "60s", "Controle na descida."),
+            ExercisePlan("Rosca martelo", "3 x 10-12", "60s", "Punho neutro."),
         )),
     )
 
     private fun todayPlanIndex(): Int {
         val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
         return when (day) {
+            2 -> 0
+            4 -> 1
+            6 -> 2
             1 -> 0
-            2 -> 1
-            3 -> 2
-            4 -> 0
-            5 -> 1
-            6 -> 3
-            else -> 2
+            3 -> 1
+            5 -> 2
+            else -> 0
         }
     }
 

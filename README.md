@@ -15,10 +15,11 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v8.9.1 - Correcao da area segura do menu inferior no Android.
 - v9.0.0 - Treino premium com timer, editar/desfazer serie, descanso e cache de imagens.
 - v9.1.0 - Midia de execucao do exercicio selecionado dentro da aba Treino.
-- v9.2.0 - Editor local dos treinos A/B/C/D.
-- v9.3.0 - Historico avancado com filtros e evolucao por exercicio.
-- v9.4.0 - Corrida melhorada com metas e progresso de esteira.
-- v9.5.0 - Backup pessoal por exportacao/importacao JSON.
+- v9.2.0 - Plano pessoal hibrido: musculacao 3x/semana e corrida para 5 km.
+- v9.3.0 - Editor local do plano pessoal.
+- v9.4.0 - Historico avancado com filtros e evolucao por exercicio.
+- v9.5.0 - Corrida melhorada com metas e progresso de esteira.
+- v9.6.0 - Backup pessoal por exportacao/importacao JSON.
 - v10.0.0 - Versao pessoal madura para uso continuo na academia.
 
 ## v8.1.2 - Android Offline Auto Login
@@ -300,3 +301,12 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - O painel de midia no Treino reaproveita o cache local de frames criado na v9.0.0.
 - Botao Abrir no catalogo leva direto ao detalhe completo do exercicio sugerido.
 - O app Android passa para versionCode 910 / versionName 9.1.0.
+
+## v9.2.0 - Plano pessoal hibrido
+
+- App passa a refletir a rotina noturna: musculacao primeiro e corrida depois.
+- Segunda fica sem musculacao e dedicada ao treino forte de corrida para 5 km.
+- Musculacao fica em 3 dias: terca Treino A, quinta Treino B pernas/core e sabado Treino C costas/biceps.
+- Aba Corrida mostra a semana de 5 km com tiros, corrida leve, ritmo e longo leve.
+- Home ganha card do plano semanal hibrido com atalhos para Treino e Corrida.
+- O app Android passa para versionCode 920 / versionName 9.2.0.

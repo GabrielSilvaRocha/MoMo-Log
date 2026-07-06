@@ -79,3 +79,7 @@ Treino premium no Android nativo: painel de sessao, timer de descanso automatico
 ## v9.1.0
 
 A aba Treino mostra a midia de execucao do exercicio selecionado, usando aliases para conectar o programa A/B/C/D aos itens do catalogo e reaproveitando o cache local de frames.
+
+## v9.2.0
+
+Plano pessoal hibrido embutido: musculacao noturna 3x/semana, segunda sem musculacao, corrida focada em prova de 5 km e card semanal na Home.
