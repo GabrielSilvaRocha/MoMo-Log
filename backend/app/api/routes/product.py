@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar resumo final da sessao com volume, series e exercicios concluidos",
         "Adicionar editor local para alterar o plano pessoal no celular",
+        "Adicionar resumo final da sessao com volume, series e exercicios concluidos",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Personal Hybrid Training Plan",
+        "milestone": "Guided 5K Running Coach",
         "status": "operational",
-        "release_focus": "Atualizar o Android com plano pessoal noturno: musculacao 3x/semana e corrida para prova de 5 km.",
+        "release_focus": "Reformular a aba Corrida no Android com semana atual, planejamento completo e treino guiado por fases.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,13 +60,14 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.2.0",
-        "title": "Personal Hybrid Training Plan",
+        "version": "9.3.0",
+        "title": "Guided 5K Running Coach",
         "highlights": [
-            "Programa de musculacao agora segue 3 dias semanais: terca, quinta e sabado.",
-            "Segunda fica dedicada ao treino forte de corrida para 5 km, sem musculacao.",
-            "Aba Corrida mostra a estrutura semanal com tiros, corrida leve, ritmo e longo leve.",
-            "Home ganhou card do plano hibrido semanal para orientar a rotina noturna.",
-            "Build Android atualizado para versionCode 920.",
+            "Aba Corrida ganhou bloco Essa Semana com os 5 treinos e checkbox de conclusao.",
+            "Treinos podem ser marcados como concluidos manualmente quando feitos sem o app.",
+            "Planejamento completo mostra 6 semanas de progressao ate a meta de 5 km.",
+            "Treino guiado por fases tem timer inicial de 5 segundos, contagem regressiva, km restantes e ajuste de velocidade com botoes -/+.",
+            "Coach por voz avisa quando faltam 30 segundos e informa a proxima etapa.",
+            "Build Android atualizado para versionCode 930.",
         ],
     }

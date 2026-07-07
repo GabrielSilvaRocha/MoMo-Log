@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
@@ -49,6 +50,24 @@ data class WorkoutPlan(
     val title: String,
     val focus: String,
     val exercises: List<ExercisePlan>,
+)
+
+data class RunningStage(
+    val title: String,
+    val distanceKm: Double,
+    val speedKmh: Double,
+    val note: String,
+)
+
+data class RunningWorkout(
+    val id: String,
+    val week: Int,
+    val dayName: String,
+    val dayIndex: Int,
+    val title: String,
+    val focus: String,
+    val description: String,
+    val stages: List<RunningStage>,
 )
 
 data class NavItem(
@@ -177,8 +196,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.2.0"
-    private val trainingPlanVersion = "9.2.0"
+    private val versionName = "9.3.0"
+    private val trainingPlanVersion = "9.3.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -193,6 +212,7 @@ class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("mo2log_native", Context.MODE_PRIVATE) }
     private val plans by lazy { buildWorkoutPlans() }
     private val catalog by lazy { loadExerciseCatalog() }
+    private val runningPlan by lazy { buildRunningPlan() }
     private val primaryNavItems = listOf(
         NavItem("home", "Home"),
         NavItem("workout", "Treino"),
@@ -212,8 +232,17 @@ class MainActivity : Activity() {
     private var currentTab = "home"
     private var selectedPlanIndex = 0
     private var selectedExerciseIndex = 0
+    private var selectedRunId = ""
+    private var voiceCoach: TextToSpeech? = null
+    private var voiceCoachReady = false
     private val restTimerHandler = Handler(Looper.getMainLooper())
+    private val runningSessionHandler = Handler(Looper.getMainLooper())
     private var restTimerText: TextView? = null
+    private var runningCountdownText: TextView? = null
+    private var runningStageText: TextView? = null
+    private var runningRemainingText: TextView? = null
+    private var runningSpeedText: TextView? = null
+    private var runningNextText: TextView? = null
     private val restTimerRunnable = object : Runnable {
         override fun run() {
             restTimerText?.let { view ->
@@ -224,6 +253,18 @@ class MainActivity : Activity() {
             }
         }
     }
+    private val runningSessionRunnable = object : Runnable {
+        override fun run() {
+            val completed = updateActiveRunProgress()
+            if (completed) {
+                Toast.makeText(this@MainActivity, "Treino de corrida concluido.", Toast.LENGTH_SHORT).show()
+                render()
+                return
+            }
+            refreshRunningSessionViews()
+            if (activeRunningWorkout() != null) runningSessionHandler.postDelayed(this, 1000L)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -231,11 +272,16 @@ class MainActivity : Activity() {
         syncTrainingPlanVersion()
         selectedPlanIndex = prefs.getInt("selected_plan", todayPlanIndex())
         selectedExerciseIndex = prefs.getInt("selected_exercise", 0)
+        selectedRunId = prefs.getString("selected_run_id", todayRunningWorkout()?.id ?: currentRunningWeekWorkouts().first().id) ?: currentRunningWeekWorkouts().first().id
+        initVoiceCoach()
         render()
     }
 
     override fun onDestroy() {
         restTimerHandler.removeCallbacks(restTimerRunnable)
+        runningSessionHandler.removeCallbacks(runningSessionRunnable)
+        voiceCoach?.stop()
+        voiceCoach?.shutdown()
         super.onDestroy()
     }
 
@@ -245,14 +291,22 @@ class MainActivity : Activity() {
             .putString("training_plan_version", trainingPlanVersion)
             .putInt("selected_plan", todayPlanIndex())
             .putInt("selected_exercise", 0)
+            .putString("selected_run_id", todayRunningWorkout()?.id ?: "w1-mon")
         if (!prefs.contains("run_distance")) editor.putString("run_distance", "5.0")
         if (!prefs.contains("run_speed")) editor.putString("run_speed", "8.0")
+        if (!prefs.contains("running_plan_start_day")) editor.putString("running_plan_start_day", dayKey())
         editor.apply()
     }
 
     private fun render() {
         restTimerHandler.removeCallbacks(restTimerRunnable)
+        runningSessionHandler.removeCallbacks(runningSessionRunnable)
         restTimerText = null
+        runningCountdownText = null
+        runningStageText = null
+        runningRemainingText = null
+        runningSpeedText = null
+        runningNextText = null
 
         val page = LinearLayout(this)
         page.orientation = LinearLayout.VERTICAL
@@ -670,58 +724,189 @@ class MainActivity : Activity() {
     }
 
     private fun renderRunning(root: LinearLayout) {
+        updateActiveRunProgress()
+        root.addView(heroCard("Running coach", "Corrida 5 km", "Semana atual, treino guiado por fases e ajuste de velocidade em tempo real."))
+        root.addView(runningThisWeekPanel())
+        root.addView(runningFullPlanButton())
+        if (prefs.getBoolean("running_full_plan_open", false)) root.addView(runningFullPlanPanel())
+        activeRunningWorkout()?.let { root.addView(activeRunPanel(it)) }
+        root.addView(runningHistoryPanel())
+    }
+
+    private fun runningThisWeekPanel(): View {
+        val week = currentRunningPlanWeek()
+        val workouts = currentRunningWeekWorkouts()
+        val selected = workouts.firstOrNull { it.id == selectedRunId } ?: todayRunningWorkout() ?: workouts.first()
+        selectedRunId = selected.id
+
         val box = card()
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("RUNNING COACH", green, 13f, true))
-        box.addView(label("Plano 5 km noturno", white, 26f, true))
-        box.addView(label("Segunda e o treino forte de corrida. Nos dias com musculacao, a corrida vem depois e respeita a fadiga.", muted, 15f, false))
+        box.addView(label("ESSA SEMANA", green, 13f, true))
+        box.addView(label("Semana " + week + " de 6 ate a meta de 5 km", white, 24f, true))
+        box.addView(label("Toque em um treino para expandir. Use Treino concluido quando fizer fora do app.", muted, 14f, false))
 
-        val speed = input("Velocidade km/h", prefs.getString("run_speed", "8.0") ?: "8.0")
-        val distance = input("Distancia km", prefs.getString("run_distance", "5.0") ?: "5.0")
-        val notes = input("Observacao", "")
-        box.addView(speed)
-        box.addView(distance)
-        box.addView(notes)
-
-        val calc = actionButton("Calcular e salvar corrida", green, bg)
-        calc.setOnClickListener {
-            val speedValue = speed.textValue().replace(',', '.').toDoubleOrNull() ?: 0.0
-            val distanceValue = distance.textValue().replace(',', '.').toDoubleOrNull() ?: 0.0
-            if (speedValue <= 0.0 || distanceValue <= 0.0) {
-                Toast.makeText(this, "Informe velocidade e distancia.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            saveRun(distanceValue, speedValue, notes.textValue())
+        workouts.forEach { workout ->
+            box.addView(runningWeekWorkoutItem(workout, workout.id == selected.id))
         }
-        box.addView(buttonParams(calc))
-        root.addView(box)
+        return box
+    }
 
-        val plan = card()
-        plan.orientation = LinearLayout.VERTICAL
-        plan.addView(label("PLANO SEMANAL PARA 5 KM", green, 13f, true))
-        runningWeekLines().forEach { line -> plan.addView(label(line, white, 15f, false)) }
-        plan.addView(label("Tempo estimado: " + estimatedRunTime(distance.textValue(), speed.textValue()), amber, 16f, true))
-        root.addView(plan)
+    private fun runningWeekWorkoutItem(workout: RunningWorkout, expanded: Boolean): View {
+        val completed = isRunWorkoutCompleted(workout)
+        val active = activeRunningWorkout()?.id == workout.id
+        val item = card(if (expanded) surface3 else surface)
+        item.orientation = LinearLayout.VERTICAL
+        item.setOnClickListener {
+            selectedRunId = workout.id
+            prefs.edit().putString("selected_run_id", workout.id).apply()
+            render()
+        }
 
-        val progression = card()
-        progression.orientation = LinearLayout.VERTICAL
-        progression.addView(label("PROGRESSAO DE 6 SEMANAS", green, 13f, true))
-        progression.addView(label("Semanas 1-2: 6x400 m na segunda, 15 min ritmo no sabado, 35-40 min leve no domingo.", white, 14f, false))
-        progression.addView(label("Semanas 3-4: 8x400 m ou 5x600 m, 20 min ritmo, 40-45 min leve.", white, 14f, false))
-        progression.addView(label("Semanas 5-6: 4x800 m ou 3x1 km, 20-25 min ritmo, 45-50 min leve.", white, 14f, false))
-        progression.addView(label("Semana de prova: reduza volume, mantenha poucos tiros curtos e priorize descanso.", muted, 14f, false))
-        root.addView(progression)
+        val status = if (completed) "[x] " else "[ ] "
+        item.addView(label(status + workout.dayName + " | " + workout.title, if (completed) green else white, 18f, true))
+        item.addView(label(workout.focus + " | " + formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), muted, 13f, false))
 
+        if (expanded) {
+            item.addView(label(workout.description, white, 14f, false))
+            workout.stages.forEachIndexed { index, stage ->
+                item.addView(label((index + 1).toString() + ". " + stage.title + " - " + formatKm(stage.distanceKm) + " a " + formatSpeed(stage.speedKmh), muted, 13f, false))
+            }
+
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            val start = actionButton(if (active) "Em andamento" else "Iniciar", green, bg)
+            start.setOnClickListener { startRunningWorkout(workout) }
+            row.addView(start, LinearLayout.LayoutParams(0, dp(50), 1f))
+
+            val done = actionButton(if (completed) "Concluido" else "Treino concluido", surface2, if (completed) green else white)
+            done.setOnClickListener { saveRunCompletion(workout, true) }
+            row.addView(done, LinearLayout.LayoutParams(0, dp(50), 1f))
+            item.addView(spacedRow(row))
+        }
+        return item
+    }
+
+    private fun runningFullPlanButton(): View {
+        val open = prefs.getBoolean("running_full_plan_open", false)
+        val button = actionButton(if (open) "Ocultar planejamento completo" else "Planejamento completo", surface2, green)
+        button.setOnClickListener {
+            prefs.edit().putBoolean("running_full_plan_open", !open).apply()
+            render()
+        }
+        return buttonParams(button)
+    }
+
+    private fun runningFullPlanPanel(): View {
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("PLANEJAMENTO COMPLETO", green, 13f, true))
+        box.addView(label("6 semanas progressivas para prova de 5 km", white, 22f, true))
+        runningPlan.groupBy { it.week }.forEach { entry ->
+            box.addView(label("Semana " + entry.key, amber, 16f, true))
+            entry.value.forEach { workout ->
+                val marker = if (isRunWorkoutCompleted(workout)) "[x] " else "[ ] "
+                box.addView(label(marker + workout.dayName + ": " + workout.title + " | " + formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), white, 13f, false))
+            }
+        }
+        return box
+    }
+
+    private fun runningHistoryPanel(): View {
         val history = card()
         history.orientation = LinearLayout.VERTICAL
         history.addView(label("CORRIDAS RECENTES", green, 13f, true))
         val runs = runLogs()
         if (runs.length() == 0) history.addView(label("Nenhuma corrida salva ainda.", muted, 15f, false))
-        for (i in runs.length() - 1 downTo max(0, runs.length() - 5)) {
+        for (i in runs.length() - 1 downTo max(0, runs.length() - 6)) {
             val item = runs.getJSONObject(i)
-            history.addView(label(item.optString("day") + " | " + item.optDouble("distance") + " km | " + item.optDouble("speed") + " km/h | " + item.optString("duration"), white, 14f, false))
+            val title = item.optString("workout_title", "Corrida")
+            val source = if (item.optBoolean("manual", false)) "manual" else "app"
+            history.addView(label(item.optString("day") + " " + item.optString("time") + " | " + title + " | " + item.optDouble("distance") + " km | " + item.optString("duration") + " | " + source, white, 14f, false))
         }
-        root.addView(history)
+        return history
+    }
+
+    private fun activeRunPanel(workout: RunningWorkout): View {
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("TREINO EM ANDAMENTO", green, 13f, true))
+        box.addView(label(workout.dayName + " | " + workout.title, white, 24f, true))
+
+        runningCountdownText = label("", amber, 32f, true)
+        runningCountdownText?.gravity = Gravity.CENTER
+        box.addView(runningCountdownText)
+
+        runningStageText = label("", white, 20f, true)
+        box.addView(runningStageText)
+        runningRemainingText = label("", green, 28f, true)
+        box.addView(runningRemainingText)
+        runningNextText = label("", muted, 14f, false)
+        box.addView(runningNextText)
+
+        val speedRow = LinearLayout(this)
+        speedRow.orientation = LinearLayout.HORIZONTAL
+        val minus = actionButton("-", surface2, green)
+        minus.setOnClickListener { adjustActiveRunSpeed(-0.2) }
+        speedRow.addView(minus, LinearLayout.LayoutParams(dp(58), dp(64)))
+
+        runningSpeedText = label("", white, 20f, true)
+        runningSpeedText?.gravity = Gravity.CENTER
+        runningSpeedText?.background = rounded(surface, dp(8), border)
+        speedRow.addView(runningSpeedText, LinearLayout.LayoutParams(0, dp(64), 1f))
+
+        val plus = actionButton("+", surface2, green)
+        plus.setOnClickListener { adjustActiveRunSpeed(0.2) }
+        speedRow.addView(plus, LinearLayout.LayoutParams(dp(58), dp(64)))
+        box.addView(spacedRow(speedRow))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val finishStage = actionButton("Finalizar etapa", surface2, white)
+        finishStage.setOnClickListener { finishCurrentRunStage() }
+        row.addView(finishStage, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val finishWorkout = actionButton("Finalizar treino", green, bg)
+        finishWorkout.setOnClickListener {
+            saveRunCompletion(workout, false, false)
+            clearActiveRun()
+            Toast.makeText(this, "Treino salvo.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        row.addView(finishWorkout, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+
+        refreshRunningSessionViews()
+        runningSessionHandler.post(runningSessionRunnable)
+        return box
+    }
+
+    private fun refreshRunningSessionViews() {
+        val workout = activeRunningWorkout() ?: return
+        val countdown = activeRunCountdownSeconds()
+        if (countdown > 0L) {
+            runningCountdownText?.text = formatDuration(countdown)
+            runningStageText?.text = "Prepare-se para iniciar"
+            runningRemainingText?.text = "Comeca em 5 segundos"
+            runningSpeedText?.text = "Velocidade inicial " + formatSpeed(currentActiveRunSpeed(workout))
+            runningNextText?.text = "Primeira etapa: " + stageCue(workout.stages.firstOrNull())
+            return
+        }
+
+        val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        val stage = workout.stages[stageIndex]
+        val remainingKm = activeRunStageRemainingKm(workout)
+        val speed = currentActiveRunSpeed(workout)
+        val remainingSeconds = if (speed <= 0.0) 0L else ((remainingKm / speed) * 3600.0).roundToInt().toLong()
+
+        runningCountdownText?.text = ""
+        runningStageText?.text = "Etapa " + (stageIndex + 1) + " de " + workout.stages.size + ": " + stage.title
+        runningRemainingText?.text = formatDuration(remainingSeconds) + " | " + formatKm(remainingKm) + " restantes"
+        runningSpeedText?.text = formatSpeed(speed)
+        runningNextText?.text = if (stageIndex < workout.stages.lastIndex) {
+            "Proxima etapa: " + stageCue(workout.stages[stageIndex + 1])
+        } else {
+            "Ultima etapa do treino."
+        }
+        announceRunTransitionIfNeeded(workout, stageIndex, remainingSeconds)
     }
 
     private fun renderHistory(root: LinearLayout) {
@@ -1391,6 +1576,197 @@ class MainActivity : Activity() {
         render()
     }
 
+    private fun startRunningWorkout(workout: RunningWorkout) {
+        val firstStage = workout.stages.firstOrNull() ?: return
+        val countdownEndAt = System.currentTimeMillis() + 5000L
+        selectedRunId = workout.id
+        prefs.edit()
+            .putString("selected_run_id", workout.id)
+            .putString("running_active_id", workout.id)
+            .putInt("running_active_stage", 0)
+            .putString("running_active_distance_done", "0.0")
+            .putString("running_active_speed", firstStage.speedKmh.toString())
+            .putLong("running_active_last_tick_at", countdownEndAt)
+            .putLong("running_countdown_end_at", countdownEndAt)
+            .putString("running_session_started_at", timestamp())
+            .remove("running_30_announced_key")
+            .apply()
+        Toast.makeText(this, "Timer de 5 segundos iniciado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun updateActiveRunProgress(): Boolean {
+        val workout = activeRunningWorkout() ?: return false
+        if (workout.stages.isEmpty()) return false
+
+        val now = System.currentTimeMillis()
+        val countdownEndAt = prefs.getLong("running_countdown_end_at", 0L)
+        if (countdownEndAt > now) return false
+
+        var stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        var distanceDone = prefs.getString("running_active_distance_done", "0.0")?.toDoubleOrNull() ?: 0.0
+        val speed = currentActiveRunSpeed(workout)
+        val lastTick = prefs.getLong("running_active_last_tick_at", if (countdownEndAt > 0L) countdownEndAt else now)
+        if (countdownEndAt > 0L && countdownEndAt <= now) prefs.edit().remove("running_countdown_end_at").apply()
+
+        val elapsedMs = max(0L, now - lastTick)
+        if (elapsedMs > 0L && speed > 0.0) {
+            distanceDone += speed * (elapsedMs.toDouble() / 3600000.0)
+        }
+
+        while (stageIndex < workout.stages.size && distanceDone >= workout.stages[stageIndex].distanceKm) {
+            distanceDone -= workout.stages[stageIndex].distanceKm
+            stageIndex += 1
+            prefs.edit().remove("running_30_announced_key").apply()
+            if (stageIndex < workout.stages.size) {
+                prefs.edit().putString("running_active_speed", workout.stages[stageIndex].speedKmh.toString()).apply()
+                speakRunCue("Etapa concluida. A proxima etapa sera " + speakableStageCue(workout.stages[stageIndex]) + ".")
+            }
+        }
+
+        if (stageIndex >= workout.stages.size) {
+            saveRunCompletion(workout, false, false)
+            clearActiveRun()
+            return true
+        }
+
+        prefs.edit()
+            .putInt("running_active_stage", stageIndex)
+            .putString("running_active_distance_done", distanceDone.toString())
+            .putLong("running_active_last_tick_at", now)
+            .apply()
+        return false
+    }
+
+    private fun adjustActiveRunSpeed(delta: Double) {
+        val workout = activeRunningWorkout() ?: return
+        if (updateActiveRunProgress()) {
+            render()
+            return
+        }
+        val speed = (currentActiveRunSpeed(workout) + delta).coerceIn(4.0, 18.0)
+        prefs.edit().putString("running_active_speed", speed.toString()).apply()
+        refreshRunningSessionViews()
+    }
+
+    private fun finishCurrentRunStage() {
+        val workout = activeRunningWorkout() ?: return
+        if (updateActiveRunProgress()) {
+            render()
+            return
+        }
+        val currentStage = prefs.getInt("running_active_stage", 0)
+        if (currentStage >= workout.stages.lastIndex) {
+            saveRunCompletion(workout, false, false)
+            clearActiveRun()
+            Toast.makeText(this, "Treino salvo.", Toast.LENGTH_SHORT).show()
+            render()
+            return
+        }
+        val nextStage = currentStage + 1
+        prefs.edit()
+            .putInt("running_active_stage", nextStage)
+            .putString("running_active_distance_done", "0.0")
+            .putString("running_active_speed", workout.stages[nextStage].speedKmh.toString())
+            .putLong("running_active_last_tick_at", System.currentTimeMillis())
+            .remove("running_30_announced_key")
+            .apply()
+        speakRunCue("Proxima etapa: " + speakableStageCue(workout.stages[nextStage]) + ".")
+        refreshRunningSessionViews()
+    }
+
+    private fun saveRunCompletion(workout: RunningWorkout, manual: Boolean, rerender: Boolean = true) {
+        if (isRunWorkoutCompleted(workout)) {
+            Toast.makeText(this, "Este treino ja esta concluido nesta semana.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val distance = totalRunDistance(workout)
+        val seconds = estimatedWorkoutSeconds(workout)
+        val avgSpeed = if (seconds <= 0L) 0.0 else distance / (seconds.toDouble() / 3600.0)
+        val log = JSONObject()
+            .put("id", UUID.randomUUID().toString())
+            .put("day", dayKey())
+            .put("week", weekKey())
+            .put("time", timeKey())
+            .put("run_workout_id", workout.id)
+            .put("plan_week", workout.week)
+            .put("workout_title", workout.dayName + " - " + workout.title)
+            .put("distance", roundKm(distance))
+            .put("speed", roundSpeed(avgSpeed))
+            .put("duration", formatDuration(seconds))
+            .put("manual", manual)
+            .put("notes", if (manual) "Marcado como concluido sem iniciar pelo app." else "Treino guiado pelo app.")
+        val logs = runLogs()
+        logs.put(log)
+        prefs.edit().putString("run_logs", logs.toString()).apply()
+        Toast.makeText(this, if (manual) "Treino marcado como concluido." else "Corrida salva localmente.", Toast.LENGTH_SHORT).show()
+        if (rerender) render()
+    }
+
+    private fun clearActiveRun() {
+        prefs.edit()
+            .remove("running_active_id")
+            .remove("running_active_stage")
+            .remove("running_active_distance_done")
+            .remove("running_active_speed")
+            .remove("running_active_last_tick_at")
+            .remove("running_countdown_end_at")
+            .remove("running_session_started_at")
+            .remove("running_30_announced_key")
+            .apply()
+    }
+
+    private fun activeRunningWorkout(): RunningWorkout? {
+        val id = prefs.getString("running_active_id", "") ?: ""
+        return if (id.isBlank()) null else runningWorkoutById(id)
+    }
+
+    private fun activeRunCountdownSeconds(): Long {
+        val endAt = prefs.getLong("running_countdown_end_at", 0L)
+        if (endAt <= 0L) return 0L
+        return max(0L, ((endAt - System.currentTimeMillis()) + 999L) / 1000L)
+    }
+
+    private fun currentActiveRunSpeed(workout: RunningWorkout): Double {
+        val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        return prefs.getString("running_active_speed", workout.stages[stageIndex].speedKmh.toString())?.toDoubleOrNull()
+            ?: workout.stages[stageIndex].speedKmh
+    }
+
+    private fun activeRunStageRemainingKm(workout: RunningWorkout): Double {
+        val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        val done = prefs.getString("running_active_distance_done", "0.0")?.toDoubleOrNull() ?: 0.0
+        return max(0.0, workout.stages[stageIndex].distanceKm - done)
+    }
+
+    private fun announceRunTransitionIfNeeded(workout: RunningWorkout, stageIndex: Int, remainingSeconds: Long) {
+        if (remainingSeconds !in 1L..30L) return
+        val key = workout.id + ":" + stageIndex
+        if (prefs.getString("running_30_announced_key", "") == key) return
+        val message = if (stageIndex < workout.stages.lastIndex) {
+            "Em 30 segundos, voce termina a etapa atual. A proxima etapa sera " + speakableStageCue(workout.stages[stageIndex + 1]) + "."
+        } else {
+            "Em 30 segundos, voce termina a etapa atual e conclui o treino."
+        }
+        prefs.edit().putString("running_30_announced_key", key).apply()
+        speakRunCue(message)
+    }
+
+    private fun initVoiceCoach() {
+        voiceCoach = TextToSpeech(this) { status ->
+            voiceCoachReady = status == TextToSpeech.SUCCESS
+            if (voiceCoachReady) {
+                voiceCoach?.language = Locale("pt", "BR")
+                voiceCoach?.setSpeechRate(0.95f)
+            }
+        }
+    }
+
+    private fun speakRunCue(text: String) {
+        if (!voiceCoachReady) return
+        voiceCoach?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "mo2log_run_" + System.currentTimeMillis())
+    }
+
     private fun saveRun(distance: Double, speed: Double, notes: String) {
         val durationMinutes = ((distance / speed) * 60.0).roundToInt()
         val log = JSONObject()
@@ -1626,6 +2002,186 @@ class MainActivity : Activity() {
         return null
     }
 
+    private fun buildRunningPlan(): List<RunningWorkout> {
+        val plan = mutableListOf<RunningWorkout>()
+        for (week in 1..6) plan.addAll(buildRunningWeek(week))
+        return plan
+    }
+
+    private fun buildRunningWeek(week: Int): List<RunningWorkout> {
+        val longDistance = when (week) {
+            1 -> 4.0
+            2 -> 4.5
+            3 -> 5.0
+            4 -> 5.5
+            5 -> 5.8
+            else -> 4.2
+        }
+        val tempoDistance = when (week) {
+            1, 2 -> 1.8
+            3, 4 -> 2.2
+            5 -> 2.6
+            else -> 1.5
+        }
+        return listOf(
+            RunningWorkout(
+                "w" + week + "-mon",
+                week,
+                "Segunda",
+                1,
+                if (week <= 2) "Tiros 400 m" else if (week <= 4) "Tiros 600 m" else "Tiros longos",
+                "Velocidade e tolerancia a ritmo forte",
+                "Sem musculacao neste dia. A corrida e o treino principal da noite.",
+                intervalStages(week),
+            ),
+            RunningWorkout(
+                "w" + week + "-tue",
+                week,
+                "Terca",
+                2,
+                "Leve pos Treino A",
+                "Soltar depois de peito, ombro e triceps",
+                "Faca depois da musculacao, mantendo conversa facil e sem buscar recorde.",
+                listOf(
+                    RunningStage("Leve continuo", if (week <= 2) 2.4 else if (week <= 4) 2.8 else 3.0, 7.2, "Respiracao controlada."),
+                ),
+            ),
+            RunningWorkout(
+                "w" + week + "-thu",
+                week,
+                "Quinta",
+                4,
+                "Regenerativo pos pernas",
+                "Baixo impacto depois do Treino B",
+                "Use como circulacao e tecnica. Se a perna pesar, reduza velocidade.",
+                listOf(
+                    RunningStage("Regenerativo", if (week <= 3) 1.8 else 2.2, 6.8, "Sem forcar apos pernas."),
+                ),
+            ),
+            RunningWorkout(
+                "w" + week + "-sat",
+                week,
+                "Sabado",
+                6,
+                "Ritmo controlado",
+                "Aproximar do ritmo de prova",
+                "Depois do Treino C, faca aquecimento curto e um bloco firme sem sprintar.",
+                listOf(
+                    RunningStage("Aquecimento", 0.8, 7.0, "Leve e progressivo."),
+                    RunningStage("Ritmo", tempoDistance, if (week <= 2) 8.6 else if (week <= 4) 9.0 else 9.3, "RPE 7, firme e sustentavel."),
+                    RunningStage("Soltar", 0.6, 6.8, "Baixe a frequencia cardiaca."),
+                ),
+            ),
+            RunningWorkout(
+                "w" + week + "-sun",
+                week,
+                "Domingo",
+                7,
+                "Longo leve",
+                "Construir base aerobica",
+                "Corrida facil. O objetivo e acumular tempo sem transformar em prova.",
+                listOf(
+                    RunningStage("Longo leve", longDistance, 7.0, "Confortavel do inicio ao fim."),
+                ),
+            ),
+        )
+    }
+
+    private fun intervalStages(week: Int): List<RunningStage> {
+        val stages = mutableListOf<RunningStage>()
+        stages.add(RunningStage("Aquecimento", 1.0, 7.0, "Comece facil."))
+        val repeats = when (week) {
+            1 -> 6
+            2 -> 7
+            3, 4 -> 5
+            5 -> 4
+            else -> 3
+        }
+        val hardDistance = when (week) {
+            1, 2 -> 0.4
+            3, 4 -> 0.6
+            5 -> 0.8
+            else -> 1.0
+        }
+        val recoveryDistance = when (week) {
+            1, 2 -> 0.2
+            3, 4 -> 0.3
+            else -> 0.35
+        }
+        val hardSpeed = when (week) {
+            1 -> 9.6
+            2 -> 9.8
+            3 -> 10.0
+            4 -> 10.2
+            5 -> 10.3
+            else -> 9.8
+        }
+        for (index in 1..repeats) {
+            stages.add(RunningStage("Tiro " + index, hardDistance, hardSpeed, "Forte, sem perder tecnica."))
+            if (index < repeats) stages.add(RunningStage("Recuperacao " + index, recoveryDistance, 6.6, "Caminhe ou trote leve."))
+        }
+        stages.add(RunningStage("Soltar", 0.8, 6.8, "Finalize leve."))
+        return stages
+    }
+
+    private fun currentRunningWeekWorkouts(): List<RunningWorkout> {
+        val week = currentRunningPlanWeek()
+        return runningPlan.filter { it.week == week }.ifEmpty { runningPlan.take(5) }
+    }
+
+    private fun currentRunningPlanWeek(): Int {
+        val startKey = prefs.getString("running_plan_start_day", dayKey()) ?: dayKey()
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val start = try { parser.parse(startKey)?.time ?: System.currentTimeMillis() } catch (_: Exception) { System.currentTimeMillis() }
+        val today = try { parser.parse(dayKey())?.time ?: System.currentTimeMillis() } catch (_: Exception) { System.currentTimeMillis() }
+        val days = max(0L, (today - start) / 86400000L)
+        return ((days / 7L) + 1L).toInt().coerceIn(1, 6)
+    }
+
+    private fun todayRunningWorkout(): RunningWorkout? {
+        val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
+        val workouts = currentRunningWeekWorkouts()
+        return workouts.firstOrNull { it.dayIndex == day }
+            ?: workouts.firstOrNull { it.dayIndex > day }
+            ?: workouts.firstOrNull()
+    }
+
+    private fun runningWorkoutById(id: String): RunningWorkout? = runningPlan.firstOrNull { it.id == id }
+
+    private fun isRunWorkoutCompleted(workout: RunningWorkout): Boolean {
+        val logs = runLogs()
+        for (i in 0 until logs.length()) {
+            val item = logs.getJSONObject(i)
+            if (item.optString("run_workout_id") == workout.id) return true
+        }
+        return false
+    }
+
+    private fun totalRunDistance(workout: RunningWorkout): Double = workout.stages.sumOf { it.distanceKm }
+
+    private fun estimatedWorkoutSeconds(workout: RunningWorkout): Long {
+        return workout.stages.sumOf { stage ->
+            if (stage.speedKmh <= 0.0) 0L else ((stage.distanceKm / stage.speedKmh) * 3600.0).roundToInt().toLong()
+        }
+    }
+
+    private fun stageCue(stage: RunningStage?): String {
+        if (stage == null) return "-"
+        return stage.title + " - " + formatKm(stage.distanceKm) + " a " + formatSpeed(stage.speedKmh)
+    }
+
+    private fun speakableStageCue(stage: RunningStage): String {
+        return String.format(Locale.US, "%.2f quilometros a %.1f quilometros por hora", stage.distanceKm, stage.speedKmh)
+    }
+
+    private fun formatKm(value: Double): String = String.format(Locale("pt", "BR"), "%.2f km", value)
+
+    private fun formatSpeed(value: Double): String = String.format(Locale("pt", "BR"), "%.1f km/h", value)
+
+    private fun roundKm(value: Double): Double = (value * 100.0).roundToInt().toDouble() / 100.0
+
+    private fun roundSpeed(value: Double): Double = (value * 10.0).roundToInt().toDouble() / 10.0
+
     private fun currentPlan() = plans[selectedPlanIndex.coerceIn(plans.indices)]
     private fun currentExercise() = currentPlan().exercises[selectedExerciseIndex.coerceIn(currentPlan().exercises.indices)]
 
@@ -1691,7 +2247,7 @@ class MainActivity : Activity() {
         return when (currentTab) {
             "home" -> "Resumo rapido para abrir o treino certo no menor numero de toques."
             "workout" -> "Registro guiado com timer, midia de execucao, edicao e desfazer serie."
-            "running" -> "Corrida de esteira, distancia, velocidade e historico no celular."
+            "running" -> "Semana de corrida, planejamento 5 km e treino guiado por fases."
             "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
             "exercises" -> "Catalogo completo com busca, midia por link, favoritos e alternativas."
             "history" -> "Linha do tempo dos registros feitos no app."

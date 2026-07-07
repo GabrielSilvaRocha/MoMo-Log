@@ -83,3 +83,7 @@ A aba Treino mostra a midia de execucao do exercicio selecionado, usando aliases
 ## v9.2.0
 
 Plano pessoal hibrido embutido: musculacao noturna 3x/semana, segunda sem musculacao, corrida focada em prova de 5 km e card semanal na Home.
+
+## v9.3.0
+
+Aba Corrida reformulada com Essa Semana, 5 treinos, conclusao manual, planejamento completo, treino guiado por fases, botoes -/+ de velocidade e avisos de voz antes da troca de etapa.
