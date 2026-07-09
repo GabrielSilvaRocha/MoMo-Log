@@ -104,6 +104,20 @@ data class CatalogExercise(
     val links: List<String>,
 )
 
+data class StrengthAdjustment(
+    val nextLoad: Double,
+    val suggestedSetCount: Int,
+    val loadReason: String,
+    val volumeReason: String,
+)
+
+data class RunningAdjustment(
+    val speedOffset: Double,
+    val distanceScale: Double,
+    val headline: String,
+    val reason: String,
+)
+
 class RemoteExerciseMediaView(context: Context, private val links: List<String>) : LinearLayout(context) {
     private val handler = Handler(Looper.getMainLooper())
     private val image = ImageView(context)
@@ -203,8 +217,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.7.0"
-    private val trainingPlanVersion = "9.7.0"
+    private val versionName = "9.8.0"
+    private val trainingPlanVersion = "9.8.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -619,6 +633,7 @@ class MainActivity : Activity() {
         val plan = currentPlan()
         root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Marque cada serie concluida. O app so troca de exercicio quando todas as series forem feitas."))
         root.addView(workoutProgressPanel())
+        root.addView(smartStrengthCoachPanel())
         root.addView(selectedExerciseMediaPanel())
         root.addView(registerPanel())
         root.addView(sectionTitle("Programa de treinos"))
@@ -668,6 +683,33 @@ class MainActivity : Activity() {
             }
         }
         row.addView(next, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun smartStrengthCoachPanel(): View {
+        val exercise = currentExercise()
+        val adjustment = strengthAdjustmentFor(exercise)
+        val sets = plannedSetsForCurrentExercise()
+        val doneCount = countDonePlannedSets(sets)
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("AJUSTE INTELIGENTE", green, 13f, true))
+        box.addView(label("Proxima carga: " + formatLoad(adjustment.nextLoad), white, 24f, true))
+        box.addView(label(adjustment.loadReason, muted, 14f, false))
+        box.addView(label("Volume sugerido: " + adjustment.suggestedSetCount + " series", white, 18f, true))
+        box.addView(label(doneCount.toString() + "/" + sets.length() + " series feitas agora. " + adjustment.volumeReason, muted, 14f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val applyLoad = actionButton("Aplicar carga", green, bg)
+        applyLoad.setOnClickListener { applySmartLoadToPendingSets() }
+        row.addView(applyLoad, LinearLayout.LayoutParams(0, dp(50), 1f))
+
+        val applyVolume = actionButton("Ajustar series", surface2, green)
+        applyVolume.setOnClickListener { applySmartVolumeToCurrentExercise() }
+        row.addView(applyVolume, LinearLayout.LayoutParams(0, dp(50), 1f))
         box.addView(spacedRow(row))
         return box
     }
@@ -741,11 +783,30 @@ class MainActivity : Activity() {
     private fun renderRunning(root: LinearLayout) {
         updateActiveRunProgress()
         root.addView(heroCard("Running coach", "Corrida 5 km", "Semana atual, treino guiado por fases e ajuste de velocidade em tempo real."))
+        root.addView(runningSmartCoachPanel())
         root.addView(runningThisWeekPanel())
         root.addView(runningFullPlanButton())
         if (prefs.getBoolean("running_full_plan_open", false)) root.addView(runningFullPlanPanel())
         activeRunningWorkout()?.let { root.addView(activeRunPanel(it)) }
         root.addView(runningHistoryPanel())
+    }
+
+    private fun runningSmartCoachPanel(): View {
+        val adjustment = smartRunningAdjustment()
+        val currentSpeedOffset = prefs.getString("running_speed_offset", "0.0")?.toDoubleOrNull() ?: 0.0
+        val currentDistanceScale = prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("AJUSTE DE RITMO", green, 13f, true))
+        box.addView(label(adjustment.headline, white, 22f, true))
+        box.addView(label(adjustment.reason, muted, 14f, false))
+        box.addView(label("Atual: " + signedSpeedOffset(currentSpeedOffset) + " | distancia x" + String.format(Locale.US, "%.2f", currentDistanceScale), muted, 13f, false))
+        box.addView(label("Sugerido: " + signedSpeedOffset(adjustment.speedOffset) + " | distancia x" + String.format(Locale.US, "%.2f", adjustment.distanceScale), white, 15f, true))
+
+        val apply = actionButton("Aplicar ajuste sugerido", green, bg)
+        apply.setOnClickListener { applySmartRunningAdjustment(adjustment) }
+        box.addView(buttonParams(apply))
+        return box
     }
 
     private fun runningThisWeekPanel(): View {
@@ -1127,7 +1188,7 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.7.0.", muted, 14f, false))
+        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.8.0.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
             prefs.edit()
@@ -1365,6 +1426,12 @@ class MainActivity : Activity() {
             Pair("RPE medio", stats.optString("avg_rpe")),
             Pair("Melhor carga", stats.optString("best_load")),
         )))
+
+        val coach = card(surface3)
+        coach.orientation = LinearLayout.VERTICAL
+        coach.addView(label("COACH INTELIGENTE", green, 13f, true))
+        smartCoachLines().forEach { line -> coach.addView(label(line, white, 15f, false)) }
+        root.addView(coach)
 
         val prs = card()
         prs.orientation = LinearLayout.VERTICAL
@@ -2021,9 +2088,10 @@ class MainActivity : Activity() {
 
     private fun addPlannedSetForCurrentExercise() {
         val sets = plannedSetsForCurrentExercise()
+        val adjustment = strengthAdjustmentFor(currentExercise())
         sets.put(JSONObject()
             .put("id", UUID.randomUUID().toString())
-            .put("load", lastLoadFor(currentExercise().name))
+            .put("load", loadInputText(adjustment.nextLoad))
             .put("reps", defaultRepsFor(currentExercise().target))
             .put("done", false))
         savePlannedSets(sets)
@@ -2072,6 +2140,164 @@ class MainActivity : Activity() {
         val afterX = Regex("[xX]\\s*(\\d+)").find(target)?.groupValues?.getOrNull(1)
         if (!afterX.isNullOrBlank()) return afterX
         return if (target.contains("s", ignoreCase = true)) "10" else "10"
+    }
+
+    private fun strengthAdjustmentFor(exercise: ExercisePlan): StrengthAdjustment {
+        val recent = recentSetsForExercise(exercise.name, 6)
+        val targetSets = defaultSetCountFor(exercise.target)
+        val plannedSets = plannedSetsForCurrentExercise()
+        val completedSets = countDonePlannedSets(plannedSets)
+        if (recent.isEmpty()) {
+            val baseLoad = lastLoadFor(exercise.name).replace(',', '.').toDoubleOrNull() ?: 0.0
+            return StrengthAdjustment(
+                nextLoad = baseLoad,
+                suggestedSetCount = targetSets.coerceAtLeast(completedSets),
+                loadReason = if (baseLoad <= 0.0) "Sem historico para este exercicio. Use a primeira serie para registrar uma carga real." else "Use a ultima carga conhecida como ponto de partida.",
+                volumeReason = "Comece pelo volume planejado e deixe o app ajustar depois dos registros.",
+            )
+        }
+
+        val recentUsed = recent.take(3)
+        val repBounds = targetRepBounds(exercise.target)
+        val avgReps = recentUsed.map { it.optInt("reps") }.average()
+        val rpeValues = recentUsed
+            .map { it.optDouble("rpe", -1.0) }
+            .filter { it >= 0.0 }
+        val avgRpe = if (rpeValues.isEmpty()) null else rpeValues.average()
+        val baseLoad = recentUsed.first().optDouble("load")
+        val step = smartLoadStep(baseLoad)
+
+        var nextLoad = baseLoad
+        val loadReason = when {
+            baseLoad <= 0.0 -> {
+                nextLoad = 0.0
+                "A ultima serie nao tem carga registrada. Preencha a carga real antes de progredir."
+            }
+            avgRpe == null -> "Sem RPE recente suficiente. Repita a ultima carga e registre RPE para calibrar melhor."
+            avgRpe <= 7.5 && avgReps >= repBounds.second -> {
+                nextLoad = roundLoad(baseLoad + step)
+                "RPE medio baixo e reps no topo da faixa. Boa hora para subir " + formatLoad(step) + "."
+            }
+            avgRpe >= 9.0 || avgReps < repBounds.first -> {
+                nextLoad = roundLoad((baseLoad - step).coerceAtLeast(0.0))
+                "RPE alto ou reps abaixo da faixa. Reduza um passo e preserve tecnica."
+            }
+            avgRpe <= 8.5 -> "Zona boa de trabalho. Repita a carga e tente fechar todas as series limpas."
+            else -> "Fadiga um pouco alta. Mantenha carga e evite series extras hoje."
+        }
+
+        val rawSuggestedSets = when {
+            avgRpe != null && avgRpe <= 7.0 && completedSets >= targetSets -> targetSets + 1
+            avgRpe != null && avgRpe >= 9.0 -> targetSets - 1
+            else -> targetSets
+        }
+        val suggestedSets = rawSuggestedSets.coerceIn(1, 8).coerceAtLeast(completedSets)
+        val volumeReason = when {
+            suggestedSets > targetSets -> "Voce ja fechou o planejado com folga. Uma serie extra leve e opcional."
+            suggestedSets < targetSets -> "Volume reduzido para hoje por sinal de fadiga recente."
+            completedSets < targetSets -> "Faltam " + (targetSets - completedSets).coerceAtLeast(0) + " series para o volume base."
+            else -> "Volume do exercicio esta dentro do planejado."
+        }
+
+        return StrengthAdjustment(
+            nextLoad = nextLoad,
+            suggestedSetCount = suggestedSets,
+            loadReason = loadReason,
+            volumeReason = volumeReason,
+        )
+    }
+
+    private fun applySmartLoadToPendingSets() {
+        val adjustment = strengthAdjustmentFor(currentExercise())
+        val sets = plannedSetsForCurrentExercise()
+        var changed = 0
+        for (i in 0 until sets.length()) {
+            val item = sets.getJSONObject(i)
+            if (!item.optBoolean("done", false)) {
+                item.put("load", loadInputText(adjustment.nextLoad))
+                sets.put(i, item)
+                changed += 1
+            }
+        }
+        if (changed == 0) {
+            Toast.makeText(this, "Todas as series ja foram concluidas.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        savePlannedSets(sets)
+        Toast.makeText(this, "Carga sugerida aplicada nas series pendentes.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun applySmartVolumeToCurrentExercise() {
+        val adjustment = strengthAdjustmentFor(currentExercise())
+        val sets = plannedSetsForCurrentExercise()
+        val desired = adjustment.suggestedSetCount.coerceIn(1, 8)
+        var changed = false
+
+        while (sets.length() < desired) {
+            sets.put(JSONObject()
+                .put("id", UUID.randomUUID().toString())
+                .put("load", loadInputText(adjustment.nextLoad))
+                .put("reps", defaultRepsFor(currentExercise().target))
+                .put("done", false))
+            changed = true
+        }
+
+        while (sets.length() > desired) {
+            var removed = false
+            for (i in sets.length() - 1 downTo 0) {
+                if (!sets.getJSONObject(i).optBoolean("done", false)) {
+                    sets.remove(i)
+                    removed = true
+                    changed = true
+                    break
+                }
+            }
+            if (!removed) break
+        }
+
+        if (!changed) {
+            Toast.makeText(this, "Volume ja esta no ponto sugerido.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        savePlannedSets(sets)
+        Toast.makeText(this, "Series ajustadas pelo coach.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun recentSetsForExercise(exercise: String, limit: Int): List<JSONObject> {
+        val logs = allLogs()
+        val result = mutableListOf<JSONObject>()
+        for (i in logs.length() - 1 downTo 0) {
+            val item = logs.getJSONObject(i)
+            if (item.optString("exercise") == exercise) {
+                result.add(item)
+                if (result.size >= limit) break
+            }
+        }
+        return result
+    }
+
+    private fun targetRepBounds(target: String): Pair<Int, Int> {
+        val match = Regex("[xX]\\s*(\\d+)(?:\\s*-\\s*(\\d+))?").find(target)
+        val first = match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: defaultRepsFor(target).toIntOrNull() ?: 10
+        val second = match?.groupValues?.getOrNull(2)?.toIntOrNull() ?: first
+        return Pair(first.coerceAtLeast(1), second.coerceAtLeast(first))
+    }
+
+    private fun smartLoadStep(load: Double): Double {
+        return when {
+            load <= 0.0 -> 0.0
+            load < 12.0 -> 1.0
+            load < 40.0 -> 2.5
+            else -> 5.0
+        }
+    }
+
+    private fun roundLoad(value: Double): Double = (value * 2.0).roundToInt().toDouble() / 2.0
+
+    private fun loadInputText(value: Double): String {
+        return if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.US, "%.1f", value)
     }
 
     private fun swapCurrentExerciseForRecommended() {
@@ -2198,6 +2424,9 @@ class MainActivity : Activity() {
             "",
             "Corrida hoje:",
             if (runLines.isEmpty()) "Nenhuma corrida registrada hoje." else runLines.joinToString("\n"),
+            "",
+            "Proximo ajuste:",
+            smartCoachLines().joinToString("\n"),
         ).joinToString("\n")
         AlertDialog.Builder(this)
             .setTitle("Treino concluido")
@@ -2772,6 +3001,17 @@ class MainActivity : Activity() {
         return insights
     }
 
+    private fun smartCoachLines(): List<String> {
+        val strength = strengthAdjustmentFor(currentExercise())
+        val run = smartRunningAdjustment()
+        return listOf(
+            "Musculacao: " + currentExercise().name + " -> " + formatLoad(strength.nextLoad) + " em " + strength.suggestedSetCount + " series.",
+            "Carga: " + strength.loadReason,
+            "Corrida: " + run.headline + " -> " + signedSpeedOffset(run.speedOffset) + " e distancia x" + String.format(Locale.US, "%.2f", run.distanceScale) + ".",
+            "Ritmo: " + run.reason,
+        )
+    }
+
     private fun lastLoadFor(exercise: String): String {
         val logs = allLogs()
         for (i in logs.length() - 1 downTo 0) {
@@ -3022,6 +3262,96 @@ class MainActivity : Activity() {
         stages.add(RunningStage("Soltar", 0.8, 6.8, "Finalize leve."))
         return stages
     }
+
+    private fun smartRunningAdjustment(): RunningAdjustment {
+        val currentOffset = prefs.getString("running_speed_offset", "0.0")?.toDoubleOrNull() ?: 0.0
+        val currentScale = prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0
+        val recent = recentRunLogItems(4)
+        val weekWorkouts = currentRunningWeekWorkouts()
+        val completedThisWeek = weekWorkouts.count { isRunWorkoutCompleted(it) }
+        val plannedAvgSpeed = plannedAverageSpeed(weekWorkouts)
+
+        if (recent.isEmpty()) {
+            return RunningAdjustment(
+                speedOffset = roundSpeed(currentOffset),
+                distanceScale = roundScale(currentScale),
+                headline = "Base atual mantida",
+                reason = "Sem corridas salvas ainda. Complete pelo menos um treino para calibrar ritmo e distancia.",
+            )
+        }
+
+        val avgRecentSpeed = recent.map { it.optDouble("speed") }.filter { it > 0.0 }.average()
+        var suggestedOffset = currentOffset
+        var suggestedScale = currentScale
+        val headline: String
+        val reason: String
+
+        when {
+            completedThisWeek >= 4 && avgRecentSpeed >= plannedAvgSpeed - 0.2 -> {
+                suggestedOffset = (currentOffset + 0.1).coerceIn(-2.0, 2.0)
+                suggestedScale = (currentScale + 0.02).coerceIn(0.60, 1.40)
+                headline = "Subir levemente"
+                reason = "Voce esta concluindo bem a semana. Proximo passo seguro: +0,1 km/h e um pequeno aumento de distancia."
+            }
+            completedThisWeek >= 2 && avgRecentSpeed >= plannedAvgSpeed -> {
+                suggestedOffset = (currentOffset + 0.1).coerceIn(-2.0, 2.0)
+                headline = "Acelerar um pouco"
+                reason = "Ritmo recente esta igual ou acima do planejado. Aumente so 0,1 km/h para manter controle."
+            }
+            completedThisWeek <= 1 && currentRunningPlanWeek() > 1 -> {
+                suggestedOffset = (currentOffset - 0.1).coerceIn(-2.0, 2.0)
+                suggestedScale = (currentScale - 0.02).coerceIn(0.60, 1.40)
+                headline = "Consolidar antes de subir"
+                reason = "Poucos treinos concluidos nesta semana. Reduza levemente para voltar a consistencia."
+            }
+            else -> {
+                headline = "Manter ritmo"
+                reason = "Semana em progresso normal. Mantenha o ajuste atual e registre a proxima corrida."
+            }
+        }
+
+        return RunningAdjustment(
+            speedOffset = roundSpeed(suggestedOffset),
+            distanceScale = roundScale(suggestedScale),
+            headline = headline,
+            reason = reason,
+        )
+    }
+
+    private fun applySmartRunningAdjustment(adjustment: RunningAdjustment) {
+        prefs.edit()
+            .putString("running_speed_offset", adjustment.speedOffset.toString())
+            .putString("running_distance_scale", adjustment.distanceScale.toString())
+            .remove("selected_run_id")
+            .apply()
+        clearActiveRun()
+        Toast.makeText(this, "Ajuste de corrida aplicado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun recentRunLogItems(limit: Int): List<JSONObject> {
+        val logs = runLogs()
+        val result = mutableListOf<JSONObject>()
+        for (i in logs.length() - 1 downTo 0) {
+            result.add(logs.getJSONObject(i))
+            if (result.size >= limit) break
+        }
+        return result
+    }
+
+    private fun plannedAverageSpeed(workouts: List<RunningWorkout>): Double {
+        val distance = workouts.sumOf { totalRunDistance(it) }
+        val seconds = workouts.sumOf { estimatedWorkoutSeconds(it) }
+        return if (distance <= 0.0 || seconds <= 0L) 0.0 else distance / (seconds.toDouble() / 3600.0)
+    }
+
+    private fun signedSpeedOffset(value: Double): String {
+        val rounded = roundSpeed(value)
+        val sign = if (rounded > 0.0) "+" else ""
+        return sign + String.format(Locale("pt", "BR"), "%.1f km/h", rounded)
+    }
+
+    private fun roundScale(value: Double): Double = (value * 100.0).roundToInt().toDouble() / 100.0
 
     private fun currentRunningWeekWorkouts(): List<RunningWorkout> {
         val week = currentRunningPlanWeek()

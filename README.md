@@ -358,3 +358,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Resumo inclui as corridas registradas no mesmo dia.
 - Popup ganha botao Copiar para salvar o resumo no clipboard.
 - O app Android passa para versionCode 970 / versionName 9.7.0.
+
+## v9.8.0 - Ajustes inteligentes de carga, volume e ritmo
+
+- Aba Treino ganha painel de ajuste inteligente com proxima carga e volume sugerido.
+- Sugestao de carga usa historico recente, faixa de reps e RPE para subir, manter ou reduzir com cautela.
+- Botoes Aplicar carga e Ajustar series atualizam apenas as series pendentes do exercicio atual.
+- Aba Corrida ganha ajuste de ritmo com microalteracoes de velocidade e distancia conforme progresso.
+- Stats passa a exibir Coach Inteligente com proximos ajustes de musculacao e corrida.
+- Popup final de treino inclui as recomendacoes para o proximo ajuste.
+- O app Android passa para versionCode 980 / versionName 9.8.0.

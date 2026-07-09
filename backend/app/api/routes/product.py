@@ -24,7 +24,7 @@ def get_mvp_status() -> dict:
 
     user_flows = [
         {"key": "execute_strength_workout", "label": "Executar treino de musculação", "coverage": 100},
-        {"key": "strength_load_progression", "label": "Receber sugestão de evolução de carga", "coverage": 80},
+        {"key": "strength_load_progression", "label": "Receber sugestão de evolução de carga", "coverage": 90},
         {"key": "swap_exercise", "label": "Trocar exercício por academia cheia", "coverage": 100},
         {"key": "mark_equipment_unavailable", "label": "Marcar equipamento inexistente", "coverage": 100},
         {"key": "manual_treadmill_run", "label": "Registrar corrida na esteira", "coverage": 100},
@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar ajustes inteligentes de carga, volume e ritmo",
         "Adicionar polimento de uso real na academia e esteira",
+        "Consolidar versao pessoal madura para uso continuo",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Personal Backup and Session Summary",
+        "milestone": "Smart Load Volume and Pace Adjustments",
         "status": "operational",
-        "release_focus": "Adicionar backup/importacao JSON e resumo final de sessao mais completo no Android.",
+        "release_focus": "Adicionar ajustes inteligentes de carga, volume e ritmo no Android.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,15 +60,16 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.7.0",
-        "title": "Personal Backup and Session Summary",
+        "version": "9.8.0",
+        "title": "Smart Load Volume and Pace Adjustments",
         "highlights": [
-            "Perfil ganhou backup pessoal JSON com copia para clipboard.",
-            "Backup inclui series, corridas, plano editado, favoritos, ocultos, substitutos, metas e ajustes locais.",
-            "Perfil permite importar backup JSON colado ou direto do clipboard.",
-            "Importacao tambem aceita o formato antigo de exportacao basica.",
-            "Resumo final de treino agora mostra series, exercicios, volume, RPE medio, melhor carga e corridas do dia.",
-            "Resumo final pode ser copiado para o clipboard.",
-            "Build Android atualizado para versionCode 970.",
+            "Aba Treino ganhou painel de ajuste inteligente para proxima carga e volume sugerido.",
+            "Carga sugerida usa historico recente, reps-alvo e RPE para subir, manter ou reduzir com cautela.",
+            "Botao Aplicar carga atualiza as series pendentes do exercicio atual.",
+            "Botao Ajustar series adiciona ou reduz apenas series pendentes conforme o volume sugerido.",
+            "Aba Corrida ganhou painel de ajuste de ritmo com microajustes de velocidade e distancia.",
+            "Stats agora mostra um card Coach Inteligente com proximo ajuste de musculacao e corrida.",
+            "Resumo final de treino inclui as proximas recomendacoes.",
+            "Build Android atualizado para versionCode 980.",
         ],
     }

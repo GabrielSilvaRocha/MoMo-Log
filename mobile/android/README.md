@@ -103,3 +103,7 @@ Perfil com backup pessoal JSON completo, copia para clipboard e importacao por t
 ## v9.7.0
 
 Resumo final de treino mais completo com series, exercicios, volume, RPE medio, melhor carga, corridas do dia e botao para copiar o resumo.
+
+## v9.8.0
+
+Ajustes inteligentes no Android nativo: aba Treino sugere proxima carga e volume por RPE/reps recentes, aba Corrida sugere microajustes de ritmo/distancia e Stats mostra o Coach Inteligente consolidado.
