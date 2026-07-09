@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar backup pessoal por exportacao/importacao JSON",
-        "Adicionar resumo final de sessao mais completo",
+        "Adicionar ajustes inteligentes de carga, volume e ritmo",
+        "Adicionar polimento de uso real na academia e esteira",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Advanced History and Animated Exercise Swap",
+        "milestone": "Personal Backup and Session Summary",
         "status": "operational",
-        "release_focus": "Evoluir o Historico Android com filtros, metricas e evolucao por exercicio, alem de escolha animada para troca recomendada.",
+        "release_focus": "Adicionar backup/importacao JSON e resumo final de sessao mais completo no Android.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,15 +60,15 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.5.0",
-        "title": "Advanced History and Animated Exercise Swap",
+        "version": "9.7.0",
+        "title": "Personal Backup and Session Summary",
         "highlights": [
-            "Aba Historico ganhou filtros por periodo, tipo e busca textual.",
-            "Historico mostra metricas filtradas de series, volume, corridas, distancia e dias registrados.",
-            "Painel Evolucao por exercicio resume volume, melhor carga e variacao de carga por movimento.",
-            "Listas de musculacao e corrida agora respeitam os filtros aplicados.",
-            "Trocar por recomendado abre popup com alternativas para escolher em vez de substituir direto.",
-            "Popup de alternativas usa animacao suave de entrada.",
-            "Build Android atualizado para versionCode 950.",
+            "Perfil ganhou backup pessoal JSON com copia para clipboard.",
+            "Backup inclui series, corridas, plano editado, favoritos, ocultos, substitutos, metas e ajustes locais.",
+            "Perfil permite importar backup JSON colado ou direto do clipboard.",
+            "Importacao tambem aceita o formato antigo de exportacao basica.",
+            "Resumo final de treino agora mostra series, exercicios, volume, RPE medio, melhor carga e corridas do dia.",
+            "Resumo final pode ser copiado para o clipboard.",
+            "Build Android atualizado para versionCode 970.",
         ],
     }

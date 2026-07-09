@@ -203,8 +203,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.5.0"
-    private val trainingPlanVersion = "9.5.0"
+    private val versionName = "9.7.0"
+    private val trainingPlanVersion = "9.7.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -1127,7 +1127,7 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.5.0.", muted, 14f, false))
+        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.7.0.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
             prefs.edit()
@@ -1787,17 +1787,50 @@ class MainActivity : Activity() {
         box.addView(label("PERFIL LOCAL", green, 13f, true))
         box.addView(label("Mo2 LOG pessoal", white, 24f, true))
         box.addView(label("Versao nativa " + versionName + ". Seus dados ficam somente neste celular.", muted, 15f, false))
-        val export = actionButton("Exportar todos os dados", green, bg)
-        export.setOnClickListener { exportToClipboard() }
-        box.addView(buttonParams(export))
+        root.addView(box)
+
+        val backup = card()
+        backup.orientation = LinearLayout.VERTICAL
+        backup.addView(label("BACKUP PESSOAL", green, 13f, true))
+        backup.addView(label("Exportacao e importacao JSON", white, 22f, true))
+        backup.addView(label("Copia todos os dados locais: series, corridas, plano editado, favoritos, ocultos, substitutos, metas e ajustes.", muted, 14f, false))
+
+        val copy = actionButton("Copiar backup JSON", green, bg)
+        copy.setOnClickListener { exportToClipboard() }
+        backup.addView(buttonParams(copy))
+
+        val paste = textArea("Cole aqui um backup JSON para importar", "")
+        backup.addView(paste)
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val importPasted = actionButton("Importar colado", surface2, green)
+        importPasted.setOnClickListener {
+            hideKeyboard()
+            importBackupJson(paste.textValue())
+        }
+        row.addView(importPasted, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val importClipboard = actionButton("Do clipboard", surface2, white)
+        importClipboard.setOnClickListener {
+            hideKeyboard()
+            importBackupJson(readClipboardText())
+        }
+        row.addView(importClipboard, LinearLayout.LayoutParams(0, dp(50), 1f))
+        backup.addView(spacedRow(row))
+        root.addView(backup)
+
+        val dangerBox = card()
+        dangerBox.orientation = LinearLayout.VERTICAL
+        dangerBox.addView(label("DADOS LOCAIS", green, 13f, true))
+        dangerBox.addView(label("Apagar remove historico de series e corridas deste celular.", muted, 14f, false))
         val clear = actionButton("Apagar dados locais", surface2, danger)
         clear.setOnClickListener {
             prefs.edit().remove("set_logs").remove("run_logs").apply()
             Toast.makeText(this, "Dados locais apagados.", Toast.LENGTH_SHORT).show()
             render()
         }
-        box.addView(buttonParams(clear))
-        root.addView(box)
+        dangerBox.addView(buttonParams(clear))
+        root.addView(dangerBox)
     }
 
     private fun planSelector(): View {
@@ -2122,23 +2155,69 @@ class MainActivity : Activity() {
     private fun showWorkoutSummaryPopup() {
         val logs = todayLogs()
         val exerciseCounts = linkedMapOf<String, Int>()
+        var totalVolume = 0.0
+        var bestLoad = 0.0
+        var bestExercise = "-"
+        var rpeSum = 0.0
+        var rpeCount = 0
         for (i in 0 until logs.length()) {
             val item = logs.getJSONObject(i)
             if (item.optString("plan") == currentPlan().title) {
                 val name = item.optString("exercise")
                 exerciseCounts[name] = (exerciseCounts[name] ?: 0) + 1
+                val load = item.optDouble("load")
+                totalVolume += load * item.optInt("reps")
+                if (load > bestLoad) {
+                    bestLoad = load
+                    bestExercise = name
+                }
+                val rpe = item.optDouble("rpe", -1.0)
+                if (rpe >= 0.0) {
+                    rpeSum += rpe
+                    rpeCount += 1
+                }
             }
         }
-        val message = if (exerciseCounts.isEmpty()) {
+        val runLines = todayRunSummaryLines()
+        val avgRpe = if (rpeCount == 0) "-" else String.format(Locale("pt", "BR"), "%.1f", rpeSum / rpeCount)
+        val exerciseLines = if (exerciseCounts.isEmpty()) {
             "Nenhuma serie registrada hoje."
         } else {
-            exerciseCounts.entries.joinToString("\n") { entry -> entry.key + ": " + entry.value + " series" }
+            exerciseCounts.entries.joinToString("\n") { entry -> "- " + entry.key + ": " + entry.value + " series" }
         }
+        val message = listOf(
+            "Treino: " + currentPlan().title,
+            "Series: " + exerciseCounts.values.sum(),
+            "Exercicios feitos: " + exerciseCounts.size,
+            "Volume: " + totalVolume.roundToInt() + " kg",
+            "RPE medio: " + avgRpe,
+            "Melhor carga: " + if (bestLoad <= 0.0) "-" else bestExercise + " " + formatLoad(bestLoad),
+            "",
+            "Exercicios:",
+            exerciseLines,
+            "",
+            "Corrida hoje:",
+            if (runLines.isEmpty()) "Nenhuma corrida registrada hoje." else runLines.joinToString("\n"),
+        ).joinToString("\n")
         AlertDialog.Builder(this)
             .setTitle("Treino concluido")
             .setMessage(message)
+            .setNeutralButton("Copiar") { _, _ -> copyTextToClipboard("Resumo Mo2 LOG", message, "Resumo copiado.") }
             .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
             .show()
+    }
+
+    private fun todayRunSummaryLines(): List<String> {
+        val runs = runLogs()
+        val lines = mutableListOf<String>()
+        for (i in 0 until runs.length()) {
+            val item = runs.getJSONObject(i)
+            if (item.optString("day") == dayKey()) {
+                val title = item.optString("workout_title", "Corrida")
+                lines.add("- " + title + ": " + formatKm(item.optDouble("distance")) + " em " + item.optString("duration"))
+            }
+        }
+        return lines
     }
 
     private fun saveSet(exercise: String, repsRaw: String, loadRaw: String, rirRaw: String, rpeRaw: String, notes: String, autoAdvance: Boolean = false, renderAfter: Boolean = true): String {
@@ -2431,20 +2510,87 @@ class MainActivity : Activity() {
     }
 
     private fun exportToClipboard() {
-        val payload = JSONObject()
+        val payload = backupPayload().toString(2)
+        copyTextToClipboard("Mo2 LOG backup", payload, "Backup JSON copiado.")
+    }
+
+    private fun copyTextToClipboard(label: String, text: String, toast: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+        Toast.makeText(this, toast, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun backupPayload(): JSONObject {
+        val preferences = JSONObject()
+        prefs.all.forEach { entry ->
+            when (val value = entry.value) {
+                is String -> preferences.put(entry.key, value)
+                is Boolean -> preferences.put(entry.key, value)
+                is Int -> preferences.put(entry.key, value)
+                is Long -> preferences.put(entry.key, value)
+                is Float -> preferences.put(entry.key, value.toDouble())
+                else -> preferences.put(entry.key, value?.toString() ?: "")
+            }
+        }
+        return JSONObject()
             .put("source", "mo2log_native_android")
+            .put("schema", "personal_backup_v1")
             .put("version", versionName)
             .put("exported_at", timestamp())
+            .put("preferences", preferences)
             .put("strength_logs", allLogs())
             .put("run_logs", runLogs())
-            .put("goals", JSONObject()
-                .put("week_sets", prefs.getString("goal_week_sets", "60"))
-                .put("week_volume", prefs.getString("goal_week_volume", "12000"))
-                .put("body_weight", prefs.getString("body_weight", "")))
-            .toString(2)
+            .put("summary", JSONObject()
+                .put("strength_log_count", allLogs().length())
+                .put("run_log_count", runLogs().length())
+                .put("custom_plan", prefs.contains("custom_workout_plans")))
+    }
+
+    private fun importBackupJson(raw: String) {
+        if (raw.isBlank()) {
+            Toast.makeText(this, "Cole ou copie um JSON de backup primeiro.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val payload = JSONObject(raw.trim())
+            val editor = prefs.edit()
+            val preferences = payload.optJSONObject("preferences")
+            if (preferences != null) {
+                val keys = preferences.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    when (val value = preferences.get(key)) {
+                        is Boolean -> editor.putBoolean(key, value)
+                        is Int -> editor.putInt(key, value)
+                        is Long -> editor.putLong(key, value)
+                        is Double -> editor.putString(key, value.toString())
+                        else -> editor.putString(key, value.toString())
+                    }
+                }
+            } else {
+                if (payload.has("strength_logs")) editor.putString("set_logs", payload.getJSONArray("strength_logs").toString())
+                if (payload.has("run_logs")) editor.putString("run_logs", payload.getJSONArray("run_logs").toString())
+                payload.optJSONObject("goals")?.let { goals ->
+                    editor.putString("goal_week_sets", goals.optString("week_sets", "60"))
+                    editor.putString("goal_week_volume", goals.optString("week_volume", "12000"))
+                    editor.putString("body_weight", goals.optString("body_weight", ""))
+                }
+            }
+            editor
+                .remove("rest_timer_end_at")
+                .remove("running_active_id")
+                .remove("running_countdown_end_at")
+                .apply()
+            Toast.makeText(this, "Backup importado.", Toast.LENGTH_SHORT).show()
+            render()
+        } catch (_: Exception) {
+            Toast.makeText(this, "JSON de backup invalido.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun readClipboardText(): String {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Mo2 LOG export", payload))
-        Toast.makeText(this, "Exportacao copiada.", Toast.LENGTH_SHORT).show()
+        return clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
     }
 
     private fun allLogs(): JSONArray = safeArray("set_logs")
@@ -3188,6 +3334,25 @@ class MainActivity : Activity() {
         input.setPadding(dp(14), 0, dp(14), 0)
         input.background = rounded(surface2, dp(8), border)
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54))
+        params.setMargins(0, dp(8), 0, 0)
+        input.layoutParams = params
+        return input
+    }
+
+    private fun textArea(hint: String, defaultValue: String): EditText {
+        val input = EditText(this)
+        input.hint = hint
+        input.setText(defaultValue)
+        input.setSingleLine(false)
+        input.minLines = 4
+        input.maxLines = 8
+        input.gravity = Gravity.TOP
+        input.setTextColor(white)
+        input.setHintTextColor(muted)
+        input.textSize = 14f
+        input.setPadding(dp(14), dp(12), dp(14), dp(12))
+        input.background = rounded(surface2, dp(8), border)
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150))
         params.setMargins(0, dp(8), 0, 0)
         input.layoutParams = params
         return input

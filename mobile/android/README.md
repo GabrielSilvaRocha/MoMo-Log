@@ -95,3 +95,11 @@ Aba Treino passa a usar checklist de series com carga/reps/checkbox, descanso ab
 ## v9.5.0
 
 Historico avancado com filtros por periodo/tipo/busca, metricas filtradas, evolucao por exercicio e popup animado para escolher alternativas ao trocar exercicio recomendado.
+
+## v9.6.0
+
+Perfil com backup pessoal JSON completo, copia para clipboard e importacao por texto colado ou clipboard.
+
+## v9.7.0
+
+Resumo final de treino mais completo com series, exercicios, volume, RPE medio, melhor carga, corridas do dia e botao para copiar o resumo.
