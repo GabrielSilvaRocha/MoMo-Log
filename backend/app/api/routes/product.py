@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar historico avancado com filtros e evolucao por exercicio",
         "Adicionar backup pessoal por exportacao/importacao JSON",
+        "Adicionar resumo final de sessao mais completo",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Workout Checklist and Local Plan Editor",
+        "milestone": "Advanced History and Animated Exercise Swap",
         "status": "operational",
-        "release_focus": "Refinar a aba Treino no Android com checklist de series, descanso sonoro, troca recomendada e editor local de plano.",
+        "release_focus": "Evoluir o Historico Android com filtros, metricas e evolucao por exercicio, alem de escolha animada para troca recomendada.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,16 +60,15 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.4.0",
-        "title": "Workout Checklist and Local Plan Editor",
+        "version": "9.5.0",
+        "title": "Advanced History and Animated Exercise Swap",
         "highlights": [
-            "Aba Treino agora usa checklist de series com carga, repeticoes e checkbox de conclusao.",
-            "O exercicio so avanca quando todas as series planejadas forem concluidas.",
-            "Descanso fica abaixo do exercicio atual e toca som de notificacao ao terminar.",
-            "Series podem ser adicionadas com botao + e removidas com gesto de arrastar para a esquerda.",
-            "Botao Trocar por recomendado substitui o exercicio por alternativa do catalogo.",
-            "Ao concluir o treino, o app exibe popup com resumo dos exercicios feitos no dia.",
-            "A tela Plano permite editar treinos, exercicios e ajustes basicos da corrida localmente.",
-            "Build Android atualizado para versionCode 940.",
+            "Aba Historico ganhou filtros por periodo, tipo e busca textual.",
+            "Historico mostra metricas filtradas de series, volume, corridas, distancia e dias registrados.",
+            "Painel Evolucao por exercicio resume volume, melhor carga e variacao de carga por movimento.",
+            "Listas de musculacao e corrida agora respeitam os filtros aplicados.",
+            "Trocar por recomendado abre popup com alternativas para escolher em vez de substituir direto.",
+            "Popup de alternativas usa animacao suave de entrada.",
+            "Build Android atualizado para versionCode 950.",
         ],
     }

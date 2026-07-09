@@ -91,3 +91,7 @@ Aba Corrida reformulada com Essa Semana, 5 treinos, conclusao manual, planejamen
 ## v9.4.0
 
 Aba Treino passa a usar checklist de series com carga/reps/checkbox, descanso abaixo do exercicio com som ao terminar, botao + para nova serie, swipe para apagar, troca por exercicio recomendado, popup de conclusao e tela Plano para edicoes locais.
+
+## v9.5.0
+
+Historico avancado com filtros por periodo/tipo/busca, metricas filtradas, evolucao por exercicio e popup animado para escolher alternativas ao trocar exercicio recomendado.
