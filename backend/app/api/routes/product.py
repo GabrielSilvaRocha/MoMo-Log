@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar editor local para alterar o plano pessoal no celular",
-        "Adicionar resumo final da sessao com volume, series e exercicios concluidos",
+        "Adicionar historico avancado com filtros e evolucao por exercicio",
+        "Adicionar backup pessoal por exportacao/importacao JSON",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Guided 5K Running Coach",
+        "milestone": "Workout Checklist and Local Plan Editor",
         "status": "operational",
-        "release_focus": "Reformular a aba Corrida no Android com semana atual, planejamento completo e treino guiado por fases.",
+        "release_focus": "Refinar a aba Treino no Android com checklist de series, descanso sonoro, troca recomendada e editor local de plano.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,14 +60,16 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.3.0",
-        "title": "Guided 5K Running Coach",
+        "version": "9.4.0",
+        "title": "Workout Checklist and Local Plan Editor",
         "highlights": [
-            "Aba Corrida ganhou bloco Essa Semana com os 5 treinos e checkbox de conclusao.",
-            "Treinos podem ser marcados como concluidos manualmente quando feitos sem o app.",
-            "Planejamento completo mostra 6 semanas de progressao ate a meta de 5 km.",
-            "Treino guiado por fases tem timer inicial de 5 segundos, contagem regressiva, km restantes e ajuste de velocidade com botoes -/+.",
-            "Coach por voz avisa quando faltam 30 segundos e informa a proxima etapa.",
-            "Build Android atualizado para versionCode 930.",
+            "Aba Treino agora usa checklist de series com carga, repeticoes e checkbox de conclusao.",
+            "O exercicio so avanca quando todas as series planejadas forem concluidas.",
+            "Descanso fica abaixo do exercicio atual e toca som de notificacao ao terminar.",
+            "Series podem ser adicionadas com botao + e removidas com gesto de arrastar para a esquerda.",
+            "Botao Trocar por recomendado substitui o exercicio por alternativa do catalogo.",
+            "Ao concluir o treino, o app exibe popup com resumo dos exercicios feitos no dia.",
+            "A tela Plano permite editar treinos, exercicios e ajustes basicos da corrida localmente.",
+            "Build Android atualizado para versionCode 940.",
         ],
     }

@@ -1,6 +1,7 @@
 package br.com.mo2log.mobile
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -9,12 +10,15 @@ import android.graphics.Typeface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
@@ -196,8 +200,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.3.0"
-    private val trainingPlanVersion = "9.3.0"
+    private val versionName = "9.4.0"
+    private val trainingPlanVersion = "9.4.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -210,9 +214,11 @@ class MainActivity : Activity() {
     private val amber = Color.rgb(255, 198, 88)
 
     private val prefs by lazy { getSharedPreferences("mo2log_native", Context.MODE_PRIVATE) }
-    private val plans by lazy { buildWorkoutPlans() }
+    private val plans: List<WorkoutPlan>
+        get() = buildWorkoutPlans()
     private val catalog by lazy { loadExerciseCatalog() }
-    private val runningPlan by lazy { buildRunningPlan() }
+    private val runningPlan: List<RunningWorkout>
+        get() = buildRunningPlan()
     private val primaryNavItems = listOf(
         NavItem("home", "Home"),
         NavItem("workout", "Treino"),
@@ -220,6 +226,7 @@ class MainActivity : Activity() {
         NavItem("more", "Mais"),
     )
     private val secondaryNavItems = listOf(
+        NavItem("plan_editor", "Plano"),
         NavItem("exercises", "Exercicios"),
         NavItem("history", "Historico"),
         NavItem("stats", "Stats"),
@@ -247,8 +254,11 @@ class MainActivity : Activity() {
         override fun run() {
             restTimerText?.let { view ->
                 view.text = restTimerDisplay()
-                if (restTimerRemainingSeconds() > 0L) {
+                val remaining = restTimerRemainingSeconds()
+                if (remaining > 0L) {
                     restTimerHandler.postDelayed(this, 1000L)
+                } else {
+                    notifyRestTimerFinishedIfNeeded()
                 }
             }
         }
@@ -328,6 +338,7 @@ class MainActivity : Activity() {
             "workout" -> renderWorkout(root)
             "running" -> renderRunning(root)
             "more" -> renderMore(root)
+            "plan_editor" -> renderPlanEditor(root)
             "history" -> renderHistory(root)
             "stats" -> renderStats(root)
             "exercises" -> renderExercises(root)
@@ -450,10 +461,11 @@ class MainActivity : Activity() {
         hub.orientation = LinearLayout.VERTICAL
         hub.addView(label("CENTRAL DO APP", green, 13f, true))
         hub.addView(label("Ferramentas extras em um lugar so", white, 25f, true))
-        hub.addView(label("Historico, estatisticas, catalogo, metas, coach e perfil ficam aqui para deixar o uso diario mais direto.", muted, 15f, false))
+        hub.addView(label("Plano, historico, estatisticas, catalogo, metas, coach e perfil ficam aqui para deixar o uso diario mais direto.", muted, 15f, false))
         root.addView(hub)
 
         val shortcuts = listOf(
+            Triple("plan_editor", "Plano", "Editar treinos, exercicios e ajustes da corrida."),
             Triple("exercises", "Exercicios", "Catalogo com midia, favoritos e alternativas."),
             Triple("history", "Historico", "Series e corridas registradas no celular."),
             Triple("stats", "Stats", "Volume, cargas, semana e melhores marcas."),
@@ -602,15 +614,14 @@ class MainActivity : Activity() {
 
     private fun renderWorkout(root: LinearLayout) {
         val plan = currentPlan()
-        root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Siga o exercicio atual, registre a serie e use o descanso automatico entre blocos."))
+        root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Marque cada serie concluida. O app so troca de exercicio quando todas as series forem feitas."))
         root.addView(workoutProgressPanel())
-        root.addView(restTimerPanel())
         root.addView(selectedExerciseMediaPanel())
+        root.addView(registerPanel())
         root.addView(sectionTitle("Programa de treinos"))
         root.addView(planSelector())
         root.addView(sectionTitle("Exercicios do treino"))
         root.addView(exerciseList())
-        root.addView(registerPanel())
     }
 
     private fun workoutProgressPanel(): View {
@@ -668,6 +679,7 @@ class MainActivity : Activity() {
         box.addView(timer)
         box.addView(label(restTimerSubtitle(), muted, 14f, false))
         if (active) restTimerHandler.post(restTimerRunnable)
+        else notifyRestTimerFinishedIfNeeded()
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
@@ -907,6 +919,230 @@ class MainActivity : Activity() {
             "Ultima etapa do treino."
         }
         announceRunTransitionIfNeeded(workout, stageIndex, remainingSeconds)
+    }
+
+    private fun renderPlanEditor(root: LinearLayout) {
+        root.addView(heroCard("Editor local", "Plano pessoal", "Ajuste musculacao e corrida direto no celular. Tudo fica salvo localmente."))
+        root.addView(planEditorSummary())
+        root.addView(planEditorSelector())
+        root.addView(planDetailsEditor())
+        root.addView(exerciseDetailsEditor())
+        root.addView(runningPlanEditor())
+        root.addView(planEditorResetPanel())
+    }
+
+    private fun planEditorSummary(): View {
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        val custom = prefs.contains("custom_workout_plans")
+        box.addView(label("STATUS DO PLANO", green, 13f, true))
+        box.addView(label(if (custom) "Plano personalizado ativo" else "Plano padrao ativo", white, 23f, true))
+        box.addView(label(plans.size.toString() + " treinos de musculacao | " + runningPlan.size + " corridas planejadas", muted, 15f, false))
+        box.addView(label("Edicoes feitas aqui aparecem imediatamente na aba Treino e nos atalhos da Home.", muted, 14f, false))
+        return box
+    }
+
+    private fun planEditorSelector(): View {
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("TREINOS", green, 13f, true))
+        val selected = editorPlanIndex()
+        plans.forEachIndexed { index, plan ->
+            val item = card(if (index == selected) surface3 else surface)
+            item.orientation = LinearLayout.VERTICAL
+            item.setOnClickListener {
+                prefs.edit().putInt("editor_plan", index).putInt("editor_exercise", 0).apply()
+                render()
+            }
+            item.addView(label(plan.title + " - " + plan.focus, white, 17f, true))
+            item.addView(label(plan.exercises.size.toString() + " exercicios", muted, 13f, false))
+            box.addView(item)
+        }
+
+        val add = actionButton("Adicionar treino", surface2, green)
+        add.setOnClickListener {
+            val updated = plans.toMutableList()
+            updated.add(WorkoutPlan("custom-" + System.currentTimeMillis(), "Novo treino", "Dia e foco", listOf(
+                ExercisePlan("Novo exercicio", "3 x 10", "60s", "Edite este exercicio antes de usar."),
+            )))
+            saveWorkoutPlans(updated)
+            prefs.edit().putInt("editor_plan", updated.lastIndex).putInt("editor_exercise", 0).apply()
+            Toast.makeText(this, "Treino adicionado.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        box.addView(buttonParams(add))
+        return box
+    }
+
+    private fun planDetailsEditor(): View {
+        val planIndex = editorPlanIndex()
+        val plan = plans[planIndex]
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("EDITAR TREINO", green, 13f, true))
+        val title = input("Nome do treino", plan.title)
+        val focus = input("Dia e foco", plan.focus)
+        box.addView(title)
+        box.addView(focus)
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val save = actionButton("Salvar treino", green, bg)
+        save.setOnClickListener {
+            saveWorkoutPlanDetails(planIndex, title.textValue(), focus.textValue())
+        }
+        row.addView(save, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val duplicate = actionButton("Duplicar", surface2, white)
+        duplicate.setOnClickListener {
+            val updated = plans.toMutableList()
+            val copy = plan.copy(id = "custom-" + System.currentTimeMillis(), title = plan.title + " copia")
+            updated.add(copy)
+            saveWorkoutPlans(updated)
+            prefs.edit().putInt("editor_plan", updated.lastIndex).putInt("editor_exercise", 0).apply()
+            Toast.makeText(this, "Treino duplicado.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        row.addView(duplicate, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+
+        val remove = actionButton("Remover treino", surface2, danger)
+        remove.setOnClickListener {
+            if (plans.size <= 1) {
+                Toast.makeText(this, "Mantenha pelo menos um treino.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val updated = plans.toMutableList()
+            updated.removeAt(planIndex)
+            saveWorkoutPlans(updated)
+            prefs.edit().putInt("editor_plan", 0).putInt("editor_exercise", 0).putInt("selected_plan", 0).apply()
+            Toast.makeText(this, "Treino removido.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        box.addView(buttonParams(remove))
+        return box
+    }
+
+    private fun exerciseDetailsEditor(): View {
+        val planIndex = editorPlanIndex()
+        val plan = plans[planIndex]
+        val exerciseIndex = editorExerciseIndex(plan)
+        val exercise = plan.exercises[exerciseIndex]
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("EXERCICIOS DO TREINO", green, 13f, true))
+
+        plan.exercises.forEachIndexed { index, item ->
+            val active = index == exerciseIndex
+            val row = card(if (active) surface3 else surface)
+            row.orientation = LinearLayout.VERTICAL
+            row.setOnClickListener {
+                prefs.edit().putInt("editor_exercise", index).apply()
+                render()
+            }
+            row.addView(label((index + 1).toString() + ". " + item.name, white, 16f, true))
+            row.addView(label(item.target + " | descanso " + item.rest, muted, 13f, false))
+            box.addView(row)
+        }
+
+        val name = input("Exercicio", exercise.name)
+        val target = input("Series/reps", exercise.target)
+        val rest = input("Descanso", exercise.rest)
+        val notes = input("Notas", exercise.notes)
+        box.addView(name)
+        box.addView(target)
+        box.addView(rest)
+        box.addView(notes)
+
+        val save = actionButton("Salvar exercicio", green, bg)
+        save.setOnClickListener {
+            saveExerciseDetails(planIndex, exerciseIndex, name.textValue(), target.textValue(), rest.textValue(), notes.textValue())
+        }
+        box.addView(buttonParams(save))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val add = actionButton("Adicionar", surface2, green)
+        add.setOnClickListener {
+            val exercises = plan.exercises.toMutableList()
+            exercises.add(ExercisePlan("Novo exercicio", "3 x 10", "60s", "Edite antes de usar no treino."))
+            replacePlanExercises(planIndex, exercises)
+            prefs.edit().putInt("editor_exercise", exercises.lastIndex).apply()
+            Toast.makeText(this, "Exercicio adicionado.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        row.addView(add, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val remove = actionButton("Remover", surface2, danger)
+        remove.setOnClickListener {
+            if (plan.exercises.size <= 1) {
+                Toast.makeText(this, "Mantenha pelo menos um exercicio.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val exercises = plan.exercises.toMutableList()
+            exercises.removeAt(exerciseIndex)
+            replacePlanExercises(planIndex, exercises)
+            prefs.edit().putInt("editor_exercise", exerciseIndex.coerceAtMost(exercises.lastIndex)).apply()
+            Toast.makeText(this, "Exercicio removido.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        row.addView(remove, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun runningPlanEditor(): View {
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("AJUSTES DA CORRIDA", green, 13f, true))
+        box.addView(label("Os treinos de 5 km continuam estruturados, mas voce pode calibrar tudo para sua esteira.", muted, 14f, false))
+        val speed = input("Ajuste de velocidade km/h", prefs.getString("running_speed_offset", "0.0") ?: "0.0")
+        val scale = input("Multiplicador de distancia", prefs.getString("running_distance_scale", "1.00") ?: "1.00")
+        val start = input("Inicio do ciclo yyyy-mm-dd", prefs.getString("running_plan_start_day", dayKey()) ?: dayKey())
+        box.addView(speed)
+        box.addView(scale)
+        box.addView(start)
+        box.addView(label("Exemplo: velocidade 0.3 deixa todas as fases 0,3 km/h mais rapidas; distancia 0.90 reduz os blocos para 90%.", muted, 13f, false))
+
+        val save = actionButton("Salvar ajustes da corrida", green, bg)
+        save.setOnClickListener {
+            val speedValue = speed.textValue().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val scaleValue = (scale.textValue().replace(',', '.').toDoubleOrNull() ?: 1.0).coerceIn(0.60, 1.40)
+            prefs.edit()
+                .putString("running_speed_offset", speedValue.coerceIn(-2.0, 2.0).toString())
+                .putString("running_distance_scale", scaleValue.toString())
+                .putString("running_plan_start_day", start.textValue().ifBlank { dayKey() })
+                .remove("selected_run_id")
+                .apply()
+            clearActiveRun()
+            Toast.makeText(this, "Corrida ajustada.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        box.addView(buttonParams(save))
+        return box
+    }
+
+    private fun planEditorResetPanel(): View {
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("RESTAURAR PADRAO", green, 13f, true))
+        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.4.0.", muted, 14f, false))
+        val reset = actionButton("Restaurar plano padrao", surface2, danger)
+        reset.setOnClickListener {
+            prefs.edit()
+                .remove("custom_workout_plans")
+                .remove("running_speed_offset")
+                .remove("running_distance_scale")
+                .putString("running_plan_start_day", dayKey())
+                .putInt("editor_plan", todayPlanIndex())
+                .putInt("editor_exercise", 0)
+                .putInt("selected_plan", todayPlanIndex())
+                .putInt("selected_exercise", 0)
+                .apply()
+            clearActiveRun()
+            Toast.makeText(this, "Plano padrao restaurado.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        box.addView(buttonParams(reset))
+        return box
     }
 
     private fun renderHistory(root: LinearLayout) {
@@ -1419,89 +1655,260 @@ class MainActivity : Activity() {
     private fun registerPanel(): View {
         val exercise = currentExercise()
         val lastSet = lastSetFor(exercise.name)
-        val defaultReps = if ((lastSet?.optInt("reps") ?: 0) > 0) (lastSet?.optInt("reps") ?: 10).toString() else "10"
-        val defaultLoad = lastLoadFor(exercise.name)
-        val defaultRir = if (lastSet?.has("rir") == true && !lastSet.isNull("rir")) lastSet.optInt("rir").toString() else "2"
-        val defaultRpe = if (lastSet?.has("rpe") == true && !lastSet.isNull("rpe")) {
-            val value = lastSet.optDouble("rpe")
-            if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()
-        } else {
-            "8"
-        }
+        val sets = plannedSetsForCurrentExercise()
+        val doneCount = countDonePlannedSets(sets)
         val box = card()
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("REGISTRAR SERIE", green, 13f, true))
+        box.addView(label("SERIES DO EXERCICIO", green, 13f, true))
         box.addView(label(exercise.name, white, 24f, true))
-        if (lastSet != null) box.addView(label("Ultima serie: " + defaultReps + " reps | " + defaultLoad + " kg | RPE " + defaultRpe, muted, 14f, false))
-        val reps = input("Reps", defaultReps)
-        val load = input("Carga kg", defaultLoad)
-        val rir = input("RIR", defaultRir)
-        val rpe = input("RPE", defaultRpe)
-        val notes = input("Observacao", "")
-        box.addView(reps)
-        box.addView(load)
-        box.addView(rir)
-        box.addView(rpe)
-        box.addView(notes)
-
-        val quickRow = LinearLayout(this)
-        quickRow.orientation = LinearLayout.HORIZONTAL
-        val repeat = actionButton("Repetir ultima", surface2, white)
-        repeat.setOnClickListener {
-            hideKeyboard()
-            saveSet(exercise.name, defaultReps, defaultLoad, defaultRir, defaultRpe, "Atalho: repetir ultima", true)
+        box.addView(label(doneCount.toString() + "/" + sets.length() + " series concluidas. Deslize uma serie para a esquerda para apagar.", muted, 14f, false))
+        if (lastSet != null) {
+            box.addView(label("Ultima concluida: " + lastSet.optInt("reps") + " reps | " + lastSet.optDouble("load") + " kg", muted, 13f, false))
         }
-        quickRow.addView(repeat, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val addLoad = actionButton("+2,5 kg", surface2, green)
-        addLoad.setOnClickListener {
-            hideKeyboard()
-            val nextLoad = ((defaultLoad.replace(',', '.').toDoubleOrNull() ?: 0.0) + 2.5).toString()
-            saveSet(exercise.name, defaultReps, nextLoad, defaultRir, defaultRpe, "Atalho: progressao de carga", true)
-        }
-        quickRow.addView(addLoad, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(quickRow))
+        box.addView(restTimerPanel())
 
-        val save = actionButton("Salvar serie", green, bg)
-        save.setOnClickListener {
-            hideKeyboard()
-            saveSet(exercise.name, reps.textValue(), load.textValue(), rir.textValue(), rpe.textValue(), notes.textValue(), true)
+        for (index in 0 until sets.length()) {
+            box.addView(plannedSetRow(index, sets.getJSONObject(index)))
         }
-        box.addView(buttonParams(save))
 
-        val editRow = LinearLayout(this)
-        editRow.orientation = LinearLayout.HORIZONTAL
-        val update = actionButton("Editar ultima", surface2, green)
-        update.setOnClickListener {
-            hideKeyboard()
-            val id = lastSet?.optString("id").orEmpty()
-            if (id.isBlank()) {
-                Toast.makeText(this, "Nenhuma serie deste exercicio para editar.", Toast.LENGTH_SHORT).show()
-            } else {
-                updateSet(id, reps.textValue(), load.textValue(), rir.textValue(), rpe.textValue(), notes.textValue())
-            }
-        }
-        editRow.addView(update, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val undo = actionButton("Desfazer ultima", surface2, danger)
-        undo.setOnClickListener { undoLastSet() }
-        editRow.addView(undo, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(editRow))
+        val add = actionButton("+", surface2, green)
+        add.textSize = 22f
+        add.setOnClickListener { addPlannedSetForCurrentExercise() }
+        box.addView(buttonParams(add))
 
-        val finish = actionButton("Finalizar treino de hoje", surface2, green)
+        val swap = actionButton("Trocar por recomendado", surface2, green)
+        swap.setOnClickListener { swapCurrentExerciseForRecommended() }
+        box.addView(buttonParams(swap))
+
+        val finish = actionButton("Concluir treino", green, bg)
         finish.setOnClickListener {
             prefs.edit().putString("last_finished_day", dayKey()).apply()
-            Toast.makeText(this, "Treino finalizado localmente.", Toast.LENGTH_SHORT).show()
+            showWorkoutSummaryPopup()
         }
         box.addView(buttonParams(finish))
         return box
     }
 
-    private fun saveSet(exercise: String, repsRaw: String, loadRaw: String, rirRaw: String, rpeRaw: String, notes: String, autoAdvance: Boolean = false) {
+    private fun plannedSetRow(index: Int, item: JSONObject): View {
+        val done = item.optBoolean("done", false)
+        val row = card(if (done) surface3 else surface)
+        row.orientation = LinearLayout.VERTICAL
+
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.HORIZONTAL
+        content.gravity = Gravity.CENTER_VERTICAL
+
+        val check = actionButton(if (done) "[x]" else "[ ]", if (done) green else surface2, if (done) bg else white)
+        content.addView(check, LinearLayout.LayoutParams(dp(58), dp(54)))
+
+        val load = input("kg", item.optString("load", lastLoadFor(currentExercise().name)))
+        content.addView(load, LinearLayout.LayoutParams(0, dp(54), 1f))
+
+        val reps = input("reps", item.optString("reps", defaultRepsFor(currentExercise().target)))
+        content.addView(reps, LinearLayout.LayoutParams(0, dp(54), 1f))
+        row.addView(content)
+
+        row.addView(label("Serie " + (index + 1) + (if (done) " concluida" else " pendente"), if (done) green else muted, 13f, false))
+        check.setOnClickListener {
+            if (done) {
+                Toast.makeText(this, "Serie ja concluida.", Toast.LENGTH_SHORT).show()
+            } else {
+                completePlannedSet(index, load.textValue(), reps.textValue())
+            }
+        }
+
+        var startX = 0f
+        row.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startX = event.rawX
+                    false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val delta = event.rawX - startX
+                    if (delta < -dp(24)) view.background = rounded(danger, dp(8), danger)
+                    false
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val delta = event.rawX - startX
+                    if (delta < -dp(96)) {
+                        deletePlannedSet(index)
+                        true
+                    } else {
+                        view.background = rounded(if (done) surface3 else surface, dp(8), border)
+                        false
+                    }
+                }
+                else -> false
+            }
+        }
+        return row
+    }
+
+    private fun plannedSetKey(): String {
+        return "planned_sets_" + dayKey() + "_" + currentPlan().id + "_" + selectedExerciseIndex
+    }
+
+    private fun plannedSetsForCurrentExercise(): JSONArray {
+        val key = plannedSetKey()
+        val stored = safeArray(key)
+        if (stored.length() > 0) return stored
+
+        val defaults = JSONArray()
+        val count = defaultSetCountFor(currentExercise().target)
+        val reps = defaultRepsFor(currentExercise().target)
+        val load = lastLoadFor(currentExercise().name)
+        for (index in 0 until count) {
+            defaults.put(JSONObject()
+                .put("id", UUID.randomUUID().toString())
+                .put("load", load)
+                .put("reps", reps)
+                .put("done", false))
+        }
+        prefs.edit().putString(key, defaults.toString()).apply()
+        return defaults
+    }
+
+    private fun savePlannedSets(sets: JSONArray) {
+        prefs.edit().putString(plannedSetKey(), sets.toString()).apply()
+    }
+
+    private fun completePlannedSet(index: Int, loadRaw: String, repsRaw: String) {
+        hideKeyboard()
+        val sets = plannedSetsForCurrentExercise()
+        val item = sets.getJSONObject(index)
+        if (item.optBoolean("done", false)) return
+
+        val loadValue = loadRaw.ifBlank { "0" }
+        val repsValue = repsRaw.ifBlank { defaultRepsFor(currentExercise().target) }
+        val logId = saveSet(currentExercise().name, repsValue, loadValue, "2", "8", "Checklist do treino", false, false)
+        item
+            .put("load", loadValue)
+            .put("reps", repsValue)
+            .put("done", true)
+            .put("log_id", logId)
+        sets.put(index, item)
+        savePlannedSets(sets)
+
+        if (countDonePlannedSets(sets) >= sets.length()) {
+            moveAfterExerciseCompleted()
+        } else {
+            Toast.makeText(this, "Serie concluida. Descanso iniciado.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+    }
+
+    private fun addPlannedSetForCurrentExercise() {
+        val sets = plannedSetsForCurrentExercise()
+        sets.put(JSONObject()
+            .put("id", UUID.randomUUID().toString())
+            .put("load", lastLoadFor(currentExercise().name))
+            .put("reps", defaultRepsFor(currentExercise().target))
+            .put("done", false))
+        savePlannedSets(sets)
+        render()
+    }
+
+    private fun deletePlannedSet(index: Int) {
+        val sets = plannedSetsForCurrentExercise()
+        if (sets.length() <= 1) {
+            Toast.makeText(this, "Mantenha pelo menos uma serie.", Toast.LENGTH_SHORT).show()
+            render()
+            return
+        }
+        sets.remove(index)
+        savePlannedSets(sets)
+        Toast.makeText(this, "Serie removida.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun countDonePlannedSets(sets: JSONArray): Int {
+        var count = 0
+        for (i in 0 until sets.length()) {
+            if (sets.getJSONObject(i).optBoolean("done", false)) count += 1
+        }
+        return count
+    }
+
+    private fun moveAfterExerciseCompleted() {
+        if (selectedExerciseIndex < currentPlan().exercises.lastIndex) {
+            selectedExerciseIndex += 1
+            prefs.edit().putInt("selected_exercise", selectedExerciseIndex).apply()
+            Toast.makeText(this, "Exercicio concluido. Proximo exercicio aberto.", Toast.LENGTH_SHORT).show()
+            render()
+        } else {
+            prefs.edit().putString("last_finished_day", dayKey()).apply()
+            showWorkoutSummaryPopup()
+        }
+    }
+
+    private fun defaultSetCountFor(target: String): Int {
+        val first = Regex("(\\d+)").find(target)?.value?.toIntOrNull() ?: 3
+        return first.coerceIn(1, 8)
+    }
+
+    private fun defaultRepsFor(target: String): String {
+        val afterX = Regex("[xX]\\s*(\\d+)").find(target)?.groupValues?.getOrNull(1)
+        if (!afterX.isNullOrBlank()) return afterX
+        return if (target.contains("s", ignoreCase = true)) "10" else "10"
+    }
+
+    private fun swapCurrentExerciseForRecommended() {
+        val matched = catalogMatchForWorkoutExercise(currentExercise().name)
+        val recommended = if (matched != null) {
+            preferredAlternativeFor(matched) ?: alternativesFor(matched).firstOrNull()
+        } else {
+            null
+        }
+        if (recommended == null) {
+            Toast.makeText(this, "Nenhuma alternativa recomendada encontrada.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val planIndex = selectedPlanIndex.coerceIn(plans.indices)
+        val plan = plans[planIndex]
+        val exercises = plan.exercises.toMutableList()
+        val current = currentExercise()
+        exercises[selectedExerciseIndex] = current.copy(
+            name = recommended.name,
+            notes = "Substituido por recomendado para " + recommended.muscle + ". " + current.notes,
+        )
+        replacePlanExercises(planIndex, exercises)
+        prefs.edit().remove(plannedSetKey()).apply()
+        Toast.makeText(this, "Exercicio trocado por " + recommended.name + ".", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun showWorkoutSummaryPopup() {
+        val logs = todayLogs()
+        val exerciseCounts = linkedMapOf<String, Int>()
+        for (i in 0 until logs.length()) {
+            val item = logs.getJSONObject(i)
+            if (item.optString("plan") == currentPlan().title) {
+                val name = item.optString("exercise")
+                exerciseCounts[name] = (exerciseCounts[name] ?: 0) + 1
+            }
+        }
+        val message = if (exerciseCounts.isEmpty()) {
+            "Nenhuma serie registrada hoje."
+        } else {
+            exerciseCounts.entries.joinToString("\n") { entry -> entry.key + ": " + entry.value + " series" }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Treino concluido")
+            .setMessage(message)
+            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+
+    private fun saveSet(exercise: String, repsRaw: String, loadRaw: String, rirRaw: String, rpeRaw: String, notes: String, autoAdvance: Boolean = false, renderAfter: Boolean = true): String {
         val reps = repsRaw.toIntOrNull() ?: 0
         val load = loadRaw.replace(',', '.').toDoubleOrNull() ?: 0.0
         val rir = rirRaw.toIntOrNull()
         val rpe = rpeRaw.replace(',', '.').toDoubleOrNull()
+        val id = UUID.randomUUID().toString()
         val log = JSONObject()
-            .put("id", UUID.randomUUID().toString())
+            .put("id", id)
             .put("day", dayKey())
             .put("week", weekKey())
             .put("time", timeKey())
@@ -1521,14 +1928,12 @@ class MainActivity : Activity() {
                 .putLong("rest_timer_end_at", System.currentTimeMillis() + restSeconds * 1000L)
                 .putInt("rest_timer_duration_secs", restSeconds)
                 .putString("rest_timer_exercise", exercise)
-        }
-        if (autoAdvance && selectedExerciseIndex < currentPlan().exercises.lastIndex) {
-            selectedExerciseIndex += 1
-            editor.putInt("selected_exercise", selectedExerciseIndex)
+                .putBoolean("rest_timer_notified", false)
         }
         editor.apply()
         Toast.makeText(this, if (autoAdvance) "Serie salva. Descanso iniciado." else "Serie salva no celular.", Toast.LENGTH_SHORT).show()
-        render()
+        if (renderAfter) render()
+        return id
     }
 
     private fun updateSet(id: String, repsRaw: String, loadRaw: String, rirRaw: String, rpeRaw: String, notesRaw: String) {
@@ -2002,6 +2407,102 @@ class MainActivity : Activity() {
         return null
     }
 
+    private fun editorPlanIndex(): Int {
+        return prefs.getInt("editor_plan", selectedPlanIndex).coerceIn(plans.indices)
+    }
+
+    private fun editorExerciseIndex(plan: WorkoutPlan): Int {
+        return prefs.getInt("editor_exercise", 0).coerceIn(plan.exercises.indices)
+    }
+
+    private fun saveWorkoutPlanDetails(planIndex: Int, titleRaw: String, focusRaw: String) {
+        val title = titleRaw.ifBlank { "Treino" }
+        val focus = focusRaw.ifBlank { "Dia e foco" }
+        val updated = plans.toMutableList()
+        updated[planIndex] = updated[planIndex].copy(title = title, focus = focus)
+        saveWorkoutPlans(updated)
+        Toast.makeText(this, "Treino salvo.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun saveExerciseDetails(planIndex: Int, exerciseIndex: Int, nameRaw: String, targetRaw: String, restRaw: String, notesRaw: String) {
+        val exercises = plans[planIndex].exercises.toMutableList()
+        exercises[exerciseIndex] = ExercisePlan(
+            name = nameRaw.ifBlank { "Exercicio" },
+            target = targetRaw.ifBlank { "3 x 10" },
+            rest = restRaw.ifBlank { "60s" },
+            notes = notesRaw.ifBlank { "Sem notas." },
+        )
+        replacePlanExercises(planIndex, exercises)
+        Toast.makeText(this, "Exercicio salvo.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun replacePlanExercises(planIndex: Int, exercises: List<ExercisePlan>) {
+        val updated = plans.toMutableList()
+        updated[planIndex] = updated[planIndex].copy(exercises = exercises)
+        saveWorkoutPlans(updated)
+    }
+
+    private fun saveWorkoutPlans(updated: List<WorkoutPlan>) {
+        prefs.edit()
+            .putString("custom_workout_plans", workoutPlansToJson(updated).toString())
+            .putInt("selected_plan", selectedPlanIndex.coerceIn(updated.indices))
+            .putInt("selected_exercise", selectedExerciseIndex.coerceAtLeast(0))
+            .apply()
+    }
+
+    private fun workoutPlansToJson(items: List<WorkoutPlan>): JSONArray {
+        val array = JSONArray()
+        items.forEach { plan ->
+            val exercises = JSONArray()
+            plan.exercises.forEach { exercise ->
+                exercises.put(JSONObject()
+                    .put("name", exercise.name)
+                    .put("target", exercise.target)
+                    .put("rest", exercise.rest)
+                    .put("notes", exercise.notes))
+            }
+            array.put(JSONObject()
+                .put("id", plan.id)
+                .put("title", plan.title)
+                .put("focus", plan.focus)
+                .put("exercises", exercises))
+        }
+        return array
+    }
+
+    private fun customWorkoutPlans(): List<WorkoutPlan>? {
+        val raw = prefs.getString("custom_workout_plans", null) ?: return null
+        return try {
+            val array = JSONArray(raw)
+            val result = mutableListOf<WorkoutPlan>()
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                val exercisesArray = item.optJSONArray("exercises") ?: JSONArray()
+                val exercises = mutableListOf<ExercisePlan>()
+                for (j in 0 until exercisesArray.length()) {
+                    val exercise = exercisesArray.getJSONObject(j)
+                    exercises.add(ExercisePlan(
+                        name = exercise.optString("name").ifBlank { "Exercicio" },
+                        target = exercise.optString("target").ifBlank { "3 x 10" },
+                        rest = exercise.optString("rest").ifBlank { "60s" },
+                        notes = exercise.optString("notes").ifBlank { "Sem notas." },
+                    ))
+                }
+                result.add(WorkoutPlan(
+                    id = item.optString("id").ifBlank { "custom-" + i },
+                    title = item.optString("title").ifBlank { "Treino" },
+                    focus = item.optString("focus").ifBlank { "Dia e foco" },
+                    exercises = exercises.ifEmpty { listOf(ExercisePlan("Exercicio", "3 x 10", "60s", "Sem notas.")) },
+                ))
+            }
+            result.ifEmpty { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun buildRunningPlan(): List<RunningWorkout> {
         val plan = mutableListOf<RunningWorkout>()
         for (week in 1..6) plan.addAll(buildRunningWeek(week))
@@ -2023,7 +2524,7 @@ class MainActivity : Activity() {
             5 -> 2.6
             else -> 1.5
         }
-        return listOf(
+        val raw = listOf(
             RunningWorkout(
                 "w" + week + "-mon",
                 week,
@@ -2084,6 +2585,18 @@ class MainActivity : Activity() {
                     RunningStage("Longo leve", longDistance, 7.0, "Confortavel do inicio ao fim."),
                 ),
             ),
+        )
+        return raw.map { workout ->
+            workout.copy(stages = workout.stages.map { stage -> personalizedRunningStage(stage) })
+        }
+    }
+
+    private fun personalizedRunningStage(stage: RunningStage): RunningStage {
+        val speedOffset = prefs.getString("running_speed_offset", "0.0")?.toDoubleOrNull() ?: 0.0
+        val distanceScale = (prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0).coerceIn(0.60, 1.40)
+        return stage.copy(
+            distanceKm = roundKm(stage.distanceKm * distanceScale),
+            speedKmh = roundSpeed((stage.speedKmh + speedOffset).coerceIn(4.0, 18.0)),
         )
     }
 
@@ -2185,7 +2698,9 @@ class MainActivity : Activity() {
     private fun currentPlan() = plans[selectedPlanIndex.coerceIn(plans.indices)]
     private fun currentExercise() = currentPlan().exercises[selectedExerciseIndex.coerceIn(currentPlan().exercises.indices)]
 
-    private fun buildWorkoutPlans(): List<WorkoutPlan> = listOf(
+    private fun buildWorkoutPlans(): List<WorkoutPlan> = customWorkoutPlans() ?: defaultWorkoutPlans()
+
+    private fun defaultWorkoutPlans(): List<WorkoutPlan> = listOf(
         WorkoutPlan("a", "Treino A", "Terca - Peito/Ombro/Triceps + corrida leve", listOf(
             ExercisePlan("Supino reto ou maquina peitoral", "4 x 8-10", "90s", "Controle e amplitude. Depois faca 15-25 min de corrida leve."),
             ExercisePlan("Supino inclinado com halteres", "3 x 10", "90s", "Suba carga quando fechar reps com tecnica limpa."),
@@ -2249,6 +2764,7 @@ class MainActivity : Activity() {
             "workout" -> "Registro guiado com timer, midia de execucao, edicao e desfazer serie."
             "running" -> "Semana de corrida, planejamento 5 km e treino guiado por fases."
             "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
+            "plan_editor" -> "Edite seu plano pessoal de musculacao e corrida direto no celular."
             "exercises" -> "Catalogo completo com busca, midia por link, favoritos e alternativas."
             "history" -> "Linha do tempo dos registros feitos no app."
             "stats" -> "Indicadores de volume, frequencia e melhores cargas."
@@ -2270,6 +2786,7 @@ class MainActivity : Activity() {
             .putLong("rest_timer_end_at", System.currentTimeMillis() + seconds * 1000L)
             .putInt("rest_timer_duration_secs", seconds)
             .putString("rest_timer_exercise", exercise)
+            .putBoolean("rest_timer_notified", false)
             .apply()
         Toast.makeText(this, "Descanso iniciado: " + formatDuration(seconds.toLong()), Toast.LENGTH_SHORT).show()
         render()
@@ -2292,9 +2809,22 @@ class MainActivity : Activity() {
             .remove("rest_timer_end_at")
             .remove("rest_timer_duration_secs")
             .remove("rest_timer_exercise")
+            .remove("rest_timer_notified")
             .apply()
         Toast.makeText(this, "Descanso parado.", Toast.LENGTH_SHORT).show()
         render()
+    }
+
+    private fun notifyRestTimerFinishedIfNeeded() {
+        val endAt = prefs.getLong("rest_timer_end_at", 0L)
+        if (endAt <= 0L || System.currentTimeMillis() < endAt) return
+        if (prefs.getBoolean("rest_timer_notified", false)) return
+        prefs.edit().putBoolean("rest_timer_notified", true).apply()
+        try {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 90).startTone(ToneGenerator.TONE_PROP_ACK, 450)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Descanso finalizado.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun restTimerRemainingSeconds(): Long {

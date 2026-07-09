@@ -87,3 +87,7 @@ Plano pessoal hibrido embutido: musculacao noturna 3x/semana, segunda sem muscul
 ## v9.3.0
 
 Aba Corrida reformulada com Essa Semana, 5 treinos, conclusao manual, planejamento completo, treino guiado por fases, botoes -/+ de velocidade e avisos de voz antes da troca de etapa.
+
+## v9.4.0
+
+Aba Treino passa a usar checklist de series com carga/reps/checkbox, descanso abaixo do exercicio com som ao terminar, botao + para nova serie, swipe para apagar, troca por exercicio recomendado, popup de conclusao e tela Plano para edicoes locais.

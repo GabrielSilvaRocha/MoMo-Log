@@ -17,7 +17,7 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v9.1.0 - Midia de execucao do exercicio selecionado dentro da aba Treino.
 - v9.2.0 - Plano pessoal hibrido: musculacao 3x/semana e corrida para 5 km.
 - v9.3.0 - Corrida guiada 5 km com semana atual, planejamento completo e fases tipo Runna.
-- v9.4.0 - Editor local do plano pessoal.
+- v9.4.0 - Checklist de series no treino, descanso sonoro e editor local do plano pessoal.
 - v9.5.0 - Historico avancado com filtros e evolucao por exercicio.
 - v9.6.0 - Backup pessoal por exportacao/importacao JSON.
 - v10.0.0 - Versao pessoal madura para uso continuo na academia.
@@ -320,3 +320,14 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - O treino ativo tem contagem inicial de 5 segundos, cronometro regressivo, km restantes ate a proxima fase e ajuste de velocidade por botoes -/+.
 - Coach por voz avisa quando faltam 30 segundos para trocar de fase e informa a proxima distancia/velocidade.
 - O app Android passa para versionCode 930 / versionName 9.3.0.
+
+## v9.4.0 - Checklist de series e editor local
+
+- Aba Treino troca o formulario antigo por uma lista de series com carga, repeticoes e checkbox de conclusao.
+- O app nao muda de exercicio apos uma unica serie; so avanca quando todas as series planejadas do exercicio forem concluidas.
+- Cronometro de descanso fica abaixo do exercicio atual e toca som de notificacao quando termina.
+- Botao + adiciona nova serie e o gesto de deslizar da direita para a esquerda remove a serie com destaque vermelho durante o movimento.
+- Botao Trocar por recomendado usa o catalogo para substituir o exercicio por alternativa sugerida.
+- Ao concluir o treino, aparece popup com os exercicios feitos no dia e botao OK.
+- Tela Plano permite editar treinos, exercicios e ajustes basicos da corrida direto no celular.
+- O app Android passa para versionCode 940 / versionName 9.4.0.
