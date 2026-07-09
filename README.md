@@ -378,3 +378,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Corrida ativa mostra a velocidade que deve estar configurada na esteira em tempo real.
 - O app mantem a tela ativa durante corrida iniciada pelo app.
 - O app Android passa para versionCode 990 / versionName 9.9.0.
+
+## v10.0.0 - Versao pessoal madura
+
+- Home ganha Cockpit V10 com missao do dia, progresso semanal e prontidao.
+- Cockpit mostra series da semana contra meta e corridas concluidas na semana atual.
+- Checklist de continuidade acompanha musculacao, corrida, backup diario e meta semanal.
+- Botao Backup no Cockpit copia o JSON pessoal e marca o backup do dia como concluido.
+- Atalho principal muda conforme o dia: treino, corrida ou coach.
+- Linha de prontidao orienta cautela quando o RPE recente esta alto ou quando o dia ja foi completo.
+- O app Android passa para versionCode 1000 / versionName 10.0.0.

@@ -218,8 +218,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.9.0"
-    private val trainingPlanVersion = "9.9.0"
+    private val versionName = "10.0.0"
+    private val trainingPlanVersion = "10.0.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -554,6 +554,9 @@ class MainActivity : Activity() {
         hero.addView(spacedRow(heroActions))
         root.addView(hero)
 
+        root.addView(dailyCommandPanel())
+        root.addView(consistencyChecklistPanel())
+
         val nextBox = card()
         nextBox.orientation = LinearLayout.VERTICAL
         nextBox.addView(label("PROXIMO TREINO", green, 13f, true))
@@ -604,6 +607,117 @@ class MainActivity : Activity() {
         insightBox.addView(label("INSIGHTS", green, 13f, true))
         localInsights().forEach { insight -> insightBox.addView(label("- " + insight, white, 15f, false)) }
         root.addView(insightBox)
+    }
+
+    private fun dailyCommandPanel(): View {
+        val stats = computeStats(allLogs())
+        val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
+        val weekSets = stats.optInt("week_sets")
+        val weekPercent = progressPercent(weekSets, weekTarget)
+        val runningDone = currentRunningWeekWorkouts().count { isRunWorkoutCompleted(it) }
+        val runningTotal = currentRunningWeekWorkouts().size
+        val mission = todayMission()
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("COCKPIT V10", green, 13f, true))
+        box.addView(label(mission.first, white, 24f, true))
+        box.addView(label(mission.second, muted, 14f, false))
+        box.addView(label("Semana: " + weekSets + "/" + weekTarget + " series (" + weekPercent + "%) | Corridas " + runningDone + "/" + runningTotal, white, 15f, true))
+        box.addView(label(readinessLine(stats), muted, 14f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val primary = actionButton(missionButtonLabel(), green, bg)
+        primary.setOnClickListener { switchTab(missionButtonTab()) }
+        row.addView(primary, LinearLayout.LayoutParams(0, dp(50), 1f))
+
+        val backup = actionButton("Backup", surface2, green)
+        backup.setOnClickListener { exportToClipboard() }
+        row.addView(backup, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun consistencyChecklistPanel(): View {
+        val strengthDone = todayLogs().length() > 0
+        val runDone = todayRunCount() > 0
+        val backupDone = prefs.getString("last_backup_day", "") == dayKey()
+        val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
+        val weekSets = computeStats(allLogs()).optInt("week_sets")
+
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("CHECKLIST DE CONTINUIDADE", green, 13f, true))
+        listOf(
+            checklistLine(strengthDone, "Musculacao registrada hoje"),
+            checklistLine(runDone, "Corrida registrada hoje"),
+            checklistLine(backupDone, "Backup copiado hoje"),
+            checklistLine(weekSets >= weekTarget, "Meta semanal de series em dia"),
+        ).forEach { line -> box.addView(label(line, white, 15f, false)) }
+        box.addView(label("Use o checklist como manutencao do app pessoal: registrar, correr, proteger dados e fechar semana.", muted, 13f, false))
+        return box
+    }
+
+    private fun todayMission(): Pair<String, String> {
+        val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
+        return when (day) {
+            1 -> Pair("Corrida principal", "Segunda sem musculacao: faca o treino forte de corrida e proteja a recuperacao.")
+            2 -> Pair("Treino A + leve", "Musculacao primeiro. Depois, corrida leve se estiver inteiro.")
+            3 -> Pair("Recuperacao", "Dia para mobilidade, caminhada leve ou descanso sem culpa.")
+            4 -> Pair("Treino B controlado", "Pernas e core primeiro. Corrida curta so para soltar.")
+            5 -> Pair("Preparar o sabado", "Descanso, sono e alimentacao para chegar bem ao Treino C.")
+            6 -> Pair("Treino C + ritmo", "Costas e biceps, depois bloco de ritmo sem sprintar.")
+            7 -> Pair("Longo leve", "Corrida facil para construir base aerobica e fechar a semana.")
+            else -> Pair("Treino pessoal", "Abra o cockpit e siga o proximo bloco planejado.")
+        }
+    }
+
+    private fun missionButtonLabel(): String {
+        return when (missionButtonTab()) {
+            "running" -> "Abrir corrida"
+            "coach" -> "Abrir coach"
+            else -> "Abrir treino"
+        }
+    }
+
+    private fun missionButtonTab(): String {
+        val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
+        return when (day) {
+            1, 7 -> "running"
+            3, 5 -> "coach"
+            else -> "workout"
+        }
+    }
+
+    private fun readinessLine(stats: JSONObject): String {
+        val avgRpe = stats.optString("avg_rpe").replace(',', '.').toDoubleOrNull()
+        return when {
+            restTimerRemainingSeconds() > 0L -> "Prontidao: em intervalo. Respire e volte quando o descanso terminar."
+            avgRpe != null && avgRpe >= 9.0 -> "Prontidao: cautela. RPE recente alto, mantenha tecnica e evite extras."
+            todayLogs().length() > 0 && todayRunCount() > 0 -> "Prontidao: dia completo registrado. Agora a prioridade e recuperar."
+            todayLogs().length() > 0 -> "Prontidao: musculacao ja entrou. Corrida leve so se combinar com o dia."
+            todayRunCount() > 0 -> "Prontidao: corrida registrada. Musculacao so se estiver no plano do dia."
+            else -> "Prontidao: comece pelo bloco principal do dia e registre tudo no app."
+        }
+    }
+
+    private fun progressPercent(value: Int, target: Int): Int {
+        if (target <= 0) return 0
+        return ((value.toDouble() / target.toDouble()) * 100.0).roundToInt().coerceIn(0, 999)
+    }
+
+    private fun todayRunCount(): Int {
+        val runs = runLogs()
+        var count = 0
+        for (i in 0 until runs.length()) {
+            if (runs.getJSONObject(i).optString("day") == dayKey()) count += 1
+        }
+        return count
+    }
+
+    private fun checklistLine(done: Boolean, text: String): String {
+        return (if (done) "[x] " else "[ ] ") + text
     }
 
     private fun weeklyHybridPlanPanel(): View {
@@ -1277,7 +1391,7 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.9.0.", muted, 14f, false))
+        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v10.0.0.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
             prefs.edit()
@@ -2850,7 +2964,9 @@ class MainActivity : Activity() {
 
     private fun exportToClipboard() {
         val payload = backupPayload().toString(2)
+        prefs.edit().putString("last_backup_day", dayKey()).apply()
         copyTextToClipboard("Mo2 LOG backup", payload, "Backup JSON copiado.")
+        if (currentTab == "home") render()
     }
 
     private fun copyTextToClipboard(label: String, text: String, toast: String) {

@@ -111,3 +111,7 @@ Ajustes inteligentes no Android nativo: aba Treino sugere proxima carga e volume
 ## v9.9.0
 
 Polimento para uso real: Modo Academia com proxima serie/descanso/atalhos, Modo Esteira com velocidades por fase, tela ativa durante treino/corrida e indicador de velocidade atual da esteira.
+
+## v10.0.0
+
+Versao pessoal madura com Cockpit V10 na Home, missao do dia, prontidao, progresso semanal, checklist de continuidade e backup diario marcado automaticamente ao copiar o JSON.

@@ -28,7 +28,7 @@ def get_mvp_status() -> dict:
         {"key": "swap_exercise", "label": "Trocar exercício por academia cheia", "coverage": 100},
         {"key": "mark_equipment_unavailable", "label": "Marcar equipamento inexistente", "coverage": 100},
         {"key": "manual_treadmill_run", "label": "Registrar corrida na esteira", "coverage": 100},
-        {"key": "weekly_planning", "label": "Editar planejamento semanal", "coverage": 95},
+        {"key": "weekly_planning", "label": "Editar planejamento semanal", "coverage": 100},
         {"key": "schedule_template", "label": "Criar sessão a partir de template", "coverage": 100},
         {"key": "custom_template", "label": "Criar template personalizado", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Consolidar versao pessoal madura para uso continuo",
-        "Preparar refinamentos finais da versao 10.0.0",
+        "Acompanhar uso real e ajustar detalhes finos",
+        "Preparar refinamentos pos-v10 com base no treino real",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Gym and Treadmill Live Polish",
+        "milestone": "Personal Training Cockpit",
         "status": "operational",
-        "release_focus": "Polir uso ao vivo na academia e na esteira no Android.",
+        "release_focus": "Consolidar uma versao pessoal madura com cockpit diario e checklist de continuidade.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,16 +60,16 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.9.0",
-        "title": "Gym and Treadmill Live Polish",
+        "version": "10.0.0",
+        "title": "Personal Training Cockpit",
         "highlights": [
-            "Aba Treino ganhou Modo Academia com exercicio atual, proxima serie, descanso e proximo movimento.",
-            "Modo Academia mantem a tela ativa enquanto a aba Treino estiver aberta.",
-            "Atalhos Carga e Descanso reduzem toques durante a serie e o intervalo.",
-            "Aba Corrida ganhou Modo Esteira com distancia, duracao, inclinacao sugerida e velocidades por fase.",
-            "Treino de corrida ativo passa a mostrar a velocidade que deve estar configurada na esteira.",
-            "Tela fica ativa durante corrida iniciada pelo app.",
-            "Botao Ativo evita reiniciar uma corrida ja em andamento.",
-            "Build Android atualizado para versionCode 990.",
+            "Home ganhou Cockpit V10 com missao do dia, progresso semanal e prontidao.",
+            "Cockpit mostra series da semana contra meta e corridas concluidas na semana atual.",
+            "Checklist de continuidade acompanha musculacao, corrida, backup diario e meta semanal.",
+            "Botao Backup no Cockpit copia o JSON pessoal e marca o backup do dia como concluido.",
+            "Missao do dia adapta o atalho principal para treino, corrida ou coach conforme o planejamento.",
+            "Linha de prontidao orienta cautela quando RPE recente esta alto ou quando o dia ja foi completo.",
+            "Plano padrao e metadados foram promovidos para a versao 10.0.0.",
+            "Build Android atualizado para versionCode 1000.",
         ],
     }
