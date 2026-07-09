@@ -368,3 +368,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Stats passa a exibir Coach Inteligente com proximos ajustes de musculacao e corrida.
 - Popup final de treino inclui as recomendacoes para o proximo ajuste.
 - O app Android passa para versionCode 980 / versionName 9.8.0.
+
+## v9.9.0 - Polimento de uso real na academia e esteira
+
+- Aba Treino ganha Modo Academia com exercicio atual, proxima serie, descanso e proximo movimento.
+- O app mantem a tela ativa enquanto a aba Treino estiver aberta.
+- Modo Academia adiciona atalhos Carga e Descanso para reduzir toques durante o treino.
+- Aba Corrida ganha Modo Esteira com distancia, duracao, inclinacao sugerida e velocidades por fase.
+- Corrida ativa mostra a velocidade que deve estar configurada na esteira em tempo real.
+- O app mantem a tela ativa durante corrida iniciada pelo app.
+- O app Android passa para versionCode 990 / versionName 9.9.0.

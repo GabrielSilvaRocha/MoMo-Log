@@ -21,6 +21,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
+import android.view.WindowManager
 import android.view.animation.AnimationSet
 import android.view.animation.AlphaAnimation
 import android.view.animation.TranslateAnimation
@@ -217,8 +218,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "9.8.0"
-    private val trainingPlanVersion = "9.8.0"
+    private val versionName = "9.9.0"
+    private val trainingPlanVersion = "9.9.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -267,6 +268,7 @@ class MainActivity : Activity() {
     private var runningRemainingText: TextView? = null
     private var runningSpeedText: TextView? = null
     private var runningNextText: TextView? = null
+    private var runningTreadmillText: TextView? = null
     private val restTimerRunnable = object : Runnable {
         override fun run() {
             restTimerText?.let { view ->
@@ -307,6 +309,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         restTimerHandler.removeCallbacks(restTimerRunnable)
         runningSessionHandler.removeCallbacks(runningSessionRunnable)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         voiceCoach?.stop()
         voiceCoach?.shutdown()
         super.onDestroy()
@@ -334,6 +337,8 @@ class MainActivity : Activity() {
         runningRemainingText = null
         runningSpeedText = null
         runningNextText = null
+        runningTreadmillText = null
+        updateSessionWakeLock()
 
         val page = LinearLayout(this)
         page.orientation = LinearLayout.VERTICAL
@@ -370,6 +375,15 @@ class MainActivity : Activity() {
         page.addView(navigation)
         applySystemBarInsets(page, root, navigation)
         setContentView(page)
+    }
+
+    private fun updateSessionWakeLock() {
+        val keepScreenOn = currentTab == "workout" || activeRunningWorkout() != null || restTimerRemainingSeconds() > 0L
+        if (keepScreenOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun header(): View {
@@ -633,6 +647,7 @@ class MainActivity : Activity() {
         val plan = currentPlan()
         root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Marque cada serie concluida. O app so troca de exercicio quando todas as series forem feitas."))
         root.addView(workoutProgressPanel())
+        root.addView(gymModePanel())
         root.addView(smartStrengthCoachPanel())
         root.addView(selectedExerciseMediaPanel())
         root.addView(registerPanel())
@@ -683,6 +698,39 @@ class MainActivity : Activity() {
             }
         }
         row.addView(next, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun gymModePanel(): View {
+        val exercise = currentExercise()
+        val sets = plannedSetsForCurrentExercise()
+        val doneCount = countDonePlannedSets(sets)
+        val pendingLine = nextPendingSetLine(sets)
+        val nextExercise = nextExerciseName()
+        val restLine = if (restTimerRemainingSeconds() > 0L) {
+            "Descanso ativo: " + restTimerDisplay()
+        } else {
+            "Descanso pronto: " + formatDuration(restSecondsFor(exercise.name).toLong())
+        }
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("MODO ACADEMIA", green, 13f, true))
+        box.addView(label("Agora: " + exercise.name, white, 21f, true))
+        box.addView(label(doneCount.toString() + "/" + sets.length() + " series | " + pendingLine, white, 15f, true))
+        box.addView(label(restLine + " | Proximo: " + nextExercise, muted, 14f, false))
+        box.addView(label("Tela mantida ativa enquanto voce estiver na aba Treino.", muted, 13f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val load = actionButton("Carga", green, bg)
+        load.setOnClickListener { applySmartLoadToPendingSets() }
+        row.addView(load, LinearLayout.LayoutParams(0, dp(50), 1f))
+
+        val rest = actionButton("Descanso", surface2, green)
+        rest.setOnClickListener { startRestTimerForCurrentExercise() }
+        row.addView(rest, LinearLayout.LayoutParams(0, dp(50), 1f))
         box.addView(spacedRow(row))
         return box
     }
@@ -783,6 +831,7 @@ class MainActivity : Activity() {
     private fun renderRunning(root: LinearLayout) {
         updateActiveRunProgress()
         root.addView(heroCard("Running coach", "Corrida 5 km", "Semana atual, treino guiado por fases e ajuste de velocidade em tempo real."))
+        root.addView(treadmillModePanel())
         root.addView(runningSmartCoachPanel())
         root.addView(runningThisWeekPanel())
         root.addView(runningFullPlanButton())
@@ -806,6 +855,41 @@ class MainActivity : Activity() {
         val apply = actionButton("Aplicar ajuste sugerido", green, bg)
         apply.setOnClickListener { applySmartRunningAdjustment(adjustment) }
         box.addView(buttonParams(apply))
+        return box
+    }
+
+    private fun treadmillModePanel(): View {
+        val workouts = currentRunningWeekWorkouts()
+        val workout = activeRunningWorkout()
+            ?: workouts.firstOrNull { it.id == selectedRunId }
+            ?: todayRunningWorkout()
+            ?: workouts.first()
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("MODO ESTEIRA", green, 13f, true))
+        box.addView(label(workout.dayName + " | " + workout.title, white, 22f, true))
+        box.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)) + " | inclinacao 1% se estiver confortavel", muted, 14f, false))
+        box.addView(label("Velocidades: " + treadmillSpeedPlan(workout), white, 15f, true))
+        box.addView(label("Tela mantida ativa durante corrida iniciada pelo app.", muted, 13f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val select = actionButton("Abrir", surface2, green)
+        select.setOnClickListener {
+            selectedRunId = workout.id
+            prefs.edit().putString("selected_run_id", workout.id).apply()
+            render()
+        }
+        row.addView(select, LinearLayout.LayoutParams(0, dp(50), 1f))
+
+        val runningNow = activeRunningWorkout()?.id == workout.id
+        val start = actionButton(if (runningNow) "Ativo" else "Iniciar", green, bg)
+        start.setOnClickListener {
+            if (runningNow) Toast.makeText(this, "Corrida ja esta em andamento.", Toast.LENGTH_SHORT).show()
+            else startRunningWorkout(workout)
+        }
+        row.addView(start, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
         return box
     }
 
@@ -935,6 +1019,9 @@ class MainActivity : Activity() {
         speedRow.addView(plus, LinearLayout.LayoutParams(dp(58), dp(64)))
         box.addView(spacedRow(speedRow))
 
+        runningTreadmillText = label("", amber, 15f, true)
+        box.addView(runningTreadmillText)
+
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         val finishStage = actionButton("Finalizar etapa", surface2, white)
@@ -963,6 +1050,7 @@ class MainActivity : Activity() {
             runningStageText?.text = "Prepare-se para iniciar"
             runningRemainingText?.text = "Comeca em 5 segundos"
             runningSpeedText?.text = "Velocidade inicial " + formatSpeed(currentActiveRunSpeed(workout))
+            runningTreadmillText?.text = "Esteira: deixe pronta em " + formatSpeed(currentActiveRunSpeed(workout)) + " | inclinacao 1% se estiver confortavel"
             runningNextText?.text = "Primeira etapa: " + stageCue(workout.stages.firstOrNull())
             return
         }
@@ -977,6 +1065,7 @@ class MainActivity : Activity() {
         runningStageText?.text = "Etapa " + (stageIndex + 1) + " de " + workout.stages.size + ": " + stage.title
         runningRemainingText?.text = formatDuration(remainingSeconds) + " | " + formatKm(remainingKm) + " restantes"
         runningSpeedText?.text = formatSpeed(speed)
+        runningTreadmillText?.text = "Esteira agora: " + formatSpeed(speed) + " | etapa " + (stageIndex + 1) + "/" + workout.stages.size
         runningNextText?.text = if (stageIndex < workout.stages.lastIndex) {
             "Proxima etapa: " + stageCue(workout.stages[stageIndex + 1])
         } else {
@@ -1188,7 +1277,7 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.8.0.", muted, 14f, false))
+        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v9.9.0.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
             prefs.edit()
@@ -2140,6 +2229,27 @@ class MainActivity : Activity() {
         val afterX = Regex("[xX]\\s*(\\d+)").find(target)?.groupValues?.getOrNull(1)
         if (!afterX.isNullOrBlank()) return afterX
         return if (target.contains("s", ignoreCase = true)) "10" else "10"
+    }
+
+    private fun nextPendingSetLine(sets: JSONArray): String {
+        for (index in 0 until sets.length()) {
+            val item = sets.getJSONObject(index)
+            if (!item.optBoolean("done", false)) {
+                val load = item.optString("load", lastLoadFor(currentExercise().name))
+                val reps = item.optString("reps", defaultRepsFor(currentExercise().target))
+                return "proxima " + (index + 1) + ": " + load + " kg x " + reps
+            }
+        }
+        return "todas as series deste exercicio foram feitas"
+    }
+
+    private fun nextExerciseName(): String {
+        val plan = currentPlan()
+        return if (selectedExerciseIndex < plan.exercises.lastIndex) {
+            plan.exercises[selectedExerciseIndex + 1].name
+        } else {
+            "concluir treino"
+        }
     }
 
     private fun strengthAdjustmentFor(exercise: ExercisePlan): StrengthAdjustment {
@@ -3352,6 +3462,15 @@ class MainActivity : Activity() {
     }
 
     private fun roundScale(value: Double): Double = (value * 100.0).roundToInt().toDouble() / 100.0
+
+    private fun treadmillSpeedPlan(workout: RunningWorkout): String {
+        val parts = workout.stages
+            .distinctBy { stage -> stage.title + stage.speedKmh.toString() }
+            .take(5)
+            .map { stage -> stage.title + " " + formatSpeed(stage.speedKmh) }
+        val suffix = if (workout.stages.size > 5) "..." else ""
+        return (parts + suffix).filter { it.isNotBlank() }.joinToString(" | ")
+    }
 
     private fun currentRunningWeekWorkouts(): List<RunningWorkout> {
         val week = currentRunningPlanWeek()

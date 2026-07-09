@@ -32,7 +32,7 @@ def get_mvp_status() -> dict:
         {"key": "schedule_template", "label": "Criar sessão a partir de template", "coverage": 100},
         {"key": "custom_template", "label": "Criar template personalizado", "coverage": 100},
         {"key": "reports_export", "label": "Exportar relatório CSV", "coverage": 90},
-        {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 90},
+        {"key": "running_coach", "label": "Running Coach de esteira", "coverage": 95},
         {"key": "race_forecast", "label": "Prever tempo por distância-alvo", "coverage": 80},
         {"key": "health_connect", "label": "Health Connect / Samsung Health", "coverage": 60},
         {"key": "user_authentication", "label": "Entrar, cadastrar e manter sessão local", "coverage": 100},
@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Adicionar polimento de uso real na academia e esteira",
         "Consolidar versao pessoal madura para uso continuo",
+        "Preparar refinamentos finais da versao 10.0.0",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Smart Load Volume and Pace Adjustments",
+        "milestone": "Gym and Treadmill Live Polish",
         "status": "operational",
-        "release_focus": "Adicionar ajustes inteligentes de carga, volume e ritmo no Android.",
+        "release_focus": "Polir uso ao vivo na academia e na esteira no Android.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,16 +60,16 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "9.8.0",
-        "title": "Smart Load Volume and Pace Adjustments",
+        "version": "9.9.0",
+        "title": "Gym and Treadmill Live Polish",
         "highlights": [
-            "Aba Treino ganhou painel de ajuste inteligente para proxima carga e volume sugerido.",
-            "Carga sugerida usa historico recente, reps-alvo e RPE para subir, manter ou reduzir com cautela.",
-            "Botao Aplicar carga atualiza as series pendentes do exercicio atual.",
-            "Botao Ajustar series adiciona ou reduz apenas series pendentes conforme o volume sugerido.",
-            "Aba Corrida ganhou painel de ajuste de ritmo com microajustes de velocidade e distancia.",
-            "Stats agora mostra um card Coach Inteligente com proximo ajuste de musculacao e corrida.",
-            "Resumo final de treino inclui as proximas recomendacoes.",
-            "Build Android atualizado para versionCode 980.",
+            "Aba Treino ganhou Modo Academia com exercicio atual, proxima serie, descanso e proximo movimento.",
+            "Modo Academia mantem a tela ativa enquanto a aba Treino estiver aberta.",
+            "Atalhos Carga e Descanso reduzem toques durante a serie e o intervalo.",
+            "Aba Corrida ganhou Modo Esteira com distancia, duracao, inclinacao sugerida e velocidades por fase.",
+            "Treino de corrida ativo passa a mostrar a velocidade que deve estar configurada na esteira.",
+            "Tela fica ativa durante corrida iniciada pelo app.",
+            "Botao Ativo evita reiniciar uma corrida ja em andamento.",
+            "Build Android atualizado para versionCode 990.",
         ],
     }
