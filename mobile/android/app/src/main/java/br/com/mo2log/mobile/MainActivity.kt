@@ -958,14 +958,14 @@ class MainActivity : Activity() {
 
     private fun renderWorkout(root: LinearLayout) {
         val plan = currentPlan()
-        root.addView(heroCard("Treino selecionado", plan.title + " - " + plan.focus, "Marque cada serie concluida. O app so troca de exercicio quando todas as series forem feitas."))
+        root.addView(heroCard("Treino de musculacao", plan.title + " - " + plan.focus, "Registre series, acompanhe descanso e troque exercicios quando a academia pedir."))
+        root.addView(sectionTitle("Planos"))
+        root.addView(planSelector())
         root.addView(workoutProgressPanel())
         root.addView(gymModePanel())
-        root.addView(smartStrengthCoachPanel())
-        root.addView(selectedExerciseMediaPanel())
         root.addView(registerPanel())
-        root.addView(sectionTitle("Programa de treinos"))
-        root.addView(planSelector())
+        root.addView(selectedExerciseMediaPanel())
+        root.addView(smartStrengthCoachPanel())
         root.addView(sectionTitle("Exercicios do treino"))
         root.addView(exerciseList())
     }
@@ -984,12 +984,26 @@ class MainActivity : Activity() {
             }
         }
 
+        val sets = plannedSetsForCurrentExercise()
+        val doneSets = countDonePlannedSets(sets)
+        val exercisePercent = progressPercent(doneSets, sets.length())
+        val planPercent = progressPercent(selectedExerciseIndex + 1, plan.exercises.size)
+
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("SESSAO DE HOJE", green, 13f, true))
-        box.addView(label("Exercicio " + (selectedExerciseIndex + 1) + " de " + plan.exercises.size, white, 24f, true))
-        box.addView(label(exercise.name, white, 18f, true))
-        box.addView(label(planSetsToday.toString() + " series no treino hoje | " + exerciseSetsToday + " neste exercicio", muted, 14f, false))
+        box.addView(label(exercise.name, white, 26f, true))
+        box.addView(label(exercise.target + " | descanso " + exercise.rest + " | " + exercise.notes, muted, 14f, false))
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(Mo2Components.metricCard(this, "Exercicio", (selectedExerciseIndex + 1).toString() + "/" + plan.exercises.size, plan.title, green), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(Mo2Components.metricCard(this, "Series", doneSets.toString() + "/" + sets.length(), planSetsToday.toString() + " hoje", Mo2Colors.Running), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(Mo2Components.metricCard(this, "Carga", lastLoadFor(exercise.name) + " kg", exerciseSetsToday.toString() + " neste exercicio", amber), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+
+        box.addView(dashboardProgressLine("Progresso do exercicio", doneSets.toString() + " de " + sets.length() + " series concluidas", exercisePercent, green))
+        box.addView(dashboardProgressLine("Avanco do treino", (selectedExerciseIndex + 1).toString() + " de " + plan.exercises.size + " exercicios", planPercent, Mo2Colors.Running))
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
@@ -1017,6 +1031,7 @@ class MainActivity : Activity() {
 
     private fun gymModePanel(): View {
         val exercise = currentExercise()
+        val matched = catalogMatchForWorkoutExercise(exercise.name)
         val sets = plannedSetsForCurrentExercise()
         val doneCount = countDonePlannedSets(sets)
         val pendingLine = nextPendingSetLine(sets)
@@ -1026,6 +1041,10 @@ class MainActivity : Activity() {
         } else {
             "Descanso pronto: " + formatDuration(restSecondsFor(exercise.name).toLong())
         }
+        val equipmentLine = matched?.equipment
+            ?.takeIf { it.isNotBlank() }
+            ?.let { equipment -> if (isEquipmentUnavailable(equipment)) "Equipamento indisponivel: " + equipment else "Equipamento: " + equipment }
+            ?: "Equipamento: variavel"
 
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
@@ -1033,6 +1052,7 @@ class MainActivity : Activity() {
         box.addView(label("Agora: " + exercise.name, white, 21f, true))
         box.addView(label(doneCount.toString() + "/" + sets.length() + " series | " + pendingLine, white, 15f, true))
         box.addView(label(restLine + " | Proximo: " + nextExercise, muted, 14f, false))
+        box.addView(label(equipmentLine, if (matched?.equipment?.let { isEquipmentUnavailable(it) } == true) danger else muted, 13f, false))
         box.addView(label("Tela mantida ativa enquanto voce estiver na aba Treino.", muted, 13f, false))
 
         val row = LinearLayout(this)
@@ -1044,6 +1064,9 @@ class MainActivity : Activity() {
         val rest = actionButton("Descanso", surface2, green)
         rest.setOnClickListener { startRestTimerForCurrentExercise() }
         row.addView(rest, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val swap = actionButton("Trocar", surface2, amber)
+        swap.setOnClickListener { matched?.let { showEquipmentUnavailableDialog(it) } ?: swapCurrentExerciseForRecommended() }
+        row.addView(swap, LinearLayout.LayoutParams(0, dp(50), 1f))
         box.addView(spacedRow(row))
         return box
     }
@@ -1107,18 +1130,27 @@ class MainActivity : Activity() {
         val matched = catalogMatchForWorkoutExercise(planned.name)
         val box = card()
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("EXECUCAO DO EXERCICIO", green, 13f, true))
+        box.addView(label("DETALHE DO EXERCICIO", green, 13f, true))
         box.addView(label(planned.name, white, 24f, true))
+        box.addView(label(planned.target + " | descanso " + planned.rest, white, 15f, true))
+        box.addView(label(planned.notes, muted, 14f, false))
 
         if (matched == null) {
             box.addView(label("Ainda nao encontrei uma midia confiavel no catalogo para este item do treino.", muted, 15f, false))
             box.addView(label("Use a aba Exercicios para buscar uma alternativa quando necessario.", muted, 14f, false))
+            val swap = actionButton("Buscar troca recomendada", surface2, green)
+            swap.setOnClickListener { swapCurrentExerciseForRecommended() }
+            box.addView(buttonParams(swap))
             return box
         }
 
-        box.addView(label("Midia sugerida: " + matched.name, white, 17f, true))
+        val unavailable = isEquipmentUnavailable(matched.equipment)
+        box.addView(label("Catalogo: " + matched.name, white, 17f, true))
         box.addView(label(exerciseMeta(matched), muted, 14f, false))
         box.addView(label(mediaHealthLabel(matched), muted, 13f, false))
+        if (unavailable) {
+            box.addView(label("Equipamento marcado como indisponivel: " + matched.equipment, danger, 14f, true))
+        }
 
         if (matched.links.isNotEmpty()) {
             val media = RemoteExerciseMediaView(this, matched.links)
@@ -1128,6 +1160,40 @@ class MainActivity : Activity() {
         } else {
             box.addView(label("Este exercicio existe no catalogo, mas ainda nao tem frames remotos.", amber, 14f, true))
         }
+
+        box.addView(label("Descricao", green, 14f, true))
+        box.addView(label(matched.description.ifBlank { "Exercicio do catalogo para " + matched.muscle + " com foco em " + matched.primary.ifBlank { matched.subgroup } + "." }, white, 15f, false))
+        if (matched.technicalCare.isNotBlank()) {
+            box.addView(label("Cuidados tecnicos", green, 14f, true))
+            box.addView(label(matched.technicalCare, muted, 14f, false))
+        }
+        box.addView(label("Grupo e equipamento", green, 14f, true))
+        box.addView(label(matched.muscle + " | " + matched.equipment.ifBlank { "equipamento variavel" } + " | nivel " + matched.level.ifBlank { "-" }, white, 14f, false))
+
+        val alternatives = recommendedSwapOptions(matched, "same_muscle").take(4)
+        box.addView(label("Alternativas do mesmo musculo", green, 14f, true))
+        if (alternatives.isEmpty()) {
+            box.addView(label("Nenhuma alternativa livre encontrada agora. Abra o catalogo para escolher manualmente.", muted, 14f, false))
+        } else {
+            alternatives.forEach { alternative ->
+                val item = card(surface2)
+                item.orientation = LinearLayout.VERTICAL
+                item.addView(label(alternative.name, white, 15f, true))
+                item.addView(label(exerciseMeta(alternative), muted, 12f, false))
+                item.setOnClickListener { applyRecommendedExerciseSwap(alternative) }
+                box.addView(item)
+            }
+        }
+
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val swap = actionButton("Trocar", surface2, green)
+        swap.setOnClickListener { swapCurrentExerciseForRecommended() }
+        actions.addView(swap, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val unavailableButton = actionButton(if (unavailable) "Rever equip." else "Equip. indisponivel", surface2, if (unavailable) danger else amber)
+        unavailableButton.setOnClickListener { showEquipmentUnavailableDialog(matched) }
+        actions.addView(unavailableButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(actions))
 
         val open = actionButton("Abrir no catalogo", surface2, green)
         open.setOnClickListener {
@@ -2327,16 +2393,16 @@ class MainActivity : Activity() {
         box.orientation = LinearLayout.VERTICAL
         currentPlan().exercises.forEachIndexed { index, exercise ->
             val active = selectedExerciseIndex == index
-            val item = card(if (active) green else surface)
+            val item = card(if (active) surface3 else surface)
             item.orientation = LinearLayout.VERTICAL
             item.setOnClickListener {
                 selectedExerciseIndex = index
                 prefs.edit().putInt("selected_exercise", index).apply()
                 render()
             }
-            item.addView(label(exercise.name, if (active) bg else white, 18f, true))
-            item.addView(label(exercise.target + " | descanso " + exercise.rest, if (active) bg else muted, 14f, false))
-            item.addView(label(exercise.notes, if (active) bg else muted, 13f, false))
+            item.addView(label((if (active) "Atual: " else "") + exercise.name, if (active) green else white, 18f, true))
+            item.addView(label(exercise.target + " | descanso " + exercise.rest, if (active) white else muted, 14f, false))
+            item.addView(label(exercise.notes, muted, 13f, false))
             box.addView(item)
         }
         return box
@@ -2351,10 +2417,11 @@ class MainActivity : Activity() {
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("SERIES DO EXERCICIO", green, 13f, true))
         box.addView(label(exercise.name, white, 24f, true))
-        box.addView(label(doneCount.toString() + "/" + sets.length() + " series concluidas. Deslize uma serie para a esquerda para apagar.", muted, 14f, false))
+        box.addView(label(doneCount.toString() + "/" + sets.length() + " series concluidas. Marque a checkbox ao terminar; deslize para a esquerda para apagar.", muted, 14f, false))
         if (lastSet != null) {
             box.addView(label("Ultima concluida: " + lastSet.optInt("reps") + " reps | " + lastSet.optDouble("load") + " kg", muted, 13f, false))
         }
+        box.addView(dashboardProgressLine("Series planejadas", doneCount.toString() + " de " + sets.length() + " concluidas", progressPercent(doneCount, sets.length()), green))
         box.addView(restTimerPanel())
 
         for (index in 0 until sets.length()) {
@@ -2388,7 +2455,7 @@ class MainActivity : Activity() {
         content.orientation = LinearLayout.HORIZONTAL
         content.gravity = Gravity.CENTER_VERTICAL
 
-        val check = actionButton(if (done) "[x]" else "[ ]", if (done) green else surface2, if (done) bg else white)
+        val check = actionButton(if (done) "OK" else "Feita", if (done) green else surface2, if (done) bg else white)
         content.addView(check, LinearLayout.LayoutParams(dp(58), dp(54)))
 
         val load = input("kg", item.optString("load", lastLoadFor(currentExercise().name)))
@@ -2398,7 +2465,7 @@ class MainActivity : Activity() {
         content.addView(reps, LinearLayout.LayoutParams(0, dp(54), 1f))
         row.addView(content)
 
-        row.addView(label("Serie " + (index + 1) + (if (done) " concluida" else " pendente"), if (done) green else muted, 13f, false))
+        row.addView(label("Serie " + (index + 1) + (if (done) " concluida" else " pendente") + " | carga e reps editaveis antes da conclusao", if (done) green else muted, 13f, false))
         check.setOnClickListener {
             if (done) {
                 Toast.makeText(this, "Serie ja concluida.", Toast.LENGTH_SHORT).show()
@@ -2416,7 +2483,7 @@ class MainActivity : Activity() {
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val delta = event.rawX - startX
-                    if (delta < -dp(24)) view.background = rounded(danger, dp(8), danger)
+                    if (delta < -dp(24)) view.background = rounded(danger, dp(Mo2Radius.Md), danger)
                     false
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -2425,7 +2492,7 @@ class MainActivity : Activity() {
                         deletePlannedSet(index)
                         true
                     } else {
-                        view.background = rounded(if (done) surface3 else surface, dp(8), border)
+                        view.background = rounded(if (done) surface3 else surface, dp(Mo2Radius.Lg), border)
                         false
                     }
                 }
@@ -2730,7 +2797,8 @@ class MainActivity : Activity() {
             return
         }
         val preferred = preferredAlternativeFor(matched)
-        val options = (listOfNotNull(preferred) + alternativesFor(matched))
+        val reason = prefs.getString("swap_reason_filter", "occupied") ?: "occupied"
+        val options = (listOfNotNull(preferred).filter { equipmentAvailableForSuggestion(it) } + recommendedSwapOptions(matched, reason))
             .distinctBy { it.id }
             .take(8)
         if (options.isEmpty()) {
@@ -2738,28 +2806,166 @@ class MainActivity : Activity() {
             return
         }
 
-        showRecommendedExerciseDialog(matched, options, preferred?.id)
+        showRecommendedExerciseDialog(matched, options, preferred?.id, reason)
     }
 
-    private fun showRecommendedExerciseDialog(current: CatalogExercise, options: List<CatalogExercise>, preferredId: String?) {
+    private fun recommendedSwapOptions(current: CatalogExercise, reason: String): List<CatalogExercise> {
+        val hiddenIds = hiddenCatalogIds()
+        val base = alternativesFor(current)
+            .filter { it.id != current.id }
+            .filter { !hiddenIds.contains(it.id) }
+            .filter { equipmentAvailableForSuggestion(it) }
+        val filtered = when (reason) {
+            "same_level" -> base.filter { it.level.isBlank() || current.level.isBlank() || normalized(it.level) == normalized(current.level) }
+            "same_muscle" -> base.filter { normalized(it.muscle) == normalized(current.muscle) }
+            else -> base
+        }
+        return filtered.ifEmpty { base }
+    }
+
+    private fun equipmentAvailableForSuggestion(exercise: CatalogExercise): Boolean {
+        return !isEquipmentUnavailable(exercise.equipment)
+    }
+
+    private fun unavailableEquipmentMap(): JSONObject = safeObject("unavailable_equipment")
+
+    private fun equipmentKey(equipment: String): String = normalized(equipment)
+
+    private fun isEquipmentUnavailable(equipment: String): Boolean {
+        val key = equipmentKey(equipment)
+        if (key.isBlank()) return false
+        return unavailableEquipmentMap().has(key)
+    }
+
+    private fun markEquipmentUnavailable(equipment: String, reason: String) {
+        val key = equipmentKey(equipment)
+        if (key.isBlank()) {
+            Toast.makeText(this, "Equipamento variavel; use a troca manual.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val map = unavailableEquipmentMap()
+        map.put(key, JSONObject()
+            .put("label", equipment)
+            .put("reason", reason)
+            .put("day", dayKey()))
+        prefs.edit().putString("unavailable_equipment", map.toString()).apply()
+    }
+
+    private fun clearUnavailableEquipment(equipment: String) {
+        val key = equipmentKey(equipment)
+        if (key.isBlank()) return
+        val map = unavailableEquipmentMap()
+        map.remove(key)
+        prefs.edit().putString("unavailable_equipment", map.toString()).apply()
+    }
+
+    private fun showEquipmentUnavailableDialog(exercise: CatalogExercise) {
         val content = LinearLayout(this)
         content.orientation = LinearLayout.VERTICAL
         content.setPadding(dp(18), dp(18), dp(18), dp(12))
-        content.background = rounded(surface, dp(8), border)
+        content.background = rounded(surface, dp(Mo2Radius.Lg), border)
+        content.addView(label("EQUIPAMENTO INDISPONIVEL", danger, 13f, true))
+        content.addView(label(exercise.equipment.ifBlank { "Equipamento variavel" }, white, 22f, true))
+        content.addView(label("Marcar aqui tira esse equipamento das sugestoes automaticas. Os exercicios continuam disponiveis manualmente no catalogo.", muted, 14f, false))
+
+        lateinit var dialog: AlertDialog
+        val occupied = actionButton("Equipamento ocupado hoje", surface2, amber)
+        occupied.setOnClickListener {
+            markEquipmentUnavailable(exercise.equipment, "ocupado")
+            dialog.dismiss()
+            Toast.makeText(this, "Equipamento oculto das sugestoes automaticas.", Toast.LENGTH_SHORT).show()
+            swapCurrentExerciseForRecommended()
+        }
+        content.addView(buttonParams(occupied))
+
+        val missing = actionButton("Nao existe nesta academia", surface2, danger)
+        missing.setOnClickListener {
+            markEquipmentUnavailable(exercise.equipment, "inexistente")
+            dialog.dismiss()
+            Toast.makeText(this, "Equipamento removido das sugestoes automaticas.", Toast.LENGTH_SHORT).show()
+            swapCurrentExerciseForRecommended()
+        }
+        content.addView(buttonParams(missing))
+
+        if (isEquipmentUnavailable(exercise.equipment)) {
+            val restore = actionButton("Liberar equipamento", surface2, green)
+            restore.setOnClickListener {
+                clearUnavailableEquipment(exercise.equipment)
+                dialog.dismiss()
+                Toast.makeText(this, "Equipamento liberado nas sugestoes.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+            content.addView(buttonParams(restore))
+        }
+
+        val cancel = actionButton("Cancelar", surface2, white)
+        cancel.setOnClickListener { dialog.dismiss() }
+        content.addView(buttonParams(cancel))
+
+        dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .create()
+        dialog.setOnShowListener { content.startAnimation(smoothPopupAnimation()) }
+        dialog.show()
+    }
+
+    private fun showRecommendedExerciseDialog(current: CatalogExercise, options: List<CatalogExercise>, preferredId: String?, reason: String) {
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(18), dp(18), dp(18), dp(12))
+        content.background = rounded(surface, dp(Mo2Radius.Lg), border)
         content.addView(label("TROCAR EXERCICIO", green, 13f, true))
         content.addView(label(currentExercise().name, white, 22f, true))
         content.addView(label("Escolha uma alternativa para " + current.muscle + ". O plano sera atualizado localmente.", muted, 14f, false))
 
         lateinit var dialog: AlertDialog
+        val reasons = listOf(
+            Pair("occupied", "Equip. ocupado"),
+            Pair("missing", "Equip. inexistente"),
+            Pair("same_muscle", "Mesmo musculo"),
+            Pair("same_level", "Nivel similar"),
+        )
+        val reasonRow = LinearLayout(this)
+        reasonRow.orientation = LinearLayout.HORIZONTAL
+        reasons.forEach { item ->
+            val active = item.first == reason
+            val button = actionButton(item.second, if (active) green else surface2, if (active) bg else white)
+            button.setOnClickListener {
+                prefs.edit().putString("swap_reason_filter", item.first).apply()
+                val refreshed = recommendedSwapOptions(current, item.first)
+                    .let { listOfNotNull(preferredAlternativeFor(current)).filter { pref -> equipmentAvailableForSuggestion(pref) } + it }
+                    .distinctBy { option -> option.id }
+                    .take(8)
+                dialog.dismiss()
+                if (refreshed.isEmpty()) Toast.makeText(this, "Nenhuma alternativa livre para esse filtro.", Toast.LENGTH_SHORT).show()
+                else showRecommendedExerciseDialog(current, refreshed, preferredAlternativeFor(current)?.id, item.first)
+            }
+            reasonRow.addView(button, LinearLayout.LayoutParams(0, dp(46), 1f))
+        }
+        content.addView(spacedRow(reasonRow))
+
         options.forEach { option ->
             val item = card(if (option.id == preferredId) surface3 else surface2)
             item.orientation = LinearLayout.VERTICAL
             item.addView(label((if (option.id == preferredId) "[preferido] " else "") + option.name, white, 16f, true))
             item.addView(label(exerciseMeta(option), muted, 12f, false))
-            item.setOnClickListener {
+            item.addView(label("Nivel: " + option.level.ifBlank { "-" } + " | Grupo: " + option.muscle, muted, 12f, false))
+
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            val use = actionButton("Usar", green, bg)
+            use.setOnClickListener {
                 applyRecommendedExerciseSwap(option)
                 dialog.dismiss()
             }
+            row.addView(use, LinearLayout.LayoutParams(0, dp(46), 1f))
+            val prefer = actionButton("Preferir", surface2, if (option.id == preferredId) amber else white)
+            prefer.setOnClickListener {
+                setPreferredAlternative(current, option)
+                dialog.dismiss()
+            }
+            row.addView(prefer, LinearLayout.LayoutParams(0, dp(46), 1f))
+            item.addView(spacedRow(row))
             content.addView(item)
         }
 

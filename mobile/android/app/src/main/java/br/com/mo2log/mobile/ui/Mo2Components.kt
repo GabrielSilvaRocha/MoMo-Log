@@ -118,4 +118,38 @@ object Mo2Components {
         bar.addView(empty, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, emptyWeight))
         return bar
     }
+
+    fun metricCard(
+        context: Context,
+        title: String,
+        value: String,
+        detail: String,
+        accent: Int = Mo2Colors.Primary,
+    ): LinearLayout {
+        val box = card(context, Mo2Colors.SurfaceAlt)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(kicker(context, title))
+        box.addView(label(context, value, Mo2Colors.TextPrimary, Mo2Type.Title, true))
+        if (detail.isNotBlank()) box.addView(label(context, detail, Mo2Colors.TextSecondary, Mo2Type.Label, false))
+        val marker = View(context)
+        marker.background = Mo2Drawables.rounded(context, accent, Mo2Radius.Pill)
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, context.mo2Dp(4))
+        params.setMargins(0, context.mo2Dp(Mo2Spacing.Md), 0, 0)
+        box.addView(marker, params)
+        return box
+    }
+
+    fun timerDisplay(
+        context: Context,
+        value: String,
+        caption: String,
+        active: Boolean,
+    ): LinearLayout {
+        val box = card(context, if (active) Mo2Colors.SurfaceElevated else Mo2Colors.Surface)
+        box.orientation = LinearLayout.VERTICAL
+        box.gravity = Gravity.CENTER
+        box.addView(label(context, value, if (active) Mo2Colors.Warning else Mo2Colors.TextPrimary, 44f, true))
+        box.addView(label(context, caption, Mo2Colors.TextSecondary, Mo2Type.Label, false))
+        return box
+    }
 }
