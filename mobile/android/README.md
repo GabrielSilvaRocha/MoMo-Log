@@ -115,3 +115,7 @@ Polimento para uso real: Modo Academia com proxima serie/descanso/atalhos, Modo 
 ## v10.0.0
 
 Versao pessoal madura com Cockpit V10 na Home, missao do dia, prontidao, progresso semanal, checklist de continuidade e backup diario marcado automaticamente ao copiar o JSON.
+
+## v10.1.0
+
+Check-in diario de prontidao na Home com estados Verde, Amarelo e Vermelho, integrado ao Cockpit V10, ao checklist de continuidade e aos insights do Coach.

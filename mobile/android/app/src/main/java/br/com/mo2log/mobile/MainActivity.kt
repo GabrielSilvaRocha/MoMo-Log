@@ -218,8 +218,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "10.0.0"
-    private val trainingPlanVersion = "10.0.0"
+    private val versionName = "10.1.0"
+    private val trainingPlanVersion = "10.1.0"
     private val bg = Color.rgb(5, 8, 7)
     private val surface = Color.rgb(13, 24, 20)
     private val surface2 = Color.rgb(19, 36, 30)
@@ -555,6 +555,7 @@ class MainActivity : Activity() {
         root.addView(hero)
 
         root.addView(dailyCommandPanel())
+        root.addView(readinessCheckInPanel())
         root.addView(consistencyChecklistPanel())
 
         val nextBox = card()
@@ -643,6 +644,7 @@ class MainActivity : Activity() {
         val strengthDone = todayLogs().length() > 0
         val runDone = todayRunCount() > 0
         val backupDone = prefs.getString("last_backup_day", "") == dayKey()
+        val checkInDone = readinessStatus().isNotBlank()
         val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
         val weekSets = computeStats(allLogs()).optInt("week_sets")
 
@@ -652,10 +654,35 @@ class MainActivity : Activity() {
         listOf(
             checklistLine(strengthDone, "Musculacao registrada hoje"),
             checklistLine(runDone, "Corrida registrada hoje"),
+            checklistLine(checkInDone, "Check-in de prontidao feito"),
             checklistLine(backupDone, "Backup copiado hoje"),
             checklistLine(weekSets >= weekTarget, "Meta semanal de series em dia"),
         ).forEach { line -> box.addView(label(line, white, 15f, false)) }
         box.addView(label("Use o checklist como manutencao do app pessoal: registrar, correr, proteger dados e fechar semana.", muted, 13f, false))
+        return box
+    }
+
+    private fun readinessCheckInPanel(): View {
+        val status = readinessStatus()
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("CHECK-IN RAPIDO", green, 13f, true))
+        box.addView(label(if (status.isBlank()) "Como voce esta hoje?" else "Hoje: " + readinessTitle(status), white, 22f, true))
+        box.addView(label(readinessGuidance(status), muted, 14f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        listOf(
+            Pair("green", "Verde"),
+            Pair("yellow", "Amarelo"),
+            Pair("red", "Vermelho"),
+        ).forEach { item ->
+            val active = status == item.first
+            val button = actionButton(item.second, if (active) green else surface2, if (active) bg else white)
+            button.setOnClickListener { saveReadinessStatus(item.first) }
+            row.addView(button, LinearLayout.LayoutParams(0, dp(50), 1f))
+        }
+        box.addView(spacedRow(row))
         return box
     }
 
@@ -691,8 +718,12 @@ class MainActivity : Activity() {
     }
 
     private fun readinessLine(stats: JSONObject): String {
+        val status = readinessStatus()
         val avgRpe = stats.optString("avg_rpe").replace(',', '.').toDoubleOrNull()
         return when {
+            status == "red" -> "Prontidao: vermelha. Reduza carga, corte extras e priorize recuperar."
+            status == "yellow" -> "Prontidao: amarela. Mantenha o plano, mas sem buscar recorde hoje."
+            status == "green" -> "Prontidao: verde. Pode seguir o plano com progressao controlada."
             restTimerRemainingSeconds() > 0L -> "Prontidao: em intervalo. Respire e volte quando o descanso terminar."
             avgRpe != null && avgRpe >= 9.0 -> "Prontidao: cautela. RPE recente alto, mantenha tecnica e evite extras."
             todayLogs().length() > 0 && todayRunCount() > 0 -> "Prontidao: dia completo registrado. Agora a prioridade e recuperar."
@@ -718,6 +749,38 @@ class MainActivity : Activity() {
 
     private fun checklistLine(done: Boolean, text: String): String {
         return (if (done) "[x] " else "[ ] ") + text
+    }
+
+    private fun readinessStatus(): String {
+        if (prefs.getString("readiness_day", "") != dayKey()) return ""
+        return prefs.getString("readiness_status", "") ?: ""
+    }
+
+    private fun saveReadinessStatus(status: String) {
+        prefs.edit()
+            .putString("readiness_day", dayKey())
+            .putString("readiness_status", status)
+            .apply()
+        Toast.makeText(this, "Check-in salvo: " + readinessTitle(status), Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun readinessTitle(status: String): String {
+        return when (status) {
+            "green" -> "Verde - pronto para treinar"
+            "yellow" -> "Amarelo - moderar"
+            "red" -> "Vermelho - recuperar"
+            else -> "Sem check-in"
+        }
+    }
+
+    private fun readinessGuidance(status: String): String {
+        return when (status) {
+            "green" -> "Siga o plano e use as sugestoes de carga com progressao limpa."
+            "yellow" -> "Treine conservador: mantenha carga, controle descanso e evite volume extra."
+            "red" -> "Use o dia para recuperar ou fazer leve. Se treinar, reduza intensidade."
+            else -> "Toque em uma cor antes do treino. Isso ajusta a leitura de prontidao do Cockpit."
+        }
     }
 
     private fun weeklyHybridPlanPanel(): View {
@@ -1391,7 +1454,7 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v10.0.0.", muted, 14f, false))
+        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v10.1.0.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
             prefs.edit()
@@ -3219,6 +3282,12 @@ class MainActivity : Activity() {
     private fun localInsights(): List<String> {
         val stats = computeStats(allLogs())
         val insights = mutableListOf<String>()
+        when (readinessStatus()) {
+            "green" -> insights.add("Check-in verde: siga o plano e use progressao controlada.")
+            "yellow" -> insights.add("Check-in amarelo: mantenha intensidade moderada e nao adicione volume extra.")
+            "red" -> insights.add("Check-in vermelho: priorize recuperacao; se treinar, reduza carga e ritmo.")
+            else -> insights.add("Faça o check-in rapido na Home antes de decidir a intensidade do dia.")
+        }
         if (stats.optInt("week_sets") < 30) insights.add("Semana ainda com volume baixo. Priorize consistencia antes de aumentar carga.")
         else insights.add("Boa consistencia semanal. Mantenha progressao gradual.")
         if (stats.optString("avg_rpe") != "-") insights.add("Use RPE medio para decidir progressao: acima de 9 pede cautela; abaixo de 7 permite subir carga.")

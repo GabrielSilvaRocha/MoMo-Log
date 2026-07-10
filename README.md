@@ -24,6 +24,7 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 - v9.8.0 - Ajustes inteligentes de carga, volume e ritmo.
 - v9.9.0 - Polimento de uso real na academia e esteira.
 - v10.0.0 - Versao pessoal madura para uso continuo na academia.
+- v10.1.0 - Check-in diario de prontidao para ajustar intensidade.
 
 ## v8.1.2 - Android Offline Auto Login
 
@@ -388,3 +389,12 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Atalho principal muda conforme o dia: treino, corrida ou coach.
 - Linha de prontidao orienta cautela quando o RPE recente esta alto ou quando o dia ja foi completo.
 - O app Android passa para versionCode 1000 / versionName 10.0.0.
+
+## v10.1.0 - Check-in diario de prontidao
+
+- Home ganha Check-in Rapido com estados Verde, Amarelo e Vermelho.
+- Check-in do dia alimenta a linha de prontidao do Cockpit V10.
+- Checklist de continuidade passa a acompanhar se o check-in diario foi feito.
+- Coach e Insights passam a considerar a prontidao registrada no dia.
+- Verde orienta seguir o plano com progressao controlada; Amarelo reduz ambicao; Vermelho prioriza recuperacao.
+- O app Android passa para versionCode 1010 / versionName 10.1.0.

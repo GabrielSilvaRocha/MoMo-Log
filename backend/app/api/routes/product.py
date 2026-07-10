@@ -41,16 +41,16 @@ def get_mvp_status() -> dict:
     ]
 
     next_priorities = [
-        "Acompanhar uso real e ajustar detalhes finos",
+        "Acompanhar prontidao diaria e ajustar detalhes finos",
         "Preparar refinamentos pos-v10 com base no treino real",
     ]
 
     return {
         "app": settings.app_name,
         "version": settings.app_version,
-        "milestone": "Personal Training Cockpit",
+        "milestone": "Daily Readiness Check-in",
         "status": "operational",
-        "release_focus": "Consolidar uma versao pessoal madura com cockpit diario e checklist de continuidade.",
+        "release_focus": "Adicionar check-in diario de prontidao para ajustar intensidade do treino pessoal.",
         "modules": modules,
         "user_flows": user_flows,
         "next_priorities": next_priorities,
@@ -60,16 +60,16 @@ def get_mvp_status() -> dict:
 @router.get("/release-notes")
 def get_release_notes() -> dict:
     return {
-        "version": "10.0.0",
-        "title": "Personal Training Cockpit",
+        "version": "10.1.0",
+        "title": "Daily Readiness Check-in",
         "highlights": [
-            "Home ganhou Cockpit V10 com missao do dia, progresso semanal e prontidao.",
-            "Cockpit mostra series da semana contra meta e corridas concluidas na semana atual.",
-            "Checklist de continuidade acompanha musculacao, corrida, backup diario e meta semanal.",
-            "Botao Backup no Cockpit copia o JSON pessoal e marca o backup do dia como concluido.",
-            "Missao do dia adapta o atalho principal para treino, corrida ou coach conforme o planejamento.",
-            "Linha de prontidao orienta cautela quando RPE recente esta alto ou quando o dia ja foi completo.",
-            "Plano padrao e metadados foram promovidos para a versao 10.0.0.",
-            "Build Android atualizado para versionCode 1000.",
+            "Home ganhou Check-in Rapido com estados Verde, Amarelo e Vermelho.",
+            "Check-in do dia alimenta a linha de prontidao do Cockpit V10.",
+            "Checklist de continuidade agora acompanha se o check-in diario foi feito.",
+            "Coach e Insights passam a considerar a prontidao registrada no dia.",
+            "Estado Verde orienta seguir o plano com progressao controlada.",
+            "Estado Amarelo recomenda manter moderado e evitar volume extra.",
+            "Estado Vermelho recomenda recuperacao ou treino reduzido.",
+            "Build Android atualizado para versionCode 1010.",
         ],
     }
