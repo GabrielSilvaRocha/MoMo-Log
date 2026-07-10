@@ -34,6 +34,11 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import br.com.mo2log.mobile.ui.Mo2Colors
+import br.com.mo2log.mobile.ui.Mo2Components
+import br.com.mo2log.mobile.ui.Mo2Drawables
+import br.com.mo2log.mobile.ui.Mo2Radius
+import br.com.mo2log.mobile.ui.Mo2Spacing
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -139,14 +144,14 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
     init {
         orientation = VERTICAL
         setPadding(0, 10, 0, 10)
-        setBackgroundColor(Color.rgb(8, 18, 15))
+        setBackgroundColor(Mo2Colors.Surface)
 
         image.scaleType = ImageView.ScaleType.FIT_CENTER
         image.adjustViewBounds = false
         addView(image, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
 
         status.text = "Carregando frames de execucao..."
-        status.setTextColor(Color.rgb(151, 171, 164))
+        status.setTextColor(Mo2Colors.TextSecondary)
         status.textSize = 12f
         status.gravity = Gravity.CENTER
         addView(status, LayoutParams(LayoutParams.MATCH_PARENT, 34))
@@ -220,16 +225,16 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 class MainActivity : Activity() {
     private val versionName = "10.1.0"
     private val trainingPlanVersion = "10.1.0"
-    private val bg = Color.rgb(5, 8, 7)
-    private val surface = Color.rgb(13, 24, 20)
-    private val surface2 = Color.rgb(19, 36, 30)
-    private val surface3 = Color.rgb(8, 31, 24)
-    private val border = Color.rgb(35, 58, 49)
-    private val green = Color.rgb(105, 255, 95)
-    private val muted = Color.rgb(151, 171, 164)
-    private val white = Color.WHITE
-    private val danger = Color.rgb(255, 116, 116)
-    private val amber = Color.rgb(255, 198, 88)
+    private val bg = Mo2Colors.Background
+    private val surface = Mo2Colors.Surface
+    private val surface2 = Mo2Colors.SurfaceAlt
+    private val surface3 = Mo2Colors.SurfaceElevated
+    private val border = Mo2Colors.Border
+    private val green = Mo2Colors.Primary
+    private val muted = Mo2Colors.TextSecondary
+    private val white = Mo2Colors.TextPrimary
+    private val danger = Mo2Colors.Error
+    private val amber = Mo2Colors.Warning
 
     private val prefs by lazy { getSharedPreferences("mo2log_native", Context.MODE_PRIVATE) }
     private val plans: List<WorkoutPlan>
@@ -238,7 +243,7 @@ class MainActivity : Activity() {
     private val runningPlan: List<RunningWorkout>
         get() = buildRunningPlan()
     private val primaryNavItems = listOf(
-        NavItem("home", "Home"),
+        NavItem("home", "Inicio"),
         NavItem("workout", "Treino"),
         NavItem("running", "Corrida"),
         NavItem("more", "Mais"),
@@ -439,19 +444,34 @@ class MainActivity : Activity() {
     private fun bottomNav(): View {
         val wrap = LinearLayout(this)
         wrap.orientation = LinearLayout.VERTICAL
-        wrap.setPadding(dp(10), dp(8), dp(10), dp(10))
-        wrap.background = rounded(surface3, dp(8), border)
+        wrap.setPadding(dp(12), dp(10), dp(12), dp(12))
+        wrap.background = rounded(surface, dp(Mo2Radius.Lg), border)
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         primaryNavItems.forEach { item ->
             val active = isBottomNavActive(item.id)
-            val button = label(item.title, if (active) bg else white, 13f, true)
+            val button = LinearLayout(this)
+            button.orientation = LinearLayout.VERTICAL
             button.gravity = Gravity.CENTER
             button.setPadding(dp(6), 0, dp(6), 0)
-            button.background = rounded(if (active) green else surface, dp(8), if (active) green else border)
+            button.background = rounded(if (active) surface2 else surface, dp(Mo2Radius.Md), if (active) green else border)
+            button.contentDescription = item.title
+            button.isClickable = true
+            button.isFocusable = true
             button.setOnClickListener { switchTab(item.id) }
-            val params = LinearLayout.LayoutParams(0, dp(54), 1f)
+
+            val marker = View(this)
+            marker.background = rounded(if (active) green else surface, dp(Mo2Radius.Pill))
+            val markerParams = LinearLayout.LayoutParams(dp(24), dp(4))
+            markerParams.setMargins(0, 0, 0, dp(6))
+            button.addView(marker, markerParams)
+
+            val title = label(item.title, if (active) green else muted, 12f, true)
+            title.gravity = Gravity.CENTER
+            button.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+            val params = LinearLayout.LayoutParams(0, dp(58), 1f)
             params.setMargins(dp(4), 0, dp(4), 0)
             row.addView(button, params)
         }
@@ -473,7 +493,7 @@ class MainActivity : Activity() {
                 insets.systemWindowInsetBottom
             }
             content.setPadding(dp(18), dp(18) + topInset, dp(18), dp(18))
-            navigation.setPadding(dp(10), dp(8), dp(10), dp(10) + bottomInset)
+            navigation.setPadding(dp(12), dp(10), dp(12), dp(12) + bottomInset)
             insets
         }
         page.requestApplyInsets()
@@ -534,47 +554,14 @@ class MainActivity : Activity() {
     }
 
     private fun renderHome(root: LinearLayout) {
-        val logs = todayLogs()
         val stats = computeStats(allLogs())
-        val next = currentPlan()
 
-        val hero = card(surface3)
-        hero.orientation = LinearLayout.VERTICAL
-        hero.addView(label("RESUMO DE HOJE", green, 13f, true))
-        hero.addView(label(logs.length().toString() + " series registradas", white, 28f, true))
-        hero.addView(label("Volume: " + stats.optInt("today_volume") + " kg | RPE medio: " + stats.optString("avg_rpe"), muted, 15f, false))
-        val heroActions = LinearLayout(this)
-        heroActions.orientation = LinearLayout.HORIZONTAL
-        val start = actionButton("Abrir treino", green, bg)
-        start.setOnClickListener { switchTab("workout") }
-        heroActions.addView(start, LinearLayout.LayoutParams(0, dp(52), 1f))
-        val catalogButton = actionButton("Catalogo", surface2, white)
-        catalogButton.setOnClickListener { switchTab("exercises") }
-        heroActions.addView(catalogButton, LinearLayout.LayoutParams(0, dp(52), 1f))
-        hero.addView(spacedRow(heroActions))
-        root.addView(hero)
-
+        root.addView(weeklyDashboardPanel())
+        root.addView(todayDashboardPanel())
+        root.addView(weeklyAgendaDashboardPanel())
         root.addView(dailyCommandPanel())
         root.addView(readinessCheckInPanel())
         root.addView(consistencyChecklistPanel())
-
-        val nextBox = card()
-        nextBox.orientation = LinearLayout.VERTICAL
-        nextBox.addView(label("PROXIMO TREINO", green, 13f, true))
-        nextBox.addView(label(next.title + " - " + next.focus, white, 23f, true))
-        nextBox.addView(label(next.exercises.size.toString() + " exercicios prontos. O primeiro toque ja leva ao registro.", muted, 15f, false))
-        val nextActions = LinearLayout(this)
-        nextActions.orientation = LinearLayout.HORIZONTAL
-        val workout = actionButton("Registrar", green, bg)
-        workout.setOnClickListener { switchTab("workout") }
-        nextActions.addView(workout, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val run = actionButton("Corrida", surface2, white)
-        run.setOnClickListener { switchTab("running") }
-        nextActions.addView(run, LinearLayout.LayoutParams(0, dp(50), 1f))
-        nextBox.addView(spacedRow(nextActions))
-        root.addView(nextBox)
-
-        root.addView(weeklyHybridPlanPanel())
 
         val favorites = favoriteCatalogExercises()
         if (favorites.isNotEmpty()) {
@@ -608,6 +595,155 @@ class MainActivity : Activity() {
         insightBox.addView(label("INSIGHTS", green, 13f, true))
         localInsights().forEach { insight -> insightBox.addView(label("- " + insight, white, 15f, false)) }
         root.addView(insightBox)
+    }
+
+    private fun weeklyDashboardPanel(): View {
+        val stats = computeStats(allLogs())
+        val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
+        val weekSets = stats.optInt("week_sets")
+        val strengthPercent = progressPercent(weekSets, weekTarget)
+        val weekRuns = currentRunningWeekWorkouts()
+        val runningDone = weekRuns.count { isRunWorkoutCompleted(it) }
+        val runningPercent = progressPercent(runningDone, weekRuns.size)
+        val distance = currentWeekRunDistance()
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("DASHBOARD SEMANAL", green, 13f, true))
+        box.addView(label("Semana " + currentRunningPlanWeek() + " de 6", white, 30f, true))
+        box.addView(label("Musculacao, corrida e prontidao em uma visao rapida para treinar hoje.", muted, 15f, false))
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(compactMetric("Series", weekSets.toString() + "/" + weekTarget), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Corridas", runningDone.toString() + "/" + weekRuns.size), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Distancia", formatKm(distance)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+
+        box.addView(dashboardProgressLine("Musculacao", weekSets.toString() + " series de " + weekTarget, strengthPercent, green))
+        box.addView(dashboardProgressLine("Corrida 5 km", runningDone.toString() + " de " + weekRuns.size + " treinos concluidos", runningPercent, Mo2Colors.Running))
+        box.addView(label(readinessLine(stats), muted, 14f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val primary = actionButton(missionButtonLabel(), green, bg)
+        primary.setOnClickListener { switchTab(missionButtonTab()) }
+        row.addView(primary, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val backup = actionButton("Backup", surface2, green)
+        backup.setOnClickListener { exportToClipboard() }
+        row.addView(backup, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun todayDashboardPanel(): View {
+        val stats = computeStats(allLogs())
+        val mission = todayMission()
+        val plan = currentPlan()
+        val run = todayRunningWorkout()
+        val strengthText = if (isStrengthDayToday()) {
+            plan.title + " - " + plan.focus + " | " + plan.exercises.size + " exercicios"
+        } else {
+            "Sem musculacao principal hoje. Preserve energia para a corrida ou recuperacao."
+        }
+        val runText = if (run != null) {
+            run.dayName + " - " + run.title + " | " + formatKm(totalRunDistance(run)) + " | " + formatDuration(estimatedWorkoutSeconds(run))
+        } else {
+            "Sem corrida planejada para hoje."
+        }
+
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("HOJE", green, 13f, true))
+        box.addView(label(mission.first, white, 24f, true))
+        box.addView(label(mission.second, muted, 14f, false))
+        box.addView(label("Musculacao: " + strengthText, white, 15f, true))
+        box.addView(label("Corrida: " + runText, muted, 14f, false))
+        box.addView(label(todayLogs().length().toString() + " series hoje | volume " + stats.optInt("today_volume") + " kg | corridas " + todayRunCount(), muted, 13f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val workout = actionButton("Treino", if (isStrengthDayToday()) green else surface2, if (isStrengthDayToday()) bg else white)
+        workout.setOnClickListener { switchTab("workout") }
+        row.addView(workout, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val running = actionButton("Corrida", if (missionButtonTab() == "running") green else surface2, if (missionButtonTab() == "running") bg else white)
+        running.setOnClickListener { switchTab("running") }
+        row.addView(running, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun weeklyAgendaDashboardPanel(): View {
+        val workoutsByDay = currentRunningWeekWorkouts().associateBy { it.dayIndex }
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("AGENDA DA SEMANA", green, 13f, true))
+        box.addView(label("Treinos planejados ate a prova de 5 km", white, 22f, true))
+        hybridWeekLines().forEachIndexed { index, line ->
+            val dayIndex = index + 1
+            val runDone = workoutsByDay[dayIndex]?.let { isRunWorkoutCompleted(it) } ?: false
+            val strengthDone = isStrengthWeekDayCompleted(dayIndex)
+            val marker = if (runDone || strengthDone) "[x] " else "[ ] "
+            val color = if (runDone || strengthDone) green else white
+            box.addView(label(marker + line, color, 14f, false))
+        }
+        val open = actionButton("Planejamento completo", surface2, green)
+        open.setOnClickListener { switchTab("running") }
+        box.addView(buttonParams(open))
+        return box
+    }
+
+    private fun dashboardProgressLine(title: String, detail: String, percent: Int, color: Int): View {
+        val wrap = LinearLayout(this)
+        wrap.orientation = LinearLayout.VERTICAL
+        wrap.setPadding(0, dp(14), 0, 0)
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.addView(label(title, white, 15f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(label(percent.coerceAtMost(999).toString() + "%", color, 15f, true))
+        wrap.addView(row)
+        wrap.addView(label(detail, muted, 13f, false))
+
+        val bar = Mo2Components.progressBar(this, percent.coerceIn(0, 100), color)
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10))
+        params.setMargins(0, dp(8), 0, 0)
+        wrap.addView(bar, params)
+        return wrap
+    }
+
+    private fun currentWeekRunDistance(): Double {
+        val runs = runLogs()
+        var total = 0.0
+        for (i in 0 until runs.length()) {
+            val item = runs.getJSONObject(i)
+            if (item.optString("week") == weekKey()) total += item.optDouble("distance")
+        }
+        return roundKm(total)
+    }
+
+    private fun isStrengthDayToday(): Boolean {
+        val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
+        return day == 2 || day == 4 || day == 6
+    }
+
+    private fun isStrengthWeekDayCompleted(dayIndex: Int): Boolean {
+        val logs = allLogs()
+        for (i in 0 until logs.length()) {
+            val item = logs.getJSONObject(i)
+            if (item.optString("week") == weekKey() && dayIndexFor(item.optString("day")) == dayIndex) return true
+        }
+        return false
+    }
+
+    private fun dayIndexFor(day: String): Int? {
+        return try {
+            val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(day) ?: return null
+            SimpleDateFormat("u", Locale.US).format(parsed).toIntOrNull()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun dailyCommandPanel(): View {
@@ -3775,12 +3911,13 @@ class MainActivity : Activity() {
     }
 
     private fun currentSectionTitle(): String {
+        if (currentTab == "home") return "Dashboard Semanal"
         return navItems.firstOrNull { it.id == currentTab }?.title ?: "Inicio"
     }
 
     private fun currentSectionSubtitle(): String {
         return when (currentTab) {
-            "home" -> "Resumo rapido para abrir o treino certo no menor numero de toques."
+            "home" -> "Visao da semana, missao de hoje e atalhos para registrar sem perder tempo."
             "workout" -> "Registro guiado com timer, midia de execucao, edicao e desfazer serie."
             "running" -> "Semana de corrida, planejamento 5 km e treino guiado por fases."
             "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
@@ -3895,18 +4032,14 @@ class MainActivity : Activity() {
     }
 
     private fun statusChip(text: String): TextView {
-        val view = label(text.uppercase(Locale("pt", "BR")), green, 12f, true)
-        view.gravity = Gravity.CENTER
-        view.setPadding(dp(10), 0, dp(10), 0)
-        view.background = rounded(surface, dp(8), border)
-        return view
+        return Mo2Components.badge(this, text, true)
     }
 
     private fun compactMetric(title: String, value: String): View {
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
-        box.setPadding(dp(8), dp(8), dp(8), dp(8))
-        box.background = rounded(surface, dp(8), border)
+        box.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+        box.background = rounded(surface, dp(Mo2Radius.Md), border)
         box.addView(label(title.uppercase(Locale("pt", "BR")), muted, 10f, true))
         box.addView(label(value, white, 14f, true))
         return box
@@ -4001,13 +4134,7 @@ class MainActivity : Activity() {
     }
 
     private fun label(text: String, color: Int, size: Float, bold: Boolean): TextView {
-        val view = TextView(this)
-        view.text = text
-        view.setTextColor(color)
-        view.textSize = size
-        view.setLineSpacing(0f, 1.08f)
-        if (bold) view.typeface = Typeface.DEFAULT_BOLD
-        return view
+        return Mo2Components.label(this, text, color, size, bold)
     }
 
     private fun pill(text: String, active: Boolean, width: Int, height: Int): TextView {
@@ -4022,14 +4149,7 @@ class MainActivity : Activity() {
     }
 
     private fun actionButton(text: String, color: Int, textColor: Int): Button {
-        val button = Button(this)
-        button.text = text
-        button.textSize = 14f
-        button.typeface = Typeface.DEFAULT_BOLD
-        button.setTextColor(textColor)
-        button.background = rounded(color, dp(8), if (color == green) green else border)
-        button.isAllCaps = false
-        return button
+        return Mo2Components.actionButton(this, text, color, textColor)
     }
 
     private fun buttonParams(button: Button): View {
@@ -4040,21 +4160,11 @@ class MainActivity : Activity() {
     }
 
     private fun card(color: Int = surface): LinearLayout {
-        val box = LinearLayout(this)
-        box.setPadding(dp(16), dp(16), dp(16), dp(16))
-        box.background = rounded(color, dp(8), border)
-        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        params.setMargins(0, dp(8), 0, dp(8))
-        box.layoutParams = params
-        return box
+        return Mo2Components.card(this, color)
     }
 
     private fun rounded(color: Int, radius: Int, stroke: Int? = null): GradientDrawable {
-        val drawable = GradientDrawable()
-        drawable.setColor(color)
-        drawable.cornerRadius = radius.toFloat()
-        if (stroke != null) drawable.setStroke(dp(1), stroke)
-        return drawable
+        return Mo2Drawables.roundedPx(this, color, radius, stroke)
     }
 
     private fun hideKeyboard() {
