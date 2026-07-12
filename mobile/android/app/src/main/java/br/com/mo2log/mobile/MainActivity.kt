@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.text.InputType
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -269,11 +270,21 @@ class MainActivity : Activity() {
     private val runningSessionHandler = Handler(Looper.getMainLooper())
     private var restTimerText: TextView? = null
     private var runningCountdownText: TextView? = null
+    private var runningCountdownCueText: TextView? = null
+    private var runningSessionTitleText: TextView? = null
+    private var runningSessionSubtitleText: TextView? = null
     private var runningStageText: TextView? = null
     private var runningRemainingText: TextView? = null
+    private var runningDistanceText: TextView? = null
+    private var runningPaceText: TextView? = null
+    private var runningElapsedText: TextView? = null
     private var runningSpeedText: TextView? = null
     private var runningNextText: TextView? = null
     private var runningTreadmillText: TextView? = null
+    private var runningCountdownPanel: View? = null
+    private var runningActiveContent: View? = null
+    private var runningPauseButton: Button? = null
+    private var pendingRunSummary: JSONObject? = null
     private val restTimerRunnable = object : Runnable {
         override fun run() {
             restTimerText?.let { view ->
@@ -291,7 +302,6 @@ class MainActivity : Activity() {
         override fun run() {
             val completed = updateActiveRunProgress()
             if (completed) {
-                Toast.makeText(this@MainActivity, "Treino de corrida concluido.", Toast.LENGTH_SHORT).show()
                 render()
                 return
             }
@@ -338,11 +348,20 @@ class MainActivity : Activity() {
         runningSessionHandler.removeCallbacks(runningSessionRunnable)
         restTimerText = null
         runningCountdownText = null
+        runningCountdownCueText = null
+        runningSessionTitleText = null
+        runningSessionSubtitleText = null
         runningStageText = null
         runningRemainingText = null
+        runningDistanceText = null
+        runningPaceText = null
+        runningElapsedText = null
         runningSpeedText = null
         runningNextText = null
         runningTreadmillText = null
+        runningCountdownPanel = null
+        runningActiveContent = null
+        runningPauseButton = null
         updateSessionWakeLock()
 
         val page = LinearLayout(this)
@@ -357,8 +376,11 @@ class MainActivity : Activity() {
         root.setPadding(dp(18), dp(18), dp(18), dp(18))
         scroll.addView(root)
 
-        root.addView(header())
-        root.addView(pageIntro())
+        val focusedRunningSession = currentTab == "running" && activeRunningWorkout() != null
+        if (!focusedRunningSession) {
+            root.addView(header())
+            root.addView(pageIntro())
+        }
 
         when (currentTab) {
             "home" -> renderHome(root)
@@ -376,10 +398,15 @@ class MainActivity : Activity() {
         }
 
         page.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-        val navigation = bottomNav()
-        page.addView(navigation)
+        val navigation = if (focusedRunningSession) null else bottomNav()
+        if (navigation != null) page.addView(navigation)
         applySystemBarInsets(page, root, navigation)
         setContentView(page)
+
+        pendingRunSummary?.let { summary ->
+            pendingRunSummary = null
+            page.post { showRunningWorkoutSummary(summary) }
+        }
     }
 
     private fun updateSessionWakeLock() {
@@ -480,7 +507,7 @@ class MainActivity : Activity() {
     }
 
     @Suppress("DEPRECATION")
-    private fun applySystemBarInsets(page: View, content: LinearLayout, navigation: View) {
+    private fun applySystemBarInsets(page: View, content: LinearLayout, navigation: View?) {
         page.setOnApplyWindowInsetsListener { _, insets ->
             val topInset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 insets.getInsets(WindowInsets.Type.statusBars()).top
@@ -492,8 +519,8 @@ class MainActivity : Activity() {
             } else {
                 insets.systemWindowInsetBottom
             }
-            content.setPadding(dp(18), dp(18) + topInset, dp(18), dp(18))
-            navigation.setPadding(dp(12), dp(10), dp(12), dp(12) + bottomInset)
+            content.setPadding(dp(18), dp(18) + topInset, dp(18), dp(18) + if (navigation == null) bottomInset else 0)
+            navigation?.setPadding(dp(12), dp(10), dp(12), dp(12) + bottomInset)
             insets
         }
         page.requestApplyInsets()
@@ -1209,13 +1236,16 @@ class MainActivity : Activity() {
 
     private fun renderRunning(root: LinearLayout) {
         updateActiveRunProgress()
-        root.addView(heroCard("Running coach", "Corrida 5 km", "Semana atual, treino guiado por fases e ajuste de velocidade em tempo real."))
-        root.addView(treadmillModePanel())
-        root.addView(runningSmartCoachPanel())
+        activeRunningWorkout()?.let { workout ->
+            root.addView(activeRunPanel(workout))
+            return
+        }
+
         root.addView(runningThisWeekPanel())
         root.addView(runningFullPlanButton())
         if (prefs.getBoolean("running_full_plan_open", false)) root.addView(runningFullPlanPanel())
-        activeRunningWorkout()?.let { root.addView(activeRunPanel(it)) }
+        root.addView(treadmillModePanel())
+        root.addView(runningSmartCoachPanel())
         root.addView(runningHistoryPanel())
     }
 
@@ -1225,11 +1255,12 @@ class MainActivity : Activity() {
         val currentDistanceScale = prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("AJUSTE DE RITMO", green, 13f, true))
+        box.addView(label("COACH DE RITMO", Mo2Colors.Running, 13f, true))
         box.addView(label(adjustment.headline, white, 22f, true))
         box.addView(label(adjustment.reason, muted, 14f, false))
-        box.addView(label("Atual: " + signedSpeedOffset(currentSpeedOffset) + " | distancia x" + String.format(Locale.US, "%.2f", currentDistanceScale), muted, 13f, false))
-        box.addView(label("Sugerido: " + signedSpeedOffset(adjustment.speedOffset) + " | distancia x" + String.format(Locale.US, "%.2f", adjustment.distanceScale), white, 15f, true))
+        box.addView(label("Ajuste atual", muted, 12f, true))
+        box.addView(label(signedSpeedOffset(currentSpeedOffset) + " | distancia x" + String.format(Locale.US, "%.2f", currentDistanceScale), white, 15f, true))
+        box.addView(label("Sugestao: " + signedSpeedOffset(adjustment.speedOffset) + " | distancia x" + String.format(Locale.US, "%.2f", adjustment.distanceScale), Mo2Colors.Running, 15f, true))
 
         val apply = actionButton("Aplicar ajuste sugerido", green, bg)
         apply.setOnClickListener { applySmartRunningAdjustment(adjustment) }
@@ -1245,15 +1276,16 @@ class MainActivity : Activity() {
             ?: workouts.first()
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("MODO ESTEIRA", green, 13f, true))
+        box.addView(label("PRONTO PARA A ESTEIRA", Mo2Colors.Running, 13f, true))
         box.addView(label(workout.dayName + " | " + workout.title, white, 22f, true))
-        box.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)) + " | inclinacao 1% se estiver confortavel", muted, 14f, false))
-        box.addView(label("Velocidades: " + treadmillSpeedPlan(workout), white, 15f, true))
-        box.addView(label("Tela mantida ativa durante corrida iniciada pelo app.", muted, 13f, false))
+        box.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), muted, 14f, false))
+        box.addView(label("Plano de velocidade", muted, 12f, true))
+        box.addView(label(treadmillSpeedPlan(workout), white, 15f, true))
+        box.addView(label("Use inclinacao de 1% se estiver confortavel. A tela fica ligada durante toda a sessao.", muted, 13f, false))
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
-        val select = actionButton("Abrir", surface2, green)
+        val select = actionButton("Ver detalhes", surface2, Mo2Colors.Running)
         select.setOnClickListener {
             selectedRunId = workout.id
             prefs.edit().putString("selected_run_id", workout.id).apply()
@@ -1262,7 +1294,7 @@ class MainActivity : Activity() {
         row.addView(select, LinearLayout.LayoutParams(0, dp(50), 1f))
 
         val runningNow = activeRunningWorkout()?.id == workout.id
-        val start = actionButton(if (runningNow) "Ativo" else "Iniciar", green, bg)
+        val start = actionButton(if (runningNow) "Em andamento" else "Iniciar corrida", green, bg)
         start.setOnClickListener {
             if (runningNow) Toast.makeText(this, "Corrida ja esta em andamento.", Toast.LENGTH_SHORT).show()
             else startRunningWorkout(workout)
@@ -1277,12 +1309,37 @@ class MainActivity : Activity() {
         val workouts = currentRunningWeekWorkouts()
         val selected = workouts.firstOrNull { it.id == selectedRunId } ?: todayRunningWorkout() ?: workouts.first()
         selectedRunId = selected.id
+        val completed = workouts.count { isRunWorkoutCompleted(it) }
+        val distanceDone = workouts.filter { isRunWorkoutCompleted(it) }.sumOf { totalRunDistance(it) }
 
-        val box = card()
+        val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("ESSA SEMANA", green, 13f, true))
-        box.addView(label("Semana " + week + " de 6 ate a meta de 5 km", white, 24f, true))
-        box.addView(label("Toque em um treino para expandir. Use Treino concluido quando fizer fora do app.", muted, 14f, false))
+
+        val overview = card(surface3)
+        overview.orientation = LinearLayout.VERTICAL
+        overview.addView(label("ESSA SEMANA", green, 13f, true))
+        overview.addView(label("Semana " + week + " de 6", white, 28f, true))
+        overview.addView(label("Meta: completar os 5 treinos e evoluir com controle ate os 5 km.", muted, 14f, false))
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(compactMetric("Treinos", completed.toString() + "/" + workouts.size), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Distancia", formatKm(distanceDone)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Faltam", (workouts.size - completed).coerceAtLeast(0).toString()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        overview.addView(spacedRow(metrics))
+
+        val progress = Mo2Components.progressBar(this, progressPercent(completed, workouts.size), Mo2Colors.Running)
+        val progressParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(8))
+        progressParams.setMargins(0, dp(14), 0, 0)
+        overview.addView(progress, progressParams)
+        box.addView(overview)
+
+        val listHeader = LinearLayout(this)
+        listHeader.orientation = LinearLayout.VERTICAL
+        listHeader.setPadding(0, dp(12), 0, dp(4))
+        listHeader.addView(label("TREINOS DA SEMANA", white, 18f, true))
+        listHeader.addView(label("Toque para abrir detalhes ou registre um treino feito sem o app.", muted, 13f, false))
+        box.addView(listHeader)
 
         workouts.forEach { workout ->
             box.addView(runningWeekWorkoutItem(workout, workout.id == selected.id))
@@ -1301,24 +1358,44 @@ class MainActivity : Activity() {
             render()
         }
 
-        val status = if (completed) "[x] " else "[ ] "
-        item.addView(label(status + workout.dayName + " | " + workout.title, if (completed) green else white, 18f, true))
-        item.addView(label(workout.focus + " | " + formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), muted, 13f, false))
+        val top = LinearLayout(this)
+        top.orientation = LinearLayout.HORIZONTAL
+        top.gravity = Gravity.CENTER_VERTICAL
+        val titleBox = LinearLayout(this)
+        titleBox.orientation = LinearLayout.VERTICAL
+        titleBox.addView(label(workout.dayName + " | " + workout.title, if (completed) green else white, 17f, true))
+        titleBox.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), muted, 13f, false))
+        top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(Mo2Components.badge(this, if (completed) "Feito" else if (expanded) "Aberto" else "Pendente", completed))
+        item.addView(top)
 
         if (expanded) {
+            item.addView(label(workout.focus, Mo2Colors.Running, 14f, true))
             item.addView(label(workout.description, white, 14f, false))
             workout.stages.forEachIndexed { index, stage ->
-                item.addView(label((index + 1).toString() + ". " + stage.title + " - " + formatKm(stage.distanceKm) + " a " + formatSpeed(stage.speedKmh), muted, 13f, false))
+                val stageRow = LinearLayout(this)
+                stageRow.orientation = LinearLayout.VERTICAL
+                stageRow.setPadding(dp(12), dp(10), dp(12), dp(10))
+                stageRow.background = rounded(surface2, dp(Mo2Radius.Md), border)
+                stageRow.addView(label("ETAPA " + (index + 1) + " | " + stage.title, white, 13f, true))
+                stageRow.addView(label(formatKm(stage.distanceKm) + " a " + formatSpeed(stage.speedKmh) + " | " + stage.note, muted, 12f, false))
+                val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                params.setMargins(0, dp(8), 0, 0)
+                item.addView(stageRow, params)
             }
 
             val row = LinearLayout(this)
             row.orientation = LinearLayout.HORIZONTAL
             val start = actionButton(if (active) "Em andamento" else "Iniciar", green, bg)
-            start.setOnClickListener { startRunningWorkout(workout) }
+            start.isEnabled = !completed
+            start.alpha = if (completed) 0.45f else 1f
+            start.setOnClickListener { if (!completed) startRunningWorkout(workout) }
             row.addView(start, LinearLayout.LayoutParams(0, dp(50), 1f))
 
-            val done = actionButton(if (completed) "Concluido" else "Treino concluido", surface2, if (completed) green else white)
-            done.setOnClickListener { saveRunCompletion(workout, true) }
+            val done = actionButton(if (completed) "Concluido" else "Marcar concluido", surface2, if (completed) green else white)
+            done.isEnabled = !completed
+            done.alpha = if (completed) 0.65f else 1f
+            done.setOnClickListener { if (!completed) saveRunCompletion(workout, true) }
             row.addView(done, LinearLayout.LayoutParams(0, dp(50), 1f))
             item.addView(spacedRow(row))
         }
@@ -1366,71 +1443,147 @@ class MainActivity : Activity() {
     }
 
     private fun activeRunPanel(workout: RunningWorkout): View {
-        val box = card(surface3)
-        box.orientation = LinearLayout.VERTICAL
-        box.addView(label("TREINO EM ANDAMENTO", green, 13f, true))
-        box.addView(label(workout.dayName + " | " + workout.title, white, 24f, true))
+        val screen = LinearLayout(this)
+        screen.orientation = LinearLayout.VERTICAL
 
-        runningCountdownText = label("", amber, 32f, true)
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.VERTICAL
+        header.setPadding(0, dp(8), 0, dp(12))
+        runningSessionTitleText = label(workout.title, white, 25f, true)
+        runningSessionSubtitleText = label("", muted, 14f, false)
+        header.addView(runningSessionTitleText)
+        header.addView(runningSessionSubtitleText)
+        screen.addView(header)
+
+        val countdownGroup = LinearLayout(this)
+        countdownGroup.orientation = LinearLayout.VERTICAL
+        val countdownCard = card(surface2)
+        countdownCard.orientation = LinearLayout.VERTICAL
+        countdownCard.gravity = Gravity.CENTER
+        countdownCard.setPadding(dp(18), dp(36), dp(18), dp(36))
+        countdownCard.addView(label("INICIANDO EM", muted, 13f, true))
+        runningCountdownText = label("", green, 92f, true)
         runningCountdownText?.gravity = Gravity.CENTER
-        box.addView(runningCountdownText)
+        countdownCard.addView(runningCountdownText)
+        runningCountdownCueText = label("", muted, 14f, false)
+        runningCountdownCueText?.gravity = Gravity.CENTER
+        countdownCard.addView(runningCountdownCueText)
+        countdownGroup.addView(countdownCard)
 
-        runningStageText = label("", white, 20f, true)
-        box.addView(runningStageText)
-        runningRemainingText = label("", green, 28f, true)
-        box.addView(runningRemainingText)
-        runningNextText = label("", muted, 14f, false)
-        box.addView(runningNextText)
+        val tips = card(surface3)
+        tips.orientation = LinearLayout.VERTICAL
+        tips.addView(label("DICAS ANTES DE INICIAR", muted, 12f, true))
+        tips.addView(label("- Ajuste a esteira na velocidade inicial", white, 14f, false))
+        tips.addView(label("- Confira velocidade, timer e inclinacao", white, 14f, false))
+        countdownGroup.addView(tips)
 
+        val cancel = actionButton("Cancelar treino", bg, white)
+        cancel.setOnClickListener { showCancelRunningWorkoutDialog() }
+        countdownGroup.addView(buttonParams(cancel))
+        runningCountdownPanel = countdownGroup
+        screen.addView(countdownGroup)
+
+        val activeContent = LinearLayout(this)
+        activeContent.orientation = LinearLayout.VERTICAL
+
+        runningStageText = label("", Mo2Colors.Running, 15f, true)
+        activeContent.addView(runningStageText)
+
+        val timeCard = card(surface2)
+        timeCard.orientation = LinearLayout.VERTICAL
+        timeCard.addView(label("TEMPO RESTANTE", muted, 12f, true))
+        runningRemainingText = label("", white, 48f, true)
+        timeCard.addView(runningRemainingText)
+        runningElapsedText = label("", muted, 13f, false)
+        timeCard.addView(runningElapsedText)
+        activeContent.addView(timeCard)
+
+        val distanceCard = card(surface2)
+        distanceCard.orientation = LinearLayout.VERTICAL
+        distanceCard.addView(label("DISTANCIA RESTANTE", muted, 12f, true))
+        runningDistanceText = label("", white, 32f, true)
+        distanceCard.addView(runningDistanceText)
+        activeContent.addView(distanceCard)
+
+        val paceCard = card(surface2)
+        paceCard.orientation = LinearLayout.VERTICAL
+        paceCard.addView(label("PACE ALVO", muted, 12f, true))
+        runningPaceText = label("", white, 24f, true)
+        paceCard.addView(runningPaceText)
+        activeContent.addView(paceCard)
+
+        val speedCard = card(surface2)
+        speedCard.orientation = LinearLayout.VERTICAL
+        speedCard.addView(label("VELOCIDADE", muted, 12f, true))
         val speedRow = LinearLayout(this)
         speedRow.orientation = LinearLayout.HORIZONTAL
-        val minus = actionButton("-", surface2, green)
+        speedRow.gravity = Gravity.CENTER_VERTICAL
+        val minus = actionButton("-", Mo2Colors.Border, white)
+        minus.contentDescription = "Diminuir velocidade"
         minus.setOnClickListener { adjustActiveRunSpeed(-0.2) }
-        speedRow.addView(minus, LinearLayout.LayoutParams(dp(58), dp(64)))
+        speedRow.addView(minus, LinearLayout.LayoutParams(dp(58), dp(58)))
 
-        runningSpeedText = label("", white, 20f, true)
+        val speedValue = LinearLayout(this)
+        speedValue.orientation = LinearLayout.VERTICAL
+        speedValue.gravity = Gravity.CENTER
+        runningSpeedText = label("", white, 32f, true)
         runningSpeedText?.gravity = Gravity.CENTER
-        runningSpeedText?.background = rounded(surface, dp(8), border)
-        speedRow.addView(runningSpeedText, LinearLayout.LayoutParams(0, dp(64), 1f))
+        speedValue.addView(runningSpeedText)
+        val unit = label("km/h", muted, 12f, false)
+        unit.gravity = Gravity.CENTER
+        speedValue.addView(unit)
+        speedRow.addView(speedValue, LinearLayout.LayoutParams(0, dp(70), 1f))
 
-        val plus = actionButton("+", surface2, green)
+        val plus = actionButton("+", Mo2Colors.Border, white)
+        plus.contentDescription = "Aumentar velocidade"
         plus.setOnClickListener { adjustActiveRunSpeed(0.2) }
-        speedRow.addView(plus, LinearLayout.LayoutParams(dp(58), dp(64)))
-        box.addView(spacedRow(speedRow))
+        speedRow.addView(plus, LinearLayout.LayoutParams(dp(58), dp(58)))
+        speedCard.addView(speedRow)
+        activeContent.addView(speedCard)
 
-        runningTreadmillText = label("", amber, 15f, true)
-        box.addView(runningTreadmillText)
+        val nextCard = card(surface3)
+        nextCard.orientation = LinearLayout.VERTICAL
+        nextCard.addView(label("PROXIMA ETAPA", muted, 12f, true))
+        runningNextText = label("", white, 15f, false)
+        nextCard.addView(runningNextText)
+        activeContent.addView(nextCard)
 
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        val finishStage = actionButton("Finalizar etapa", surface2, white)
+        runningTreadmillText = label("", amber, 14f, true)
+        activeContent.addView(runningTreadmillText)
+
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val pause = actionButton("Pausar", bg, white)
+        pause.setOnClickListener { toggleActiveRunPause() }
+        runningPauseButton = pause
+        actions.addView(pause, LinearLayout.LayoutParams(0, dp(52), 1f))
+        val finishWorkout = actionButton("Concluir", green, bg)
+        finishWorkout.setOnClickListener { finishActiveRunningWorkout(workout) }
+        actions.addView(finishWorkout, LinearLayout.LayoutParams(0, dp(52), 1f))
+        activeContent.addView(spacedRow(actions))
+
+        val finishStage = actionButton("Finalizar etapa atual", surface2, white)
         finishStage.setOnClickListener { finishCurrentRunStage() }
-        row.addView(finishStage, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val finishWorkout = actionButton("Finalizar treino", green, bg)
-        finishWorkout.setOnClickListener {
-            saveRunCompletion(workout, false, false)
-            clearActiveRun()
-            Toast.makeText(this, "Treino salvo.", Toast.LENGTH_SHORT).show()
-            render()
-        }
-        row.addView(finishWorkout, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(row))
+        activeContent.addView(buttonParams(finishStage))
+
+        runningActiveContent = activeContent
+        screen.addView(activeContent)
 
         refreshRunningSessionViews()
         runningSessionHandler.post(runningSessionRunnable)
-        return box
+        return screen
     }
 
     private fun refreshRunningSessionViews() {
         val workout = activeRunningWorkout() ?: return
         val countdown = activeRunCountdownSeconds()
         if (countdown > 0L) {
-            runningCountdownText?.text = formatDuration(countdown)
-            runningStageText?.text = "Prepare-se para iniciar"
-            runningRemainingText?.text = "Comeca em 5 segundos"
-            runningSpeedText?.text = "Velocidade inicial " + formatSpeed(currentActiveRunSpeed(workout))
-            runningTreadmillText?.text = "Esteira: deixe pronta em " + formatSpeed(currentActiveRunSpeed(workout)) + " | inclinacao 1% se estiver confortavel"
-            runningNextText?.text = "Primeira etapa: " + stageCue(workout.stages.firstOrNull())
+            runningCountdownPanel?.visibility = View.VISIBLE
+            runningActiveContent?.visibility = View.GONE
+            runningSessionTitleText?.text = "Preparar corrida"
+            runningSessionSubtitleText?.text = workout.title
+            runningCountdownText?.text = countdown.toString()
+            runningCountdownCueText?.text = "Primeira etapa: " + stageCue(workout.stages.firstOrNull())
             return
         }
 
@@ -1439,18 +1592,38 @@ class MainActivity : Activity() {
         val remainingKm = activeRunStageRemainingKm(workout)
         val speed = currentActiveRunSpeed(workout)
         val remainingSeconds = if (speed <= 0.0) 0L else ((remainingKm / speed) * 3600.0).roundToInt().toLong()
+        val paused = isActiveRunPaused()
 
-        runningCountdownText?.text = ""
-        runningStageText?.text = "Etapa " + (stageIndex + 1) + " de " + workout.stages.size + ": " + stage.title
-        runningRemainingText?.text = formatDuration(remainingSeconds) + " | " + formatKm(remainingKm) + " restantes"
-        runningSpeedText?.text = formatSpeed(speed)
-        runningTreadmillText?.text = "Esteira agora: " + formatSpeed(speed) + " | etapa " + (stageIndex + 1) + "/" + workout.stages.size
+        runningCountdownPanel?.visibility = View.GONE
+        runningActiveContent?.visibility = View.VISIBLE
+        runningSessionTitleText?.text = workout.title
+        runningSessionSubtitleText?.text = "Etapa " + (stageIndex + 1) + " de " + workout.stages.size + " | Esteira"
+        runningStageText?.text = (if (paused) "PAUSADO | " else "ETAPA ATUAL | ") + stage.title
+        runningRemainingText?.text = formatDuration(remainingSeconds)
+        runningDistanceText?.text = formatKm(remainingKm)
+        runningPaceText?.text = formatPaceForSpeed(speed)
+        runningElapsedText?.text = "Tempo de treino: " + formatDuration(activeRunElapsedSeconds())
+        runningSpeedText?.text = String.format(Locale("pt", "BR"), "%.1f", speed)
+        runningTreadmillText?.text = if (paused) {
+            "Sessao pausada. A distancia nao esta avancando."
+        } else {
+            "Esteira agora: " + formatSpeed(speed) + " | tela mantida ativa"
+        }
+        runningPauseButton?.text = if (paused) "Continuar" else "Pausar"
+        runningPauseButton?.setTextColor(if (paused) bg else white)
+        runningPauseButton?.background = Mo2Drawables.pressed(
+            this,
+            if (paused) green else bg,
+            surface2,
+            Mo2Radius.Md,
+            if (paused) green else border,
+        )
         runningNextText?.text = if (stageIndex < workout.stages.lastIndex) {
-            "Proxima etapa: " + stageCue(workout.stages[stageIndex + 1])
+            stageCue(workout.stages[stageIndex + 1])
         } else {
             "Ultima etapa do treino."
         }
-        announceRunTransitionIfNeeded(workout, stageIndex, remainingSeconds)
+        if (!paused) announceRunTransitionIfNeeded(workout, stageIndex, remainingSeconds)
     }
 
     private fun renderPlanEditor(root: LinearLayout) {
@@ -3057,12 +3230,48 @@ class MainActivity : Activity() {
             "Proximo ajuste:",
             smartCoachLines().joinToString("\n"),
         ).joinToString("\n")
-        AlertDialog.Builder(this)
-            .setTitle("Treino concluido")
-            .setMessage(message)
+
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(12), dp(14), dp(12), dp(8))
+        content.addView(label("RESUMO POS-TREINO", green, 13f, true))
+        content.addView(label(currentPlan().title + " concluido", white, 24f, true))
+        content.addView(label("Seu treino foi salvo localmente e ja esta disponivel no historico.", muted, 14f, false))
+        content.addView(summaryMetricRow(
+            Triple("Series", exerciseCounts.values.sum().toString(), exerciseCounts.size.toString() + " exercicios"),
+            Triple("Volume", totalVolume.roundToInt().toString() + " kg", "movimentado"),
+            green,
+        ))
+        content.addView(summaryMetricRow(
+            Triple("RPE", avgRpe, "media da sessao"),
+            Triple("Melhor carga", if (bestLoad <= 0.0) "-" else formatLoad(bestLoad), bestExercise),
+            amber,
+        ))
+
+        val details = card(surface2)
+        details.orientation = LinearLayout.VERTICAL
+        details.addView(label("EXERCICIOS REALIZADOS", muted, 12f, true))
+        details.addView(label(exerciseLines, white, 14f, false))
+        if (runLines.isNotEmpty()) {
+            details.addView(label("CORRIDA HOJE", muted, 12f, true))
+            details.addView(label(runLines.joinToString("\n"), white, 14f, false))
+        }
+        content.addView(details)
+
+        val scroll = ScrollView(this)
+        scroll.addView(content)
+        val dialog = AlertDialog.Builder(this)
+            .setView(scroll)
             .setNeutralButton("Copiar") { _, _ -> copyTextToClipboard("Resumo Mo2 LOG", message, "Resumo copiado.") }
             .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
-            .show()
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Mo2Colors.Running)
+            content.startAnimation(smoothPopupAnimation())
+        }
+        dialog.show()
     }
 
     private fun todayRunSummaryLines(): List<String> {
@@ -3170,7 +3379,11 @@ class MainActivity : Activity() {
             .putString("running_active_speed", firstStage.speedKmh.toString())
             .putLong("running_active_last_tick_at", countdownEndAt)
             .putLong("running_countdown_end_at", countdownEndAt)
+            .putLong("running_active_started_at_ms", countdownEndAt)
+            .putLong("running_active_paused_total_ms", 0L)
+            .putBoolean("running_active_paused", false)
             .putString("running_session_started_at", timestamp())
+            .remove("running_active_pause_started_at")
             .remove("running_30_announced_key")
             .apply()
         Toast.makeText(this, "Timer de 5 segundos iniciado.", Toast.LENGTH_SHORT).show()
@@ -3184,6 +3397,7 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val countdownEndAt = prefs.getLong("running_countdown_end_at", 0L)
         if (countdownEndAt > now) return false
+        if (isActiveRunPaused()) return false
 
         var stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
         var distanceDone = prefs.getString("running_active_distance_done", "0.0")?.toDoubleOrNull() ?: 0.0
@@ -3207,8 +3421,16 @@ class MainActivity : Activity() {
         }
 
         if (stageIndex >= workout.stages.size) {
-            saveRunCompletion(workout, false, false)
+            val log = saveRunCompletion(
+                workout,
+                manual = false,
+                rerender = false,
+                distanceOverride = totalRunDistance(workout),
+                elapsedSecondsOverride = activeRunElapsedSeconds(),
+                completedStagesOverride = workout.stages.size,
+            )
             clearActiveRun()
+            if (log != null) pendingRunSummary = log
             return true
         }
 
@@ -3239,9 +3461,16 @@ class MainActivity : Activity() {
         }
         val currentStage = prefs.getInt("running_active_stage", 0)
         if (currentStage >= workout.stages.lastIndex) {
-            saveRunCompletion(workout, false, false)
+            val log = saveRunCompletion(
+                workout,
+                manual = false,
+                rerender = false,
+                distanceOverride = totalRunDistance(workout),
+                elapsedSecondsOverride = activeRunElapsedSeconds(),
+                completedStagesOverride = workout.stages.size,
+            )
             clearActiveRun()
-            Toast.makeText(this, "Treino salvo.", Toast.LENGTH_SHORT).show()
+            if (log != null) pendingRunSummary = log
             render()
             return
         }
@@ -3257,14 +3486,109 @@ class MainActivity : Activity() {
         refreshRunningSessionViews()
     }
 
-    private fun saveRunCompletion(workout: RunningWorkout, manual: Boolean, rerender: Boolean = true) {
-        if (isRunWorkoutCompleted(workout)) {
-            Toast.makeText(this, "Este treino ja esta concluido nesta semana.", Toast.LENGTH_SHORT).show()
+    private fun toggleActiveRunPause() {
+        val workout = activeRunningWorkout() ?: return
+        if (activeRunCountdownSeconds() > 0L) return
+        val now = System.currentTimeMillis()
+        if (isActiveRunPaused()) {
+            val pausedAt = prefs.getLong("running_active_pause_started_at", now)
+            val pausedTotal = prefs.getLong("running_active_paused_total_ms", 0L) + max(0L, now - pausedAt)
+            prefs.edit()
+                .putBoolean("running_active_paused", false)
+                .putLong("running_active_paused_total_ms", pausedTotal)
+                .putLong("running_active_last_tick_at", now)
+                .remove("running_active_pause_started_at")
+                .apply()
+            speakRunCue("Treino retomado.")
+        } else {
+            if (updateActiveRunProgress()) {
+                render()
+                return
+            }
+            prefs.edit()
+                .putBoolean("running_active_paused", true)
+                .putLong("running_active_pause_started_at", now)
+                .putLong("running_active_last_tick_at", now)
+                .apply()
+            speakRunCue("Treino pausado.")
+        }
+        refreshRunningSessionViews()
+        runningSessionHandler.removeCallbacks(runningSessionRunnable)
+        runningSessionHandler.post(runningSessionRunnable)
+    }
+
+    private fun finishActiveRunningWorkout(workout: RunningWorkout) {
+        if (updateActiveRunProgress()) {
+            render()
             return
         }
-        val distance = totalRunDistance(workout)
-        val seconds = estimatedWorkoutSeconds(workout)
+        val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        val log = saveRunCompletion(
+            workout,
+            manual = false,
+            rerender = false,
+            distanceOverride = activeRunCompletedDistance(workout),
+            elapsedSecondsOverride = activeRunElapsedSeconds(),
+            completedStagesOverride = stageIndex,
+        )
+        clearActiveRun()
+        if (log != null) pendingRunSummary = log
+        render()
+    }
+
+    private fun showCancelRunningWorkoutDialog() {
+        val workout = activeRunningWorkout() ?: return
+        AlertDialog.Builder(this)
+            .setTitle("Cancelar corrida?")
+            .setMessage(workout.title + " sera encerrado sem criar um registro no historico.")
+            .setNegativeButton("Continuar treino", null)
+            .setPositiveButton("Cancelar") { _, _ ->
+                clearActiveRun()
+                Toast.makeText(this, "Corrida cancelada.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+            .show()
+    }
+
+    private fun isActiveRunPaused(): Boolean = prefs.getBoolean("running_active_paused", false)
+
+    private fun activeRunElapsedSeconds(): Long {
+        val now = System.currentTimeMillis()
+        val startedAt = prefs.getLong("running_active_started_at_ms", 0L)
+        if (startedAt <= 0L) return 0L
+        val effectiveNow = if (isActiveRunPaused()) {
+            prefs.getLong("running_active_pause_started_at", now)
+        } else {
+            now
+        }
+        val pausedTotal = prefs.getLong("running_active_paused_total_ms", 0L)
+        return max(0L, (effectiveNow - startedAt - pausedTotal) / 1000L)
+    }
+
+    private fun activeRunCompletedDistance(workout: RunningWorkout): Double {
+        val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        val completedDistance = workout.stages.take(stageIndex).sumOf { it.distanceKm }
+        val currentDistance = prefs.getString("running_active_distance_done", "0.0")?.toDoubleOrNull() ?: 0.0
+        return roundKm(completedDistance + currentDistance.coerceIn(0.0, workout.stages[stageIndex].distanceKm))
+    }
+
+    private fun saveRunCompletion(
+        workout: RunningWorkout,
+        manual: Boolean,
+        rerender: Boolean = true,
+        distanceOverride: Double? = null,
+        elapsedSecondsOverride: Long? = null,
+        completedStagesOverride: Int? = null,
+    ): JSONObject? {
+        if (isRunWorkoutCompleted(workout)) {
+            Toast.makeText(this, "Este treino ja esta concluido nesta semana.", Toast.LENGTH_SHORT).show()
+            return null
+        }
+        val distance = (distanceOverride ?: totalRunDistance(workout)).coerceAtLeast(0.0)
+        val seconds = (elapsedSecondsOverride ?: estimatedWorkoutSeconds(workout)).coerceAtLeast(1L)
+        val completedStages = (completedStagesOverride ?: workout.stages.size).coerceIn(0, workout.stages.size)
         val avgSpeed = if (seconds <= 0L) 0.0 else distance / (seconds.toDouble() / 3600.0)
+        val paceSeconds = if (distance <= 0.0) 0L else (seconds.toDouble() / distance).roundToInt().toLong()
         val log = JSONObject()
             .put("id", UUID.randomUUID().toString())
             .put("day", dayKey())
@@ -3276,6 +3600,10 @@ class MainActivity : Activity() {
             .put("distance", roundKm(distance))
             .put("speed", roundSpeed(avgSpeed))
             .put("duration", formatDuration(seconds))
+            .put("duration_seconds", seconds)
+            .put("pace_seconds_per_km", paceSeconds)
+            .put("completed_stages", completedStages)
+            .put("total_stages", workout.stages.size)
             .put("manual", manual)
             .put("notes", if (manual) "Marcado como concluido sem iniciar pelo app." else "Treino guiado pelo app.")
         val logs = runLogs()
@@ -3283,6 +3611,112 @@ class MainActivity : Activity() {
         prefs.edit().putString("run_logs", logs.toString()).apply()
         Toast.makeText(this, if (manual) "Treino marcado como concluido." else "Corrida salva localmente.", Toast.LENGTH_SHORT).show()
         if (rerender) render()
+        return log
+    }
+
+    private fun showRunningWorkoutSummary(log: JSONObject) {
+        val workout = runningWorkoutById(log.optString("run_workout_id"))
+        val distance = log.optDouble("distance", 0.0)
+        val seconds = log.optLong("duration_seconds", workout?.let { estimatedWorkoutSeconds(it) } ?: 0L)
+        val paceSeconds = log.optLong(
+            "pace_seconds_per_km",
+            if (distance <= 0.0) 0L else (seconds.toDouble() / distance).roundToInt().toLong(),
+        )
+        val completedStages = log.optInt("completed_stages", workout?.stages?.size ?: 0)
+        val totalStages = log.optInt("total_stages", workout?.stages?.size ?: completedStages)
+
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(12), dp(14), dp(12), dp(8))
+        content.addView(label("RESUMO POS-TREINO", green, 13f, true))
+        content.addView(label(log.optString("workout_title", "Corrida concluida"), white, 24f, true))
+        content.addView(label("Treino salvo localmente. Complete sua percepcao de esforco para melhorar os proximos ajustes.", muted, 14f, false))
+
+        content.addView(summaryMetricRow(
+            Triple("Duracao", formatDuration(seconds), "tempo ativo"),
+            Triple("Distancia", formatKm(distance), "percorrida"),
+            Mo2Colors.Running,
+        ))
+        content.addView(summaryMetricRow(
+            Triple("Pace", formatPaceSeconds(paceSeconds), "medio"),
+            Triple("Etapas", completedStages.toString() + "/" + totalStages, "concluidas"),
+            green,
+        ))
+
+        val effort = input("RPE de 1 a 10", log.optInt("rpe", -1).takeIf { it in 1..10 }?.toString().orEmpty())
+        effort.inputType = InputType.TYPE_CLASS_NUMBER
+        content.addView(label("PERCEPCAO DE ESFORCO", muted, 12f, true))
+        content.addView(effort)
+        val notes = textArea("Como foi a corrida?", log.optString("feedback_notes", ""))
+        content.addView(label("NOTAS", muted, 12f, true))
+        content.addView(notes)
+
+        val scroll = ScrollView(this)
+        scroll.addView(content)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(scroll)
+            .setNegativeButton("Fechar", null)
+            .setNeutralButton("Historico", null)
+            .setPositiveButton("Salvar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Mo2Colors.Running)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+            content.startAnimation(smoothPopupAnimation())
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (updateRunFeedback(log.optString("id"), effort.textValue(), notes.textValue())) {
+                    dialog.dismiss()
+                    render()
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                if (updateRunFeedback(log.optString("id"), effort.textValue(), notes.textValue())) {
+                    dialog.dismiss()
+                    switchTab("history")
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun summaryMetricRow(
+        first: Triple<String, String, String>,
+        second: Triple<String, String, String>,
+        accent: Int,
+    ): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val firstMetric = Mo2Components.metricCard(this, first.first, first.second, first.third, accent)
+        val secondMetric = Mo2Components.metricCard(this, second.first, second.second, second.third, accent)
+        row.addView(firstMetric, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val secondParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        secondParams.setMargins(dp(8), 0, 0, 0)
+        row.addView(secondMetric, secondParams)
+        return row
+    }
+
+    private fun updateRunFeedback(logId: String, rpeRaw: String, notes: String): Boolean {
+        val rpe = rpeRaw.trim().toIntOrNull()
+        if (rpeRaw.isNotBlank() && (rpe == null || rpe !in 1..10)) {
+            Toast.makeText(this, "Informe um RPE entre 1 e 10.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val logs = runLogs()
+        for (index in 0 until logs.length()) {
+            val item = logs.getJSONObject(index)
+            if (item.optString("id") != logId) continue
+            if (rpe != null) item.put("rpe", rpe) else item.remove("rpe")
+            item.put("feedback_notes", notes.trim())
+            logs.put(index, item)
+            prefs.edit().putString("run_logs", logs.toString()).apply()
+            Toast.makeText(this, "Resumo atualizado.", Toast.LENGTH_SHORT).show()
+            return true
+        }
+        Toast.makeText(this, "Corrida nao encontrada no historico.", Toast.LENGTH_SHORT).show()
+        return false
     }
 
     private fun clearActiveRun() {
@@ -3293,6 +3727,10 @@ class MainActivity : Activity() {
             .remove("running_active_speed")
             .remove("running_active_last_tick_at")
             .remove("running_countdown_end_at")
+            .remove("running_active_started_at_ms")
+            .remove("running_active_paused")
+            .remove("running_active_pause_started_at")
+            .remove("running_active_paused_total_ms")
             .remove("running_session_started_at")
             .remove("running_30_announced_key")
             .apply()
@@ -4052,6 +4490,18 @@ class MainActivity : Activity() {
     private fun formatKm(value: Double): String = String.format(Locale("pt", "BR"), "%.2f km", value)
 
     private fun formatSpeed(value: Double): String = String.format(Locale("pt", "BR"), "%.1f km/h", value)
+
+    private fun formatPaceForSpeed(speed: Double): String {
+        if (speed <= 0.0) return "- /km"
+        return formatPaceSeconds((3600.0 / speed).roundToInt().toLong())
+    }
+
+    private fun formatPaceSeconds(secondsPerKm: Long): String {
+        if (secondsPerKm <= 0L) return "- /km"
+        val minutes = secondsPerKm / 60L
+        val seconds = secondsPerKm % 60L
+        return minutes.toString() + ":" + seconds.toString().padStart(2, '0') + " /km"
+    }
 
     private fun roundKm(value: Double): Double = (value * 100.0).roundToInt().toDouble() / 100.0
 
