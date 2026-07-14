@@ -128,6 +128,8 @@ data class RunningAdjustment(
 data class HistoryActivity(
     val type: String,
     val item: JSONObject,
+    val strengthSets: List<JSONObject> = emptyList(),
+    val completion: JSONObject? = null,
 )
 
 class RemoteExerciseMediaView(context: Context, private val links: List<String>) : LinearLayout(context) {
@@ -693,7 +695,9 @@ class MainActivity : Activity() {
         val mission = todayMission()
         val plan = currentPlan()
         val run = todayRunningWorkout()
-        val strengthText = if (isStrengthDayToday()) {
+        val strengthText = if (hasCompletedStrengthSession(dayKey())) {
+            plan.title + " concluido. Exercicios nao realizados foram registrados como pulados."
+        } else if (isStrengthDayToday()) {
             plan.title + " - " + plan.focus + " | " + plan.exercises.size + " exercicios"
         } else {
             "Sem musculacao principal hoje. Preserve energia para a corrida ou recuperacao."
@@ -781,6 +785,13 @@ class MainActivity : Activity() {
     }
 
     private fun isStrengthWeekDayCompleted(dayIndex: Int): Boolean {
+        val sessions = strengthSessionLogs()
+        for (i in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(i)
+            if (item.optString("week") == weekKey() &&
+                item.optString("status", "completed") == "completed" &&
+                dayIndexFor(item.optString("day")) == dayIndex) return true
+        }
         val logs = allLogs()
         for (i in 0 until logs.length()) {
             val item = logs.getJSONObject(i)
@@ -829,7 +840,7 @@ class MainActivity : Activity() {
     }
 
     private fun consistencyChecklistPanel(): View {
-        val strengthDone = todayLogs().length() > 0
+        val strengthDone = todayLogs().length() > 0 || hasCompletedStrengthSession(dayKey())
         val runDone = todayRunCount() > 0
         val backupDone = prefs.getString("last_backup_day", "") == dayKey()
         val checkInDone = readinessStatus().isNotBlank()
@@ -908,13 +919,15 @@ class MainActivity : Activity() {
     private fun readinessLine(stats: JSONObject): String {
         val status = readinessStatus()
         val avgRpe = stats.optString("avg_rpe").replace(',', '.').toDoubleOrNull()
+        val strengthFinished = hasCompletedStrengthSession(dayKey())
         return when {
             status == "red" -> "Prontidao: vermelha. Reduza carga, corte extras e priorize recuperar."
             status == "yellow" -> "Prontidao: amarela. Mantenha o plano, mas sem buscar recorde hoje."
             status == "green" -> "Prontidao: verde. Pode seguir o plano com progressao controlada."
             restTimerRemainingSeconds() > 0L -> "Prontidao: em intervalo. Respire e volte quando o descanso terminar."
             avgRpe != null && avgRpe >= 9.0 -> "Prontidao: cautela. RPE recente alto, mantenha tecnica e evite extras."
-            todayLogs().length() > 0 && todayRunCount() > 0 -> "Prontidao: dia completo registrado. Agora a prioridade e recuperar."
+            strengthFinished && todayRunCount() > 0 -> "Prontidao: dia completo registrado. Agora a prioridade e recuperar."
+            strengthFinished -> "Prontidao: musculacao encerrada. O app preservou feitos, parciais e pulados."
             todayLogs().length() > 0 -> "Prontidao: musculacao ja entrou. Corrida leve so se combinar com o dia."
             todayRunCount() > 0 -> "Prontidao: corrida registrada. Musculacao so se estiver no plano do dia."
             else -> "Prontidao: comece pelo bloco principal do dia e registre tudo no app."
@@ -1013,6 +1026,13 @@ class MainActivity : Activity() {
         root.addView(heroCard("Treino de musculacao", plan.title + " - " + plan.focus, "Registre series, acompanhe descanso e troque exercicios quando a academia pedir."))
         root.addView(sectionTitle("Planos"))
         root.addView(planSelector())
+        val completion = currentStrengthSessionCompletion()
+        if (completion != null) {
+            root.addView(completedStrengthWorkoutPanel(completion))
+            root.addView(sectionTitle("Exercicios do treino"))
+            root.addView(exerciseList())
+            return
+        }
         root.addView(workoutProgressPanel())
         root.addView(gymModePanel())
         root.addView(registerPanel())
@@ -1020,6 +1040,39 @@ class MainActivity : Activity() {
         root.addView(smartStrengthCoachPanel())
         root.addView(sectionTitle("Exercicios do treino"))
         root.addView(exerciseList())
+    }
+
+    private fun completedStrengthWorkoutPanel(completion: JSONObject): View {
+        val completed = jsonStringList(completion.optJSONArray("completed_exercises"))
+        val partial = jsonStringList(completion.optJSONArray("partial_exercises"))
+        val skipped = jsonStringList(completion.optJSONArray("skipped_exercises"))
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("TREINO CONCLUIDO", green, 13f, true))
+        box.addView(label(completion.optString("plan_title", currentPlan().title), white, 26f, true))
+        box.addView(label(
+            completion.optInt("completed_sets").toString() + " series registradas | " +
+                completed.size + " completos | " + partial.size + " parciais | " + skipped.size + " pulados",
+            muted,
+            14f,
+            false,
+        ))
+        if (partial.isNotEmpty()) box.addView(label("Parciais: " + partial.joinToString(", "), amber, 14f, true))
+        if (skipped.isNotEmpty()) box.addView(label("Pulados: " + skipped.joinToString(", "), muted, 14f, false))
+        if (partial.isEmpty() && skipped.isEmpty()) {
+            box.addView(label("Todos os exercicios planejados foram concluidos.", green, 14f, true))
+        }
+
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val history = actionButton("Ver historico", green, bg)
+        history.setOnClickListener { switchTab("history") }
+        actions.addView(history, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val reopen = actionButton("Reabrir treino", surface2, white)
+        reopen.setOnClickListener { reopenCurrentStrengthWorkout() }
+        actions.addView(reopen, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(actions))
+        return box
     }
 
     private fun workoutProgressPanel(): View {
@@ -1877,12 +1930,14 @@ class MainActivity : Activity() {
 
     private fun renderHistory(root: LinearLayout) {
         val strengthLogs = filteredStrengthHistory()
+        val strengthSessions = filteredStrengthSessionHistory()
+        val strengthActivities = strengthHistoryActivities(strengthLogs, strengthSessions)
         val runs = filteredRunHistory()
         root.addView(historyTypeSelectorPanel())
         root.addView(historyAdvancedFiltersButton())
         if (prefs.getBoolean("history_filters_open", false)) root.addView(historyFilterPanel())
-        root.addView(historyMetricsPanel(strengthLogs, runs))
-        root.addView(historyActivityPanel(strengthLogs, runs))
+        root.addView(historyMetricsPanel(strengthLogs, strengthActivities, runs))
+        root.addView(historyActivityPanel(strengthActivities, runs))
         if (strengthLogs.isNotEmpty()) root.addView(exerciseEvolutionPanel(strengthLogs))
 
         val export = actionButton("Copiar exportacao completa", green, bg)
@@ -1962,16 +2017,24 @@ class MainActivity : Activity() {
         return box
     }
 
-    private fun historyMetricsPanel(strengthLogs: List<JSONObject>, runs: List<JSONObject>): View {
+    private fun historyMetricsPanel(
+        strengthLogs: List<JSONObject>,
+        strengthActivities: List<HistoryActivity>,
+        runs: List<JSONObject>,
+    ): View {
         val volume = strengthLogs.sumOf { it.optDouble("load") * it.optInt("reps") }.roundToInt()
         val runDistance = runs.sumOf { it.optDouble("distance") }
         val bestLoad = strengthLogs.maxOfOrNull { it.optDouble("load") } ?: 0.0
-        val activities = strengthLogs.size + runs.size
+        val activities = strengthActivities.size + runs.size
+        val activeDays = (strengthActivities.map { it.item.optString("day") } + runs.map { it.optString("day") })
+            .filter { it.isNotBlank() }
+            .toSet()
+            .size
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESUMO DO FILTRO", green, 13f, true))
         box.addView(label(activities.toString() + " atividades", white, 26f, true))
-        box.addView(label(filteredHistoryDays(strengthLogs, runs).toString() + " dias com registro", muted, 14f, false))
+        box.addView(label(activeDays.toString() + " dias com registro", muted, 14f, false))
 
         val metrics = LinearLayout(this)
         metrics.orientation = LinearLayout.HORIZONTAL
@@ -2014,11 +2077,63 @@ class MainActivity : Activity() {
         return box
     }
 
-    private fun historyActivityPanel(strengthLogs: List<JSONObject>, runs: List<JSONObject>): View {
-        val activities = (
-            strengthLogs.map { HistoryActivity("strength", it) } +
-                runs.map { HistoryActivity("run", it) }
-            ).sortedByDescending { activity -> activity.item.optString("day") + activity.item.optString("time") }
+    private fun strengthHistoryActivities(
+        strengthLogs: List<JSONObject>,
+        filteredSessions: List<JSONObject>,
+    ): List<HistoryActivity> {
+        val setsByKey = linkedMapOf<String, MutableList<JSONObject>>()
+        strengthLogs.forEach { item ->
+            val key = strengthHistoryKey(item.optString("day"), item.optString("plan", "Treino"))
+            setsByKey.getOrPut(key) { mutableListOf() }.add(item)
+        }
+
+        val allSessionsByKey = linkedMapOf<String, JSONObject>()
+        val allSessions = strengthSessionLogs()
+        for (index in 0 until allSessions.length()) {
+            val session = allSessions.getJSONObject(index)
+            val key = strengthHistoryKey(session.optString("day"), session.optString("plan_title", "Treino"))
+            allSessionsByKey[key] = session
+        }
+
+        val eligibleKeys = linkedSetOf<String>()
+        eligibleKeys.addAll(setsByKey.keys)
+        filteredSessions.forEach { session ->
+            eligibleKeys.add(strengthHistoryKey(session.optString("day"), session.optString("plan_title", "Treino")))
+        }
+
+        val completeSetsByKey = linkedMapOf<String, MutableList<JSONObject>>()
+        val allSetLogs = allLogs()
+        for (index in 0 until allSetLogs.length()) {
+            val item = allSetLogs.getJSONObject(index)
+            val key = strengthHistoryKey(item.optString("day"), item.optString("plan", "Treino"))
+            if (eligibleKeys.contains(key)) completeSetsByKey.getOrPut(key) { mutableListOf() }.add(item)
+        }
+
+        return eligibleKeys.map { key ->
+            val sets = completeSetsByKey[key].orEmpty().sortedBy { it.optString("time") }
+            val completion = allSessionsByKey[key]
+            val firstSet = sets.firstOrNull()
+            val latestSet = sets.maxByOrNull { it.optString("time") }
+            val day = completion?.optString("day")?.takeIf { it.isNotBlank() } ?: firstSet?.optString("day").orEmpty()
+            val plan = completion?.optString("plan_title")?.takeIf { it.isNotBlank() }
+                ?: firstSet?.optString("plan", "Treino")
+                ?: "Treino"
+            val time = completion?.optString("time")?.takeIf { it.isNotBlank() }
+                ?: latestSet?.optString("time").orEmpty()
+            val item = JSONObject()
+                .put("id", "strength:" + strengthHistoryKey(day, plan))
+                .put("day", day)
+                .put("time", time)
+                .put("plan", plan)
+            HistoryActivity("strength", item, sets, completion)
+        }
+    }
+
+    private fun strengthHistoryKey(day: String, plan: String): String = day + "::" + plan
+
+    private fun historyActivityPanel(strengthActivities: List<HistoryActivity>, runs: List<JSONObject>): View {
+        val activities = (strengthActivities + runs.map { HistoryActivity("run", it) })
+            .sortedByDescending { activity -> activity.item.optString("day") + activity.item.optString("time") }
 
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
@@ -2046,8 +2161,98 @@ class MainActivity : Activity() {
     }
 
     private fun historyActivityCard(activity: HistoryActivity): View {
+        return if (activity.type == "run") runHistoryActivityCard(activity) else strengthHistoryActivityCard(activity)
+    }
+
+    private fun strengthHistoryActivityCard(activity: HistoryActivity): View {
         val item = activity.item
-        val isRun = activity.type == "run"
+        val sets = activity.strengthSets
+        val completion = activity.completion
+        val day = item.optString("day")
+        val plan = item.optString("plan", "Treino")
+        val expansionKey = strengthHistoryKey(day, plan)
+        val expanded = prefs.getString("history_expanded_strength", "") == expansionKey
+        val exercises = sets.map { it.optString("exercise", "Exercicio") }.distinct()
+        val volume = sets.sumOf { it.optDouble("load") * it.optInt("reps") }.roundToInt()
+        val partial = jsonStringList(completion?.optJSONArray("partial_exercises"))
+        val skipped = jsonStringList(completion?.optJSONArray("skipped_exercises"))
+
+        val box = card(surface2)
+        box.orientation = LinearLayout.VERTICAL
+        val top = LinearLayout(this)
+        top.orientation = LinearLayout.HORIZONTAL
+        top.gravity = Gravity.CENTER_VERTICAL
+        val titleBox = LinearLayout(this)
+        titleBox.orientation = LinearLayout.VERTICAL
+        titleBox.addView(label(plan, white, 19f, true))
+        titleBox.addView(label(day + " | " + item.optString("time"), muted, 12f, false))
+        top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        top.addView(historyTypeBadge(if (completion != null) "CONCLUIDO" else "MUSCULACAO", green))
+        box.addView(top)
+        box.addView(label(
+            sets.size.toString() + " series | " + exercises.size + " exercicios | volume " + volume + " kg",
+            green,
+            15f,
+            true,
+        ))
+        if (partial.isNotEmpty()) box.addView(label("Parciais: " + partial.joinToString(", "), amber, 13f, true))
+        if (skipped.isNotEmpty()) box.addView(label("Pulados: " + skipped.joinToString(", "), muted, 13f, false))
+
+        if (expanded) {
+            if (sets.isEmpty()) {
+                box.addView(label("Treino concluido sem series registradas.", muted, 14f, false))
+            } else {
+                sets.groupBy { it.optString("exercise", "Exercicio") }.forEach { entry ->
+                    box.addView(label(entry.key.uppercase(Locale("pt", "BR")), white, 14f, true))
+                    entry.value.forEachIndexed { index, set -> box.addView(strengthHistorySetRow(set, index + 1)) }
+                }
+            }
+            val deleteWorkout = actionButton("Excluir treino do historico", surface, danger)
+            deleteWorkout.setOnClickListener { showDeleteStrengthHistorySessionDialog(activity) }
+            box.addView(buttonParams(deleteWorkout))
+        }
+        val expand = actionButton(if (expanded) "Ocultar series" else "Ver todas as series", surface, if (expanded) muted else white)
+        expand.setOnClickListener { toggleHistoryExpansion("history_expanded_strength", expansionKey, expanded) }
+        box.addView(buttonParams(expand))
+        box.setOnClickListener { toggleHistoryExpansion("history_expanded_strength", expansionKey, expanded) }
+        return box
+    }
+
+    private fun strengthHistorySetRow(item: JSONObject, number: Int): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.VERTICAL
+        row.setPadding(0, dp(10), 0, dp(6))
+        val divider = View(this)
+        divider.setBackgroundColor(border)
+        row.addView(divider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
+        val rpe = item.optString("rpe").ifBlank { "-" }
+        row.addView(label(
+            "Serie " + number + ": " + item.optInt("reps") + " reps x " + formatLoad(item.optDouble("load")) + " | RPE " + rpe,
+            white,
+            14f,
+            true,
+        ))
+        val notes = item.optString("notes")
+        if (notes.isNotBlank()) row.addView(label(notes, muted, 12f, false))
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val edit = actionButton("Editar serie", surface, white)
+        edit.setOnClickListener { showEditStrengthHistoryDialog(item) }
+        actions.addView(edit, LinearLayout.LayoutParams(0, dp(44), 1f))
+        val delete = actionButton("Excluir", surface, danger)
+        delete.setOnClickListener { showDeleteHistoryActivityDialog(HistoryActivity("strength", item)) }
+        actions.addView(delete, LinearLayout.LayoutParams(0, dp(44), 1f))
+        row.addView(spacedRow(actions))
+        return row
+    }
+
+    private fun runHistoryActivityCard(activity: HistoryActivity): View {
+        val item = activity.item
+        val stages = runStagesForLog(item)
+        val expansionKey = item.optString("id").ifBlank {
+            item.optString("day") + "::" + item.optString("time") + "::" + item.optString("workout_title")
+        }
+        val expanded = prefs.getString("history_expanded_run", "") == expansionKey
         val box = card(surface2)
         box.orientation = LinearLayout.VERTICAL
 
@@ -2056,57 +2261,84 @@ class MainActivity : Activity() {
         top.gravity = Gravity.CENTER_VERTICAL
         val titleBox = LinearLayout(this)
         titleBox.orientation = LinearLayout.VERTICAL
-        titleBox.addView(label(
-            if (isRun) item.optString("workout_title", "Corrida") else item.optString("exercise", "Exercicio"),
-            white,
-            18f,
-            true,
-        ))
+        titleBox.addView(label(item.optString("workout_title", "Corrida"), white, 19f, true))
         titleBox.addView(label(item.optString("day") + " | " + item.optString("time"), muted, 12f, false))
         top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-
-        val type = label(if (isRun) "CORRIDA" else "MUSCULACAO", if (isRun) Mo2Colors.Running else green, 11f, true)
-        type.gravity = Gravity.CENTER
-        type.setPadding(dp(10), dp(5), dp(10), dp(5))
-        type.background = rounded(surface, dp(Mo2Radius.Pill), border)
-        top.addView(type)
+        top.addView(historyTypeBadge("CORRIDA", Mo2Colors.Running))
         box.addView(top)
 
-        if (isRun) {
-            val paceSeconds = item.optLong("pace_seconds_per_km", 0L)
-            val pace = if (paceSeconds > 0L) formatPaceSeconds(paceSeconds) else formatPaceForSpeed(item.optDouble("speed"))
-            box.addView(label(
-                formatKm(item.optDouble("distance")) + " | " + item.optString("duration", "-") + " | " + pace,
-                Mo2Colors.Running,
-                15f,
-                true,
-            ))
-        } else {
-            val rpe = item.optString("rpe").ifBlank { "-" }
-            box.addView(label(
-                item.optInt("reps").toString() + " reps | " + formatLoad(item.optDouble("load")) + " | RPE " + rpe,
-                green,
-                15f,
-                true,
-            ))
-            box.addView(label(item.optString("plan"), muted, 13f, false))
+        val paceSeconds = item.optLong("pace_seconds_per_km", 0L)
+        val pace = if (paceSeconds > 0L) formatPaceSeconds(paceSeconds) else formatPaceForSpeed(item.optDouble("speed"))
+        box.addView(label(
+            formatKm(item.optDouble("distance")) + " | " + item.optString("duration", "-") + " | " + pace,
+            Mo2Colors.Running,
+            15f,
+            true,
+        ))
+        if (stages.length() > 0) {
+            val completedStages = item.optInt("completed_stages", stages.length()).coerceIn(0, stages.length())
+            box.addView(label(completedStages.toString() + "/" + stages.length() + " etapas concluidas", muted, 13f, false))
         }
-
-        val notes = if (isRun) item.optString("feedback_notes").ifBlank { item.optString("notes") } else item.optString("notes")
+        val notes = item.optString("feedback_notes").ifBlank { item.optString("notes") }
         if (notes.isNotBlank()) box.addView(label(notes, muted, 13f, false))
 
+        if (expanded) {
+            for (index in 0 until stages.length()) {
+                box.addView(runHistoryStageRow(item, stages.getJSONObject(index), index))
+            }
+        }
+
+        if (stages.length() > 0) {
+            val expand = actionButton(if (expanded) "Ocultar etapas" else "Ver e editar etapas", surface, if (expanded) muted else Mo2Colors.Running)
+            expand.setOnClickListener { toggleHistoryExpansion("history_expanded_run", expansionKey, expanded) }
+            box.addView(buttonParams(expand))
+        }
         val actions = LinearLayout(this)
         actions.orientation = LinearLayout.HORIZONTAL
-        val edit = actionButton("Editar", surface, white)
-        edit.setOnClickListener {
-            if (isRun) showEditRunHistoryDialog(item) else showEditStrengthHistoryDialog(item)
-        }
+        val edit = actionButton("Editar corrida", surface, white)
+        edit.setOnClickListener { showEditRunHistoryDialog(item) }
         actions.addView(edit, LinearLayout.LayoutParams(0, dp(46), 1f))
         val delete = actionButton("Excluir", surface, danger)
         delete.setOnClickListener { showDeleteHistoryActivityDialog(activity) }
         actions.addView(delete, LinearLayout.LayoutParams(0, dp(46), 1f))
         box.addView(spacedRow(actions))
+        box.setOnClickListener {
+            if (stages.length() > 0) toggleHistoryExpansion("history_expanded_run", expansionKey, expanded)
+        }
         return box
+    }
+
+    private fun historyTypeBadge(text: String, color: Int): TextView {
+        val badge = label(text, color, 11f, true)
+        badge.gravity = Gravity.CENTER
+        badge.setPadding(dp(10), dp(5), dp(10), dp(5))
+        badge.background = rounded(surface, dp(Mo2Radius.Pill), border)
+        return badge
+    }
+
+    private fun runHistoryStageRow(run: JSONObject, stage: JSONObject, index: Int): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.VERTICAL
+        row.setPadding(0, dp(10), 0, dp(6))
+        val divider = View(this)
+        divider.setBackgroundColor(border)
+        row.addView(divider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
+        row.addView(label("ETAPA " + (index + 1) + " | " + stage.optString("title", "Etapa"), white, 14f, true))
+        row.addView(label(
+            formatKm(stage.optDouble("distance")) + " | " + formatSpeed(stage.optDouble("speed")),
+            Mo2Colors.Running,
+            14f,
+            true,
+        ))
+        val edit = actionButton("Editar velocidade", surface, Mo2Colors.Running)
+        edit.setOnClickListener { showEditRunStageDialog(run, index) }
+        row.addView(buttonParams(edit))
+        return row
+    }
+
+    private fun toggleHistoryExpansion(preference: String, key: String, expanded: Boolean) {
+        prefs.edit().putString(preference, if (expanded) "" else key).apply()
+        render()
     }
 
     private fun showEditStrengthHistoryDialog(item: JSONObject) {
@@ -2223,6 +2455,96 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun runStagesForLog(item: JSONObject): JSONArray {
+        val stored = item.optJSONArray("stages")
+        if (stored != null && stored.length() > 0) return JSONArray(stored.toString())
+        val workout = runningWorkoutById(item.optString("run_workout_id"))
+        if (workout != null) return runStageSnapshot(workout, false)
+        val distance = item.optDouble("distance")
+        val speed = item.optDouble("speed")
+        if (distance <= 0.0 && speed <= 0.0) return JSONArray()
+        return JSONArray().put(JSONObject()
+            .put("title", item.optString("workout_title", "Corrida"))
+            .put("distance", roundKm(distance))
+            .put("speed", roundSpeed(speed))
+            .put("note", "Registro sem etapas originais."))
+    }
+
+    private fun showEditRunStageDialog(item: JSONObject, stageIndex: Int) {
+        val stages = runStagesForLog(item)
+        if (stageIndex !in 0 until stages.length()) {
+            Toast.makeText(this, "Etapa nao encontrada.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val stage = stages.getJSONObject(stageIndex)
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(14), dp(14), dp(14), dp(8))
+        content.addView(label("EDITAR ETAPA " + (stageIndex + 1), Mo2Colors.Running, 13f, true))
+        content.addView(label(stage.optString("title", "Etapa"), white, 22f, true))
+        content.addView(label("Distancia registrada: " + formatKm(stage.optDouble("distance")), muted, 14f, false))
+        val speed = input("Velocidade km/h", stage.optString("speed"))
+        speed.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        content.addView(speed)
+        content.addView(label("A alteracao atualiza esta etapa sem apagar a distancia, duracao ou as demais etapas da corrida.", muted, 13f, false))
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Salvar", null)
+            .create()
+        dialog.setOnShowListener {
+            styleHistoryDialog(dialog, content)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (updateRunStageSpeed(item, stageIndex, speed.textValue())) {
+                    dialog.dismiss()
+                    render()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun updateRunStageSpeed(target: JSONObject, stageIndex: Int, speedRaw: String): Boolean {
+        val speed = speedRaw.replace(',', '.').toDoubleOrNull()
+        if (speed == null || speed !in 1.0..30.0) {
+            Toast.makeText(this, "Informe uma velocidade entre 1 e 30 km/h.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val logs = runLogs()
+        val index = findHistoryRecordIndex(logs, target, "run")
+        if (index < 0) {
+            Toast.makeText(this, "Corrida nao encontrada no historico.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val updated = logs.getJSONObject(index)
+        val stages = runStagesForLog(updated)
+        if (stageIndex !in 0 until stages.length()) {
+            Toast.makeText(this, "Etapa nao encontrada.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val stage = stages.getJSONObject(stageIndex)
+            .put("speed", roundSpeed(speed))
+            .put("edited_at", timestamp())
+        stages.put(stageIndex, stage)
+        updated.put("stages", stages).put("edited_at", timestamp())
+        if (stages.length() == 1) {
+            val distance = stage.optDouble("distance")
+            if (distance > 0.0) {
+                val durationSeconds = ((distance / speed) * 3600.0).roundToInt().toLong().coerceAtLeast(1L)
+                updated
+                    .put("speed", roundSpeed(speed))
+                    .put("duration", formatDuration(durationSeconds))
+                    .put("duration_seconds", durationSeconds)
+                    .put("pace_seconds_per_km", (durationSeconds.toDouble() / distance).roundToInt().toLong())
+            }
+        }
+        logs.put(index, updated)
+        prefs.edit().putString("run_logs", logs.toString()).apply()
+        Toast.makeText(this, "Velocidade da etapa atualizada.", Toast.LENGTH_SHORT).show()
+        return true
+    }
+
     private fun historyEditorRow(first: EditText, second: EditText): View {
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
@@ -2250,6 +2572,8 @@ class MainActivity : Activity() {
         rpeRaw: String,
         notesRaw: String,
     ): Boolean {
+        val originalDay = target.optString("day")
+        val originalPlan = target.optString("plan", "Treino")
         val day = dayRaw.trim()
         val reps = repsRaw.trim().toIntOrNull()
         val load = loadRaw.replace(',', '.').toDoubleOrNull()
@@ -2294,6 +2618,9 @@ class MainActivity : Activity() {
         if (rpe != null) updated.put("rpe", rpe) else updated.remove("rpe")
         logs.put(index, updated)
         prefs.edit().putString("set_logs", logs.toString()).apply()
+        refreshStrengthSessionSummary(originalDay, originalPlan)
+        val updatedPlan = updated.optString("plan", "Treino")
+        if (day != originalDay || updatedPlan != originalPlan) refreshStrengthSessionSummary(day, updatedPlan)
         Toast.makeText(this, "Serie atualizada.", Toast.LENGTH_SHORT).show()
         return true
     }
@@ -2365,6 +2692,45 @@ class MainActivity : Activity() {
         return true
     }
 
+    private fun showDeleteStrengthHistorySessionDialog(activity: HistoryActivity) {
+        val plan = activity.item.optString("plan", "Treino")
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Excluir treino completo?")
+            .setMessage(plan + " e todas as suas series deste dia serao removidos do historico local.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Excluir treino") { _, _ -> deleteStrengthHistorySession(activity) }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun deleteStrengthHistorySession(activity: HistoryActivity) {
+        val day = activity.item.optString("day")
+        val plan = activity.item.optString("plan", "Treino")
+        val setLogs = allLogs()
+        for (index in setLogs.length() - 1 downTo 0) {
+            val item = setLogs.getJSONObject(index)
+            if (item.optString("day") == day && item.optString("plan") == plan) setLogs.remove(index)
+        }
+        val sessions = strengthSessionLogs()
+        for (index in sessions.length() - 1 downTo 0) {
+            val item = sessions.getJSONObject(index)
+            if (item.optString("day") == day && item.optString("plan_title") == plan) sessions.remove(index)
+        }
+        val editor = prefs.edit()
+            .putString("set_logs", setLogs.toString())
+            .putString("strength_session_logs", sessions.toString())
+            .remove("history_expanded_strength")
+        if (day == dayKey() && prefs.getString("last_finished_day", "") == day) editor.remove("last_finished_day")
+        editor.apply()
+        Toast.makeText(this, "Treino excluido do historico.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
     private fun showDeleteHistoryActivityDialog(activity: HistoryActivity) {
         val item = activity.item
         val title = if (activity.type == "run") item.optString("workout_title", "Corrida") else item.optString("exercise", "Serie")
@@ -2384,6 +2750,8 @@ class MainActivity : Activity() {
 
     private fun deleteHistoryActivity(activity: HistoryActivity) {
         val isRun = activity.type == "run"
+        val strengthDay = activity.item.optString("day")
+        val strengthPlan = activity.item.optString("plan", "Treino")
         val logs = if (isRun) runLogs() else allLogs()
         val index = findHistoryRecordIndex(logs, activity.item, activity.type)
         if (index < 0) {
@@ -2392,6 +2760,7 @@ class MainActivity : Activity() {
         }
         logs.remove(index)
         prefs.edit().putString(if (isRun) "run_logs" else "set_logs", logs.toString()).apply()
+        if (!isRun) refreshStrengthSessionSummary(strengthDay, strengthPlan)
         Toast.makeText(this, "Atividade excluida.", Toast.LENGTH_SHORT).show()
         render()
     }
@@ -2457,6 +2826,25 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun filteredStrengthSessionHistory(): List<JSONObject> {
+        val type = prefs.getString("history_type", "all") ?: "all"
+        if (type == "run") return emptyList()
+        val sessions = strengthSessionLogs()
+        val items = mutableListOf<JSONObject>()
+        for (index in sessions.length() - 1 downTo 0) {
+            val item = sessions.getJSONObject(index)
+            val haystack = listOf(
+                item.optString("plan_title"),
+                item.optString("plan_focus"),
+                jsonStringList(item.optJSONArray("completed_exercises")).joinToString(" "),
+                jsonStringList(item.optJSONArray("partial_exercises")).joinToString(" "),
+                jsonStringList(item.optJSONArray("skipped_exercises")).joinToString(" "),
+            ).joinToString(" ")
+            if (matchesHistoryFilters(item.optString("day"), haystack)) items.add(item)
+        }
+        return items
+    }
+
     private fun filteredStrengthHistory(): List<JSONObject> {
         val type = prefs.getString("history_type", "all") ?: "all"
         if (type == "run") return emptyList()
@@ -2487,6 +2875,7 @@ class MainActivity : Activity() {
                 item.optString("feedback_notes"),
                 item.optString("duration"),
                 item.optString("rpe"),
+                item.optJSONArray("stages")?.toString().orEmpty(),
             ).joinToString(" ")
             if (matchesHistoryFilters(item.optString("day"), haystack)) items.add(item)
         }
@@ -3063,7 +3452,7 @@ class MainActivity : Activity() {
             .setMessage("Todas as series e corridas salvas neste celular serao removidas. Plano, metas e favoritos serao mantidos.")
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Apagar") { _, _ ->
-                prefs.edit().remove("set_logs").remove("run_logs").apply()
+                prefs.edit().remove("set_logs").remove("run_logs").remove("strength_session_logs").apply()
                 Toast.makeText(this, "Historico local apagado.", Toast.LENGTH_SHORT).show()
                 render()
             }
@@ -3146,10 +3535,7 @@ class MainActivity : Activity() {
         box.addView(buttonParams(swap))
 
         val finish = actionButton("Concluir treino", green, bg)
-        finish.setOnClickListener {
-            prefs.edit().putString("last_finished_day", dayKey()).apply()
-            showWorkoutSummaryPopup()
-        }
+        finish.setOnClickListener { finishStrengthWorkout() }
         box.addView(buttonParams(finish))
         return box
     }
@@ -3211,7 +3597,11 @@ class MainActivity : Activity() {
     }
 
     private fun plannedSetKey(): String {
-        return "planned_sets_" + dayKey() + "_" + currentPlan().id + "_" + selectedExerciseIndex
+        return plannedSetKey(dayKey(), currentPlan().id, selectedExerciseIndex)
+    }
+
+    private fun plannedSetKey(day: String, planId: String, exerciseIndex: Int): String {
+        return "planned_sets_" + day + "_" + planId + "_" + exerciseIndex
     }
 
     private fun plannedSetsForCurrentExercise(): JSONArray {
@@ -3296,6 +3686,172 @@ class MainActivity : Activity() {
         return count
     }
 
+    private fun finishStrengthWorkout() {
+        hideKeyboard()
+        val completion = saveStrengthSessionCompletion()
+        prefs.edit()
+            .putString("last_finished_day", dayKey())
+            .remove("rest_timer_end_at")
+            .remove("rest_timer_duration_secs")
+            .remove("rest_timer_exercise")
+            .remove("rest_timer_notified")
+            .apply()
+        render()
+        showWorkoutSummaryPopup(completion)
+    }
+
+    private fun saveStrengthSessionCompletion(): JSONObject {
+        val plan = currentPlan()
+        val day = dayKey()
+        val planSetCounts = mutableMapOf<String, Int>()
+        val setLogs = allLogs()
+        for (index in 0 until setLogs.length()) {
+            val item = setLogs.getJSONObject(index)
+            if (item.optString("day") == day && item.optString("plan") == plan.title) {
+                val exercise = item.optString("exercise")
+                planSetCounts[exercise] = (planSetCounts[exercise] ?: 0) + 1
+            }
+        }
+
+        val completed = mutableListOf<String>()
+        val partial = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
+        var totalPlannedSets = 0
+        plan.exercises.forEachIndexed { exerciseIndex, exercise ->
+            val stored = safeArray(plannedSetKey(day, plan.id, exerciseIndex))
+            val plannedCount = if (stored.length() > 0) stored.length() else defaultSetCountFor(exercise.target)
+            val checkedCount = countDonePlannedSets(stored)
+            val loggedCount = planSetCounts[exercise.name] ?: 0
+            val doneCount = max(checkedCount, loggedCount)
+            totalPlannedSets += plannedCount
+            when {
+                doneCount <= 0 -> skipped.add(exercise.name)
+                doneCount >= plannedCount -> completed.add(exercise.name)
+                else -> partial.add(exercise.name)
+            }
+        }
+
+        val sessions = strengthSessionLogs()
+        val existingIndex = findStrengthSessionIndex(sessions, day, plan.id, plan.title)
+        val existing = if (existingIndex >= 0) sessions.getJSONObject(existingIndex) else null
+        val session = JSONObject()
+            .put("id", existing?.optString("id")?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString())
+            .put("day", day)
+            .put("week", weekKey())
+            .put("time", timeKey())
+            .put("plan_id", plan.id)
+            .put("plan_title", plan.title)
+            .put("plan_focus", plan.focus)
+            .put("status", "completed")
+            .put("completed_sets", planSetCounts.values.sum())
+            .put("total_planned_sets", totalPlannedSets)
+            .put("completed_exercises", jsonStringArray(completed))
+            .put("partial_exercises", jsonStringArray(partial))
+            .put("skipped_exercises", jsonStringArray(skipped))
+            .put("finished_with_skips", partial.isNotEmpty() || skipped.isNotEmpty())
+            .put("updated_at", timestamp())
+        if (existingIndex >= 0) sessions.put(existingIndex, session) else sessions.put(session)
+        prefs.edit().putString("strength_session_logs", sessions.toString()).apply()
+        return session
+    }
+
+    private fun currentStrengthSessionCompletion(): JSONObject? {
+        val plan = currentPlan()
+        val sessions = strengthSessionLogs()
+        val index = findStrengthSessionIndex(sessions, dayKey(), plan.id, plan.title)
+        return if (index >= 0) sessions.getJSONObject(index) else null
+    }
+
+    private fun reopenCurrentStrengthWorkout() {
+        val plan = currentPlan()
+        val sessions = strengthSessionLogs()
+        val index = findStrengthSessionIndex(sessions, dayKey(), plan.id, plan.title)
+        if (index >= 0) sessions.remove(index)
+        val editor = prefs.edit().putString("strength_session_logs", sessions.toString())
+        if (prefs.getString("last_finished_day", "") == dayKey()) editor.remove("last_finished_day")
+        editor.apply()
+        Toast.makeText(this, "Treino reaberto com as series ja registradas.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun findStrengthSessionIndex(sessions: JSONArray, day: String, planId: String, planTitle: String): Int {
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            val samePlan = item.optString("plan_id") == planId || item.optString("plan_title") == planTitle
+            if (item.optString("day") == day && samePlan && item.optString("status", "completed") == "completed") return index
+        }
+        return -1
+    }
+
+    private fun refreshStrengthSessionSummary(day: String, planTitle: String) {
+        val sessions = strengthSessionLogs()
+        var sessionIndex = -1
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            if (item.optString("day") == day && item.optString("plan_title") == planTitle) {
+                sessionIndex = index
+                break
+            }
+        }
+        if (sessionIndex < 0) return
+
+        val session = sessions.getJSONObject(sessionIndex)
+        val plan = plans.firstOrNull { it.title == planTitle }
+        val counts = linkedMapOf<String, Int>()
+        val logs = allLogs()
+        for (index in 0 until logs.length()) {
+            val item = logs.getJSONObject(index)
+            if (item.optString("day") == day && item.optString("plan") == planTitle) {
+                val exercise = item.optString("exercise", "Exercicio")
+                counts[exercise] = (counts[exercise] ?: 0) + 1
+            }
+        }
+        val names = if (plan != null) {
+            plan.exercises.map { it.name }
+        } else {
+            (jsonStringList(session.optJSONArray("completed_exercises")) +
+                jsonStringList(session.optJSONArray("partial_exercises")) +
+                jsonStringList(session.optJSONArray("skipped_exercises")) +
+                counts.keys).distinct()
+        }
+        val completed = mutableListOf<String>()
+        val partial = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
+        var totalPlannedSets = 0
+        names.forEachIndexed { exerciseIndex, exerciseName ->
+            val exercise = plan?.exercises?.getOrNull(exerciseIndex)
+            val stored = if (plan != null) safeArray(plannedSetKey(day, plan.id, exerciseIndex)) else JSONArray()
+            val plannedCount = when {
+                stored.length() > 0 -> stored.length()
+                exercise != null -> defaultSetCountFor(exercise.target)
+                else -> 1
+            }
+            val doneCount = counts[exerciseName] ?: 0
+            totalPlannedSets += plannedCount
+            when {
+                doneCount <= 0 -> skipped.add(exerciseName)
+                doneCount >= plannedCount -> completed.add(exerciseName)
+                else -> partial.add(exerciseName)
+            }
+        }
+        session
+            .put("completed_sets", counts.values.sum())
+            .put("total_planned_sets", totalPlannedSets)
+            .put("completed_exercises", jsonStringArray(completed))
+            .put("partial_exercises", jsonStringArray(partial))
+            .put("skipped_exercises", jsonStringArray(skipped))
+            .put("finished_with_skips", partial.isNotEmpty() || skipped.isNotEmpty())
+            .put("updated_at", timestamp())
+        sessions.put(sessionIndex, session)
+        prefs.edit().putString("strength_session_logs", sessions.toString()).apply()
+    }
+
+    private fun jsonStringArray(values: List<String>): JSONArray {
+        val array = JSONArray()
+        values.forEach { value -> array.put(value) }
+        return array
+    }
+
     private fun moveAfterExerciseCompleted() {
         if (selectedExerciseIndex < currentPlan().exercises.lastIndex) {
             selectedExerciseIndex += 1
@@ -3303,8 +3859,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Exercicio concluido. Proximo exercicio aberto.", Toast.LENGTH_SHORT).show()
             render()
         } else {
-            prefs.edit().putString("last_finished_day", dayKey()).apply()
-            showWorkoutSummaryPopup()
+            finishStrengthWorkout()
         }
     }
 
@@ -3715,7 +4270,7 @@ class MainActivity : Activity() {
         render()
     }
 
-    private fun showWorkoutSummaryPopup() {
+    private fun showWorkoutSummaryPopup(completion: JSONObject) {
         val logs = todayLogs()
         val exerciseCounts = linkedMapOf<String, Int>()
         var totalVolume = 0.0
@@ -3742,6 +4297,8 @@ class MainActivity : Activity() {
             }
         }
         val runLines = todayRunSummaryLines()
+        val partialExercises = jsonStringList(completion.optJSONArray("partial_exercises"))
+        val skippedExercises = jsonStringList(completion.optJSONArray("skipped_exercises"))
         val avgRpe = if (rpeCount == 0) "-" else String.format(Locale("pt", "BR"), "%.1f", rpeSum / rpeCount)
         val exerciseLines = if (exerciseCounts.isEmpty()) {
             "Nenhuma serie registrada hoje."
@@ -3758,6 +4315,8 @@ class MainActivity : Activity() {
             "",
             "Exercicios:",
             exerciseLines,
+            "Parciais: " + if (partialExercises.isEmpty()) "Nenhum." else partialExercises.joinToString(", "),
+            "Pulados: " + if (skippedExercises.isEmpty()) "Nenhum." else skippedExercises.joinToString(", "),
             "",
             "Corrida hoje:",
             if (runLines.isEmpty()) "Nenhuma corrida registrada hoje." else runLines.joinToString("\n"),
@@ -3771,7 +4330,16 @@ class MainActivity : Activity() {
         content.setPadding(dp(12), dp(14), dp(12), dp(8))
         content.addView(label("RESUMO POS-TREINO", green, 13f, true))
         content.addView(label(currentPlan().title + " concluido", white, 24f, true))
-        content.addView(label("Seu treino foi salvo localmente e ja esta disponivel no historico.", muted, 14f, false))
+        content.addView(label(
+            if (partialExercises.isEmpty() && skippedExercises.isEmpty()) {
+                "Todos os exercicios planejados foram concluidos e salvos no historico."
+            } else {
+                "Treino encerrado. O app registrou o que foi feito e marcou o restante como parcial ou pulado."
+            },
+            muted,
+            14f,
+            false,
+        ))
         content.addView(summaryMetricRow(
             Triple("Series", exerciseCounts.values.sum().toString(), exerciseCounts.size.toString() + " exercicios"),
             Triple("Volume", totalVolume.roundToInt().toString() + " kg", "movimentado"),
@@ -3787,6 +4355,14 @@ class MainActivity : Activity() {
         details.orientation = LinearLayout.VERTICAL
         details.addView(label("EXERCICIOS REALIZADOS", muted, 12f, true))
         details.addView(label(exerciseLines, white, 14f, false))
+        if (partialExercises.isNotEmpty()) {
+            details.addView(label("EXERCICIOS PARCIAIS", amber, 12f, true))
+            details.addView(label(partialExercises.joinToString("\n") { exercise -> "- " + exercise }, white, 14f, false))
+        }
+        if (skippedExercises.isNotEmpty()) {
+            details.addView(label("EXERCICIOS PULADOS", muted, 12f, true))
+            details.addView(label(skippedExercises.joinToString("\n") { exercise -> "- " + exercise }, white, 14f, false))
+        }
         if (runLines.isNotEmpty()) {
             details.addView(label("CORRIDA HOJE", muted, 12f, true))
             details.addView(label(runLines.joinToString("\n"), white, 14f, false))
@@ -3912,6 +4488,7 @@ class MainActivity : Activity() {
             .putInt("running_active_stage", 0)
             .putString("running_active_distance_done", "0.0")
             .putString("running_active_speed", firstStage.speedKmh.toString())
+            .putString("running_active_stage_speeds", runStageSpeedArray(workout).toString())
             .putLong("running_active_last_tick_at", countdownEndAt)
             .putLong("running_countdown_end_at", countdownEndAt)
             .putLong("running_active_started_at_ms", countdownEndAt)
@@ -3984,8 +4561,40 @@ class MainActivity : Activity() {
             return
         }
         val speed = (currentActiveRunSpeed(workout) + delta).coerceIn(4.0, 18.0)
-        prefs.edit().putString("running_active_speed", speed.toString()).apply()
+        val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        val stageSpeeds = safeArray("running_active_stage_speeds")
+        while (stageSpeeds.length() < workout.stages.size) {
+            stageSpeeds.put(workout.stages[stageSpeeds.length()].speedKmh)
+        }
+        stageSpeeds.put(stageIndex, roundSpeed(speed))
+        prefs.edit()
+            .putString("running_active_speed", speed.toString())
+            .putString("running_active_stage_speeds", stageSpeeds.toString())
+            .apply()
         refreshRunningSessionViews()
+    }
+
+    private fun runStageSpeedArray(workout: RunningWorkout): JSONArray {
+        val speeds = JSONArray()
+        workout.stages.forEach { stage -> speeds.put(roundSpeed(stage.speedKmh)) }
+        return speeds
+    }
+
+    private fun runStageSnapshot(workout: RunningWorkout, includeActiveSpeeds: Boolean): JSONArray {
+        val useActive = includeActiveSpeeds && prefs.getString("running_active_id", "") == workout.id
+        val activeSpeeds = if (useActive) safeArray("running_active_stage_speeds") else JSONArray()
+        val snapshot = JSONArray()
+        workout.stages.forEachIndexed { index, stage ->
+            val speed = activeSpeeds.optDouble(index, stage.speedKmh).takeIf { it > 0.0 } ?: stage.speedKmh
+            snapshot.put(JSONObject()
+                .put("index", index)
+                .put("title", stage.title)
+                .put("distance", roundKm(stage.distanceKm))
+                .put("speed", roundSpeed(speed))
+                .put("planned_speed", roundSpeed(stage.speedKmh))
+                .put("note", stage.note))
+        }
+        return snapshot
     }
 
     private fun finishCurrentRunStage() {
@@ -4139,6 +4748,7 @@ class MainActivity : Activity() {
             .put("pace_seconds_per_km", paceSeconds)
             .put("completed_stages", completedStages)
             .put("total_stages", workout.stages.size)
+            .put("stages", runStageSnapshot(workout, !manual))
             .put("manual", manual)
             .put("notes", if (manual) "Marcado como concluido sem iniciar pelo app." else "Treino guiado pelo app.")
         val logs = runLogs()
@@ -4260,6 +4870,7 @@ class MainActivity : Activity() {
             .remove("running_active_stage")
             .remove("running_active_distance_done")
             .remove("running_active_speed")
+            .remove("running_active_stage_speeds")
             .remove("running_active_last_tick_at")
             .remove("running_countdown_end_at")
             .remove("running_active_started_at_ms")
@@ -4324,6 +4935,13 @@ class MainActivity : Activity() {
 
     private fun saveRun(distance: Double, speed: Double, notes: String) {
         val durationMinutes = ((distance / speed) * 60.0).roundToInt()
+        val stages = JSONArray().put(JSONObject()
+            .put("index", 0)
+            .put("title", "Corrida manual")
+            .put("distance", roundKm(distance))
+            .put("speed", roundSpeed(speed))
+            .put("planned_speed", roundSpeed(speed))
+            .put("note", notes.trim()))
         val log = JSONObject()
             .put("id", UUID.randomUUID().toString())
             .put("day", dayKey())
@@ -4332,6 +4950,7 @@ class MainActivity : Activity() {
             .put("distance", distance)
             .put("speed", speed)
             .put("duration", durationMinutes.toString() + " min")
+            .put("stages", stages)
             .put("notes", notes.trim())
         val logs = runLogs()
         logs.put(log)
@@ -4372,9 +4991,11 @@ class MainActivity : Activity() {
             .put("exported_at", timestamp())
             .put("preferences", preferences)
             .put("strength_logs", allLogs())
+            .put("strength_sessions", strengthSessionLogs())
             .put("run_logs", runLogs())
             .put("summary", JSONObject()
                 .put("strength_log_count", allLogs().length())
+                .put("strength_session_count", strengthSessionLogs().length())
                 .put("run_log_count", runLogs().length())
                 .put("custom_plan", prefs.contains("custom_workout_plans")))
     }
@@ -4402,6 +5023,7 @@ class MainActivity : Activity() {
                 }
             } else {
                 if (payload.has("strength_logs")) editor.putString("set_logs", payload.getJSONArray("strength_logs").toString())
+                if (payload.has("strength_sessions")) editor.putString("strength_session_logs", payload.getJSONArray("strength_sessions").toString())
                 if (payload.has("run_logs")) editor.putString("run_logs", payload.getJSONArray("run_logs").toString())
                 payload.optJSONObject("goals")?.let { goals ->
                     editor.putString("goal_week_sets", goals.optString("week_sets", "60"))
@@ -4428,6 +5050,16 @@ class MainActivity : Activity() {
 
     private fun allLogs(): JSONArray = safeArray("set_logs")
     private fun runLogs(): JSONArray = safeArray("run_logs")
+    private fun strengthSessionLogs(): JSONArray = safeArray("strength_session_logs")
+
+    private fun hasCompletedStrengthSession(day: String): Boolean {
+        val sessions = strengthSessionLogs()
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            if (item.optString("day") == day && item.optString("status", "completed") == "completed") return true
+        }
+        return false
+    }
 
     private fun safeArray(key: String): JSONArray {
         return try {
