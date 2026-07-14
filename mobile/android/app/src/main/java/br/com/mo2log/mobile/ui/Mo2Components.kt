@@ -1,6 +1,8 @@
 package br.com.mo2log.mobile.ui
 
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
@@ -36,7 +38,7 @@ object Mo2Components {
         )
     }
 
-    fun card(context: Context, color: Int = Mo2Colors.Surface): LinearLayout {
+    fun card(context: Context, color: Int = Mo2Colors.SurfaceAlt): LinearLayout {
         val box = LinearLayout(context)
         box.setPadding(
             context.mo2Dp(Mo2Spacing.Lg),
@@ -64,6 +66,8 @@ object Mo2Components {
         )
         view.gravity = Gravity.CENTER
         view.setPadding(context.mo2Dp(Mo2Spacing.Md), 0, context.mo2Dp(Mo2Spacing.Md), 0)
+        view.includeFontPadding = false
+        view.minHeight = context.mo2Dp(28)
         view.background = Mo2Drawables.rounded(
             context,
             if (active) Mo2Colors.Primary else Mo2Colors.SurfaceAlt,
@@ -81,21 +85,103 @@ object Mo2Components {
     ): Button {
         val button = Button(context)
         button.text = text
-        button.textSize = Mo2Type.Body
+        button.textSize = Mo2Type.Button
         button.typeface = Typeface.DEFAULT_BOLD
-        button.setTextColor(textColor)
+        button.setTextColor(
+            ColorStateList(
+                arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+                intArrayOf(Mo2Colors.TextMuted, textColor),
+            ),
+        )
         button.background = Mo2Drawables.pressed(
+            context = context,
+            color = color,
+            pressedColor = if (color == Mo2Colors.Primary) Mo2Colors.PrimaryDark else Mo2Colors.SurfaceElevated,
+            disabledColor = Mo2Colors.Disabled,
+            radiusDp = Mo2Radius.Md,
+            strokeColor = if (color == Mo2Colors.Primary) Mo2Colors.Primary else Mo2Colors.Border,
+        )
+        button.foreground = Mo2Drawables.rippleForeground(
             context,
-            color,
-            Mo2Colors.SurfaceAlt,
+            Color.argb(52, 248, 250, 252),
             Mo2Radius.Md,
-            if (color == Mo2Colors.Primary) Mo2Colors.Primary else Mo2Colors.Border,
         )
         button.isAllCaps = false
-        button.minHeight = 0
-        button.minimumHeight = 0
+        button.gravity = Gravity.CENTER
+        button.contentDescription = text
+        button.minHeight = context.mo2Dp(48)
+        button.minimumHeight = context.mo2Dp(48)
+        button.minWidth = context.mo2Dp(48)
+        button.minimumWidth = context.mo2Dp(48)
         button.includeFontPadding = false
+        button.setPadding(context.mo2Dp(Mo2Spacing.Lg), 0, context.mo2Dp(Mo2Spacing.Lg), 0)
+        button.elevation = 0f
         return button
+    }
+
+    fun bottomNavigationItem(
+        context: Context,
+        title: String,
+        icon: Mo2NavIcon,
+        active: Boolean,
+        onClick: () -> Unit,
+    ): LinearLayout {
+        val color = if (active) Mo2Colors.Primary else Mo2Colors.TextSecondary
+        val item = LinearLayout(context)
+        item.orientation = LinearLayout.VERTICAL
+        item.gravity = Gravity.CENTER
+        item.setPadding(
+            context.mo2Dp(Mo2Spacing.Xs),
+            context.mo2Dp(Mo2Spacing.Xs),
+            context.mo2Dp(Mo2Spacing.Xs),
+            context.mo2Dp(Mo2Spacing.Xs),
+        )
+        item.background = Mo2Drawables.rounded(
+            context,
+            if (active) Mo2Colors.SurfaceAlt else Color.TRANSPARENT,
+            Mo2Radius.Md,
+        )
+        item.foreground = Mo2Drawables.rippleForeground(
+            context,
+            Color.argb(44, 34, 197, 94),
+            Mo2Radius.Md,
+        )
+        item.minimumHeight = context.mo2Dp(64)
+        item.isClickable = true
+        item.isFocusable = true
+        item.isSelected = active
+        item.contentDescription = if (active) "$title, selecionado" else title
+        item.setOnClickListener { onClick() }
+
+        val indicator = View(context)
+        indicator.background = Mo2Drawables.rounded(
+            context,
+            if (active) Mo2Colors.Primary else Color.TRANSPARENT,
+            Mo2Radius.Pill,
+        )
+        val indicatorParams = LinearLayout.LayoutParams(context.mo2Dp(24), context.mo2Dp(3))
+        indicatorParams.setMargins(0, 0, 0, context.mo2Dp(Mo2Spacing.Xs))
+        item.addView(indicator, indicatorParams)
+
+        val iconView = Mo2NavIconView(context, icon, color)
+        item.addView(iconView, LinearLayout.LayoutParams(context.mo2Dp(24), context.mo2Dp(24)))
+
+        val label = label(context, title, color, Mo2Type.Label, active)
+        label.gravity = Gravity.CENTER
+        label.includeFontPadding = false
+        val labelParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        labelParams.setMargins(0, context.mo2Dp(Mo2Spacing.Xs), 0, 0)
+        item.addView(label, labelParams)
+        return item
+    }
+
+    fun sectionHeader(context: Context, text: String): TextView {
+        val view = label(context, text, Mo2Colors.TextPrimary, Mo2Type.SectionTitle, true)
+        view.setPadding(0, context.mo2Dp(Mo2Spacing.Xxl), 0, context.mo2Dp(Mo2Spacing.Sm))
+        return view
     }
 
     fun progressBar(
@@ -129,7 +215,7 @@ object Mo2Components {
         val box = card(context, Mo2Colors.SurfaceAlt)
         box.orientation = LinearLayout.VERTICAL
         box.addView(kicker(context, title))
-        box.addView(label(context, value, Mo2Colors.TextPrimary, Mo2Type.Title, true))
+        box.addView(label(context, value, Mo2Colors.TextPrimary, Mo2Type.SectionTitle, true))
         if (detail.isNotBlank()) box.addView(label(context, detail, Mo2Colors.TextSecondary, Mo2Type.Label, false))
         val marker = View(context)
         marker.background = Mo2Drawables.rounded(context, accent, Mo2Radius.Pill)
@@ -145,10 +231,10 @@ object Mo2Components {
         caption: String,
         active: Boolean,
     ): LinearLayout {
-        val box = card(context, if (active) Mo2Colors.SurfaceElevated else Mo2Colors.Surface)
+        val box = card(context, if (active) Mo2Colors.SurfaceElevated else Mo2Colors.SurfaceAlt)
         box.orientation = LinearLayout.VERTICAL
         box.gravity = Gravity.CENTER
-        box.addView(label(context, value, if (active) Mo2Colors.Warning else Mo2Colors.TextPrimary, 44f, true))
+        box.addView(label(context, value, if (active) Mo2Colors.Warning else Mo2Colors.TextPrimary, Mo2Type.Timer, true))
         box.addView(label(context, caption, Mo2Colors.TextSecondary, Mo2Type.Label, false))
         return box
     }

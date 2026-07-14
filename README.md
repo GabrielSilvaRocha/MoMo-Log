@@ -2,29 +2,23 @@
 
 Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
+## Estado atual
+
+- Android nativo pessoal: v10.2.0.
+- Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
+- Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
+- Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
+
 ## Proximas entregas
 
-- v8.2.0 - Sincronizacao/importacao dos treinos offline para o backend.
-- v8.3.0 - Polimento mobile-first da tela de treino para uso na academia.
-- v8.4.0 - Catalogo nativo de exercicios para uso offline no Android.
-- v8.5.0 - Catalogo de exercicios importado com midia remota por link.
-- v8.6.0 - Atualizacao visual da interface Android nativa.
-- v8.7.0 - UX pessoal para favoritos, atalhos e fluxo de treino mais rapido.
-- v8.8.0 - Catalogo avancado com ocultos, substitutos preferidos e status de midia.
-- v8.9.0 - Redesign Android com menu inferior fixo e central Mais.
-- v8.9.1 - Correcao da area segura do menu inferior no Android.
-- v9.0.0 - Treino premium com timer, editar/desfazer serie, descanso e cache de imagens.
-- v9.1.0 - Midia de execucao do exercicio selecionado dentro da aba Treino.
-- v9.2.0 - Plano pessoal hibrido: musculacao 3x/semana e corrida para 5 km.
-- v9.3.0 - Corrida guiada 5 km com semana atual, planejamento completo e fases tipo Runna.
-- v9.4.0 - Checklist de series no treino, descanso sonoro e editor local do plano pessoal.
-- v9.5.0 - Historico avancado com filtros, metricas, evolucao por exercicio e troca recomendada animada.
-- v9.6.0 - Backup pessoal por exportacao/importacao JSON.
-- v9.7.0 - Resumo final de sessao mais completo.
-- v9.8.0 - Ajustes inteligentes de carga, volume e ritmo.
-- v9.9.0 - Polimento de uso real na academia e esteira.
-- v10.0.0 - Versao pessoal madura para uso continuo na academia.
-- v10.1.0 - Check-in diario de prontidao para ajustar intensidade.
+- v10.3.0 - Historico avancado com calendario, recordes pessoais, filtros e graficos.
+- v10.4.0 - Corrida adaptativa com previsao de 5 km e refinamento dos comandos de voz.
+- v10.5.0 - Progressao de musculacao, deload e volume por grupo muscular.
+- v10.6.0 - Personalizacao por equipamentos, favoritos, alternativas e exercicios proprios.
+- v10.7.0 - Integracao opcional com Android Health Connect.
+- v10.8.0 - Backup versionado, restauracao e migracao segura dos dados.
+- v10.9.0 - Acessibilidade, desempenho, estabilidade e testes automatizados.
+- v11.0.0 - Experiencia pessoal madura com musculacao, corrida e planejamento integrados.
 
 ## v8.1.2 - Android Offline Auto Login
 
@@ -398,3 +392,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Coach e Insights passam a considerar a prontidao registrada no dia.
 - Verde orienta seguir o plano com progressao controlada; Amarelo reduz ambicao; Vermelho prioriza recuperacao.
 - O app Android passa para versionCode 1010 / versionName 10.1.0.
+
+## v10.2.0 - Consolidacao visual Android
+
+- Design system alinhado aos tokens do Figma, incluindo cores de corrida/alerta, raios, tipografia e estados de interacao.
+- Cards padrao passam a usar a superficie correta e as barras do sistema seguem a paleta do aplicativo.
+- Bottom navigation ganha icones Android nativos para Inicio, Treino, Corrida e Mais, com selecao, ripple e area de toque consistentes.
+- Botao Voltar retorna de telas secundarias para Mais e das abas principais para Inicio; durante uma corrida ativa pede confirmacao antes de sair.
+- Versao do aplicativo e versao do plano ficam independentes, evitando reposicionar o treino em atualizacoes apenas visuais.
+- Documentacao Android e roteiro de validacao foram atualizados para o aplicativo Kotlin nativo atual.
+- O app Android passa para versionCode 1020 / versionName 10.2.0.

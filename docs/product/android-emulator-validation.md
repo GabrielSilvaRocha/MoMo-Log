@@ -1,71 +1,77 @@
-# Mo2 LOG v8.1.1 - Validacao no emulador Android
+# Mo2 LOG Android - validacao nativa
 
-Objetivo: testar o APK no Android Studio antes de instalar no celular fisico.
+Este roteiro valida o APK Kotlin nativo antes de um treino real. O aplicativo nao usa WebView nem depende do backend.
 
-## Criar emulador no Android Studio
+## Preparar um emulador
 
-1. Abra o Android Studio.
-2. Va em Tools > Device Manager.
-3. Clique em Create virtual device.
-4. Escolha um Pixel recente.
-5. Escolha uma imagem API 35 ou API 36. Se pedir download, aceite.
-6. Finalize e clique no botao Play do emulador.
+1. No Android Studio, abra Tools > Device Manager.
+2. Crie ou inicie um Pixel recente com API 35 ou 36.
+3. Aguarde a tela inicial do Android antes de instalar o APK.
 
-## Gerar APK corrigido
-
-No terminal:
+## Gerar e verificar o APK
 
 ```powershell
 cd C:\Users\CDP\OneDrive\Documentos\Projeto\MoMo-Log\mobile\android
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
-.\gradlew.bat assembleDebug
+.\gradlew.bat assembleDebug testDebugUnitTest lintDebug --console=plain
 ```
 
-APK:
+O artefato esperado e:
 
 ```text
-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+app\build\outputs\apk\debug\app-debug.apk
 ```
 
-## Instalar no emulador
-
-Com o emulador aberto:
+## Escolher o dispositivo
 
 ```powershell
-C:\Users\CDP\AppData\Local\Android\Sdk\platform-tools\adb.exe install -r "C:\Users\CDP\OneDrive\Documentos\Projeto\MoMo-Log\mobile\android\app\build\outputs\apk\debug\app-debug.apk"
+$adb='C:\Users\CDP\AppData\Local\Android\Sdk\platform-tools\adb.exe'
+& $adb devices -l
 ```
 
-## Diagnostico de tela branca
+Quando houver emulador e celular conectados ao mesmo tempo, passe `-s SERIAL` nos comandos seguintes.
 
-Logs do WebView:
+## Instalar preservando dados
 
 ```powershell
-C:\Users\CDP\AppData\Local\Android\Sdk\platform-tools\adb.exe logcat -s Mo2LogWebView chromium AndroidRuntime
+& $adb -s emulator-5554 install -r '.\app\build\outputs\apk\debug\app-debug.apk'
+& $adb -s emulator-5554 shell am force-stop br.com.mo2log.mobile
+& $adb -s emulator-5554 shell monkey -p br.com.mo2log.mobile -c android.intent.category.LAUNCHER 1
 ```
 
-O APK corrigido carrega:
+`install -r` atualiza o APK sem limpar `SharedPreferences`. Nao use `pm clear` em um aparelho com historico real.
 
-```text
-https://appassets.androidplatform.net/assets/mo2log/index.html?view=offline-workout
+## Smoke test visual e funcional
+
+- O Dashboard abre sem tela branca ou crash.
+- Inicio, Treino, Corrida e Mais exibem icone, texto e estado selecionado.
+- O menu inferior fica acima da barra de gestos/botoes do Android.
+- O botao Voltar retorna de Historico/Perfil para Mais e depois para Inicio.
+- Uma serie pode ser marcada, editada e mantida apos fechar e abrir o app.
+- O descanso nao duplica e emite o aviso ao terminar.
+- Uma corrida abre o countdown, atualiza velocidade/tempo e preserva a etapa ativa.
+- O Historico agrupa o treino do dia e permite editar series, corridas e velocidades das etapas.
+- O Perfil exporta um JSON e a versao exibida corresponde ao APK instalado.
+- A interface nao corta textos em uma tela de aproximadamente 390 x 844.
+
+## Diagnostico nativo
+
+Limpe os logs antes de abrir o app:
+
+```powershell
+& $adb -s emulator-5554 logcat -c
+& $adb -s emulator-5554 shell monkey -p br.com.mo2log.mobile -c android.intent.category.LAUNCHER 1
+& $adb -s emulator-5554 logcat -d AndroidRuntime:E ActivityTaskManager:I '*:S'
 ```
 
-Esse caminho evita bloqueios comuns de JavaScript/CSS quando o WebView abre arquivos via file://.
+Procure por `FATAL EXCEPTION`, `ANR` ou falha ao iniciar `br.com.mo2log.mobile.MainActivity`.
 
+## Aparelho fisico
 
-## Validacao v8.1.3
+Depois do smoke test no emulador, repita a instalacao usando o serial do telefone:
 
-Ao abrir o APK, ele deve ir direto para Academia offline sem pedir login.
+```powershell
+& $adb -s SERIAL_DO_TELEFONE install -r '.\app\build\outputs\apk\debug\app-debug.apk'
+```
 
-Se aparecer failed to fetch, voce provavelmente tocou em Demo Local ou esta com build antigo instalado. Reinstale o APK gerado apos a v8.1.3.
-
-### v8.1.3 - Android APK sem cache legado
-
-- APK Android abre diretamente a Academia offline sem depender do backend.
-- Service worker fica desativado no WebView asset host para evitar bundle antigo.
-- Build Android atualizado para versionCode 813 e versionName 8.1.3.
-
-## v8.1.4 - Android Offline-Only APK
-
-- O APK Android deve mostrar apenas a entrada Academia offline no menu.
-- Abas online como Corridas, Deploy e Treino do dia ficam escondidas no WebView Android.
-- Se o usuario abrir o app fora de casa, o fluxo nao deve chamar backend nem exibir failed to fetch.
+Abra o app e confirme o historico existente antes de registrar um treino novo.

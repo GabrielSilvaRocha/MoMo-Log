@@ -5,7 +5,6 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -38,6 +37,7 @@ import android.widget.Toast
 import br.com.mo2log.mobile.ui.Mo2Colors
 import br.com.mo2log.mobile.ui.Mo2Components
 import br.com.mo2log.mobile.ui.Mo2Drawables
+import br.com.mo2log.mobile.ui.Mo2NavIcon
 import br.com.mo2log.mobile.ui.Mo2Radius
 import br.com.mo2log.mobile.ui.Mo2Spacing
 import org.json.JSONArray
@@ -231,7 +231,8 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = "10.1.0"
+    private val versionName = BuildConfig.VERSION_NAME
+    // Change only when the bundled plan changes so visual releases never reset an active workout.
     private val trainingPlanVersion = "10.1.0"
     private val bg = Mo2Colors.Background
     private val surface = Mo2Colors.Surface
@@ -337,6 +338,19 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun onBackPressed() {
+        if (currentTab == "running" && activeRunningWorkout() != null) {
+            showCancelRunningWorkoutDialog()
+            return
+        }
+        when {
+            secondaryNavItems.any { it.id == currentTab } -> switchTab("more")
+            currentTab != "home" -> switchTab("home")
+            else -> super.onBackPressed()
+        }
+    }
+
     private fun syncTrainingPlanVersion() {
         if (prefs.getString("training_plan_version", "") == trainingPlanVersion) return
         val editor = prefs.edit()
@@ -380,7 +394,7 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(18), dp(18), dp(18), dp(18))
+        root.setPadding(dp(Mo2Spacing.Xxl), dp(Mo2Spacing.Xxl), dp(Mo2Spacing.Xxl), dp(Mo2Spacing.Xxl))
         scroll.addView(root)
 
         val focusedRunningSession = currentTab == "running" && activeRunningWorkout() != null
@@ -451,7 +465,7 @@ class MainActivity : Activity() {
         titleBox.setPadding(dp(14), 0, 0, 0)
         titleBox.addView(label("MO2 LOG", green, 13f, true))
         titleBox.addView(label("Treino pessoal", white, 25f, true))
-        titleBox.addView(label("Android offline | v" + versionName, muted, 14f, false))
+        titleBox.addView(label("Android nativo | v" + versionName, muted, 14f, false))
         top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         top.addView(statusChip("Local"))
         box.addView(top)
@@ -481,48 +495,36 @@ class MainActivity : Activity() {
     private fun bottomNav(): View {
         val wrap = LinearLayout(this)
         wrap.orientation = LinearLayout.VERTICAL
-        wrap.setPadding(dp(12), dp(10), dp(12), dp(12))
         wrap.setBackgroundColor(surface)
 
         val divider = View(this)
         divider.setBackgroundColor(border)
-        val dividerParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
-        dividerParams.setMargins(0, 0, 0, dp(8))
-        wrap.addView(divider, dividerParams)
+        wrap.addView(divider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs))
         primaryNavItems.forEach { item ->
             val active = isBottomNavActive(item.id)
-            val button = LinearLayout(this)
-            button.orientation = LinearLayout.VERTICAL
-            button.gravity = Gravity.CENTER
-            button.setPadding(dp(6), 0, dp(6), 0)
-            button.setBackgroundColor(Color.TRANSPARENT)
-            button.contentDescription = item.title
-            button.isClickable = true
-            button.isFocusable = true
-            button.setOnClickListener { switchTab(item.id) }
-
-            val marker = View(this)
-            marker.background = rounded(
-                if (active) green else surface,
-                dp(Mo2Radius.Pill),
-                if (active) green else muted,
+            val icon = when (item.id) {
+                "home" -> Mo2NavIcon.Home
+                "workout" -> Mo2NavIcon.Strength
+                "running" -> Mo2NavIcon.Running
+                else -> Mo2NavIcon.More
+            }
+            val button = Mo2Components.bottomNavigationItem(
+                context = this,
+                title = item.title,
+                icon = icon,
+                active = active,
+                onClick = { switchTab(item.id) },
             )
-            val markerParams = LinearLayout.LayoutParams(dp(16), dp(16))
-            markerParams.setMargins(0, 0, 0, dp(7))
-            button.addView(marker, markerParams)
-
-            val title = label(item.title, if (active) green else muted, 12f, active)
-            title.gravity = Gravity.CENTER
-            button.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-            val params = LinearLayout.LayoutParams(0, dp(62), 1f)
+            val params = LinearLayout.LayoutParams(0, dp(64), 1f)
             params.setMargins(dp(2), 0, dp(2), 0)
             row.addView(button, params)
         }
-        wrap.addView(row)
+        wrap.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(72)))
         return wrap
     }
 
@@ -542,12 +544,12 @@ class MainActivity : Activity() {
             val enforcedEdgeToEdge = Build.VERSION.SDK_INT >= 35
             page.setPadding(0, if (enforcedEdgeToEdge) topInset else 0, 0, 0)
             content.setPadding(
-                dp(18),
-                dp(18) + if (enforcedEdgeToEdge) 0 else topInset,
-                dp(18),
-                dp(18) + if (navigation == null) bottomInset else 0,
+                dp(Mo2Spacing.Xxl),
+                dp(Mo2Spacing.Xxl) + if (enforcedEdgeToEdge) 0 else topInset,
+                dp(Mo2Spacing.Xxl),
+                dp(Mo2Spacing.Xxl) + if (navigation == null) bottomInset else 0,
             )
-            navigation?.setPadding(dp(12), dp(10), dp(12), dp(12) + bottomInset)
+            navigation?.setPadding(0, 0, 0, bottomInset)
             insets
         }
         page.requestApplyInsets()
@@ -2554,7 +2556,7 @@ class MainActivity : Activity() {
     }
 
     private fun styleHistoryDialog(dialog: AlertDialog, content: View) {
-        dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+        dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
         dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
         content.startAnimation(smoothPopupAnimation())
@@ -2701,7 +2703,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Excluir treino") { _, _ -> deleteStrengthHistorySession(activity) }
             .create()
         dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
         }
@@ -2741,7 +2743,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Excluir") { _, _ -> deleteHistoryActivity(activity) }
             .create()
         dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
         }
@@ -3383,7 +3385,7 @@ class MainActivity : Activity() {
         planning.addView(label("PLANEJAMENTO", green, 13f, true))
         planning.addView(label("Preferencias de treino", white, 22f, true))
         planning.addView(label(
-            "Plano " + trainingPlanVersion + " | corrida semana " + currentRunningPlanWeek() + " de 6",
+            "Plano base " + trainingPlanVersion + " | corrida semana " + currentRunningPlanWeek() + " de 6",
             muted,
             14f,
             false,
@@ -3458,7 +3460,7 @@ class MainActivity : Activity() {
             }
             .create()
         dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
         }
@@ -4126,7 +4128,7 @@ class MainActivity : Activity() {
         val content = LinearLayout(this)
         content.orientation = LinearLayout.VERTICAL
         content.setPadding(dp(18), dp(18), dp(18), dp(12))
-        content.background = rounded(surface, dp(Mo2Radius.Lg), border)
+        content.background = rounded(surface, dp(Mo2Radius.Modal), border)
         content.addView(label("EQUIPAMENTO INDISPONIVEL", danger, 13f, true))
         content.addView(label(exercise.equipment.ifBlank { "Equipamento variavel" }, white, 22f, true))
         content.addView(label("Marcar aqui tira esse equipamento das sugestoes automaticas. Os exercicios continuam disponiveis manualmente no catalogo.", muted, 14f, false))
@@ -4176,7 +4178,7 @@ class MainActivity : Activity() {
         val content = LinearLayout(this)
         content.orientation = LinearLayout.VERTICAL
         content.setPadding(dp(18), dp(18), dp(18), dp(12))
-        content.background = rounded(surface, dp(Mo2Radius.Lg), border)
+        content.background = rounded(surface, dp(Mo2Radius.Modal), border)
         content.addView(label("TROCAR EXERCICIO", green, 13f, true))
         content.addView(label(currentExercise().name, white, 22f, true))
         content.addView(label("Escolha uma alternativa para " + current.muscle + ". O plano sera atualizado localmente.", muted, 14f, false))
@@ -4377,7 +4379,7 @@ class MainActivity : Activity() {
             .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
             .create()
         dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Mo2Colors.Running)
             content.startAnimation(smoothPopupAnimation())
@@ -4806,7 +4808,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Salvar", null)
             .create()
         dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Lg, border))
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Mo2Colors.Running)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
@@ -5951,9 +5953,7 @@ class MainActivity : Activity() {
     private fun EditText.textValue() = text?.toString().orEmpty()
 
     private fun sectionTitle(text: String): TextView {
-        val view = label(text.uppercase(Locale("pt", "BR")), green, 14f, true)
-        view.setPadding(0, dp(20), 0, dp(8))
-        return view
+        return Mo2Components.sectionHeader(this, text)
     }
 
     private fun label(text: String, color: Int, size: Float, bold: Boolean): TextView {
@@ -5982,7 +5982,7 @@ class MainActivity : Activity() {
         return button
     }
 
-    private fun card(color: Int = surface): LinearLayout {
+    private fun card(color: Int = surface2): LinearLayout {
         return Mo2Components.card(this, color)
     }
 
