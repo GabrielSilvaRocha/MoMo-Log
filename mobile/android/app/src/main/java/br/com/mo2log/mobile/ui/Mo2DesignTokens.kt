@@ -8,7 +8,7 @@ object Mo2Colors {
     val Background: Int = Color.rgb(15, 23, 42)
     val Surface: Int = Color.rgb(17, 24, 39)
     val SurfaceAlt: Int = Color.rgb(30, 41, 59)
-    val SurfaceElevated: Int = Color.rgb(15, 36, 33)
+    val SurfaceElevated: Int = Color.rgb(36, 54, 74)
     val Border: Int = Color.rgb(51, 65, 85)
     val Primary: Int = Color.rgb(34, 197, 94)
     val PrimarySoft: Int = Color.rgb(20, 83, 45)
