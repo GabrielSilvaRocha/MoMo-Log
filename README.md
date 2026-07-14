@@ -4,14 +4,13 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v10.2.0.
+- Android nativo pessoal: v10.3.0.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v10.3.0 - Historico avancado com calendario, recordes pessoais, filtros e graficos.
 - v10.4.0 - Corrida adaptativa com previsao de 5 km e refinamento dos comandos de voz.
 - v10.5.0 - Progressao de musculacao, deload e volume por grupo muscular.
 - v10.6.0 - Personalizacao por equipamentos, favoritos, alternativas e exercicios proprios.
@@ -402,3 +401,15 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Versao do aplicativo e versao do plano ficam independentes, evitando reposicionar o treino em atualizacoes apenas visuais.
 - Documentacao Android e roteiro de validacao foram atualizados para o aplicativo Kotlin nativo atual.
 - O app Android passa para versionCode 1020 / versionName 10.2.0.
+
+## v10.3.0 - Historico avancado e recordes
+
+- Historico ganha calendario mensal navegavel com marcadores de musculacao e corrida.
+- Toque em um dia aplica o filtro exato; atalhos permitem alternar entre 30 dias, 90 dias e todo o historico.
+- Filtros avancados validam datas e impedem intervalos invertidos.
+- Painel de recordes calcula maior carga, e1RM estimado, corrida mais longa e melhor ritmo acima de 1 km.
+- Ritmos fora da faixa plausivel sao ignorados para que registros de teste ou duracoes incompletas nao virem recordes.
+- Grafico Android nativo compara volume de musculacao e distancia corrida nas ultimas oito semanas.
+- Recordes usam todo o historico; resumo, grafico e atividades continuam reagindo aos filtros ativos.
+- A estrutura dos dados pessoais permanece inalterada e compativel com os backups existentes.
+- O app Android passa para versionCode 1030 / versionName 10.3.0.

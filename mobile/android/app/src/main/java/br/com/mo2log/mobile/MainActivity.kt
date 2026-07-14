@@ -37,6 +37,8 @@ import android.widget.Toast
 import br.com.mo2log.mobile.ui.Mo2Colors
 import br.com.mo2log.mobile.ui.Mo2Components
 import br.com.mo2log.mobile.ui.Mo2Drawables
+import br.com.mo2log.mobile.ui.Mo2HistoryChartView
+import br.com.mo2log.mobile.ui.Mo2HistoryPoint
 import br.com.mo2log.mobile.ui.Mo2NavIcon
 import br.com.mo2log.mobile.ui.Mo2Radius
 import br.com.mo2log.mobile.ui.Mo2Spacing
@@ -45,6 +47,7 @@ import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.text.Normalizer
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
@@ -130,6 +133,13 @@ data class HistoryActivity(
     val item: JSONObject,
     val strengthSets: List<JSONObject> = emptyList(),
     val completion: JSONObject? = null,
+)
+
+data class HistoryCalendarSummary(
+    var strengthWorkouts: Int = 0,
+    var strengthSets: Int = 0,
+    var runs: Int = 0,
+    var runningDistance: Double = 0.0,
 )
 
 class RemoteExerciseMediaView(context: Context, private val links: List<String>) : LinearLayout(context) {
@@ -293,6 +303,8 @@ class MainActivity : Activity() {
     private var runningActiveContent: View? = null
     private var runningPauseButton: Button? = null
     private var pendingRunSummary: JSONObject? = null
+    private var requestedHistorySection = ""
+    private var historyScrollTarget: View? = null
     private val restTimerRunnable = object : Runnable {
         override fun run() {
             restTimerText?.let { view ->
@@ -320,7 +332,10 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        currentTab = prefs.getString("current_tab", "home") ?: "home"
+        val persistedTab = prefs.getString("current_tab", "home") ?: "home"
+        val requestedTab = intent.getStringExtra("tab")?.takeIf { tab -> navItems.any { it.id == tab } }
+        currentTab = requestedTab ?: persistedTab
+        requestedHistorySection = intent.getStringExtra("section").orEmpty()
         syncTrainingPlanVersion()
         selectedPlanIndex = prefs.getInt("selected_plan", todayPlanIndex())
         selectedExerciseIndex = prefs.getInt("selected_exercise", 0)
@@ -383,6 +398,7 @@ class MainActivity : Activity() {
         runningCountdownPanel = null
         runningActiveContent = null
         runningPauseButton = null
+        historyScrollTarget = null
         updateSessionWakeLock()
 
         val page = LinearLayout(this)
@@ -426,6 +442,13 @@ class MainActivity : Activity() {
         if (navigation != null) page.addView(navigation)
         applySystemBarInsets(page, root, navigation)
         setContentView(page)
+
+        historyScrollTarget?.let { target ->
+            scroll.post {
+                scroll.scrollTo(0, (target.top - dp(Mo2Spacing.Md)).coerceAtLeast(0))
+                requestedHistorySection = ""
+            }
+        }
 
         pendingRunSummary?.let { summary ->
             pendingRunSummary = null
@@ -1936,10 +1959,19 @@ class MainActivity : Activity() {
         val strengthActivities = strengthHistoryActivities(strengthLogs, strengthSessions)
         val runs = filteredRunHistory()
         root.addView(historyTypeSelectorPanel())
+        root.addView(historyCalendarPanel())
         root.addView(historyAdvancedFiltersButton())
         if (prefs.getBoolean("history_filters_open", false)) root.addView(historyFilterPanel())
         root.addView(historyMetricsPanel(strengthLogs, strengthActivities, runs))
-        root.addView(historyActivityPanel(strengthActivities, runs))
+        val trendPanel = historyTrendPanel(strengthLogs, runs)
+        root.addView(trendPanel)
+        if (requestedHistorySection == "trend") historyScrollTarget = trendPanel
+        val recordsPanel = historyPersonalRecordsPanel()
+        root.addView(recordsPanel)
+        if (requestedHistorySection == "records") historyScrollTarget = recordsPanel
+        val activityPanel = historyActivityPanel(strengthActivities, runs)
+        root.addView(activityPanel)
+        if (requestedHistorySection == "activity") historyScrollTarget = activityPanel
         if (strengthLogs.isNotEmpty()) root.addView(exerciseEvolutionPanel(strengthLogs))
 
         val export = actionButton("Copiar exportacao completa", green, bg)
@@ -1958,6 +1990,9 @@ class MainActivity : Activity() {
         ).forEachIndexed { index, item ->
             val active = selected == item.first
             val button = actionButton(item.second, if (active) green else surface2, if (active) bg else white)
+            button.textSize = 14f
+            button.isSingleLine = true
+            button.setPadding(dp(4), 0, dp(4), 0)
             button.setOnClickListener {
                 prefs.edit().putString("history_type", item.first).apply()
                 render()
@@ -1967,6 +2002,285 @@ class MainActivity : Activity() {
             box.addView(button, params)
         }
         return box
+    }
+
+    private fun historyCalendarPanel(): View {
+        val month = historyCalendarMonth()
+        val monthKey = SimpleDateFormat("yyyy-MM", Locale.US).format(month.time)
+        val locale = Locale("pt", "BR")
+        val rawTitle = SimpleDateFormat("MMMM yyyy", locale).format(month.time)
+        val monthTitle = rawTitle.substring(0, 1).uppercase(locale) + rawTitle.substring(1)
+        val selectedDay = prefs.getString("history_calendar_day", "").orEmpty()
+        val today = dayKey()
+        val activities = historyCalendarActivities()
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("CALENDARIO DE ATIVIDADES", green, 13f, true))
+
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+        val previous = actionButton("<", surface, white)
+        previous.contentDescription = "Mes anterior"
+        previous.setOnClickListener { shiftHistoryCalendarMonth(-1) }
+        header.addView(previous, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val title = label(monthTitle, white, 20f, true)
+        title.gravity = Gravity.CENTER
+        header.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val next = actionButton(">", surface, white)
+        next.contentDescription = "Proximo mes"
+        next.setOnClickListener { shiftHistoryCalendarMonth(1) }
+        header.addView(next, LinearLayout.LayoutParams(dp(48), dp(48)))
+        box.addView(spacedRow(header))
+
+        val weekdays = LinearLayout(this)
+        weekdays.orientation = LinearLayout.HORIZONTAL
+        listOf("Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom").forEach { weekday ->
+            val view = label(weekday, muted, 11f, true)
+            view.gravity = Gravity.CENTER
+            weekdays.addView(view, LinearLayout.LayoutParams(0, dp(30), 1f))
+        }
+        box.addView(weekdays)
+
+        val firstDayOffset = (month.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        val daysInMonth = month.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        repeat(6) { rowIndex ->
+            val week = LinearLayout(this)
+            week.orientation = LinearLayout.HORIZONTAL
+            repeat(7) { columnIndex ->
+                val dayNumber = rowIndex * 7 + columnIndex - firstDayOffset + 1
+                if (dayNumber in 1..daysInMonth) {
+                    val dayCalendar = month.clone() as Calendar
+                    dayCalendar.set(Calendar.DAY_OF_MONTH, dayNumber)
+                    val dateKey = formatter.format(dayCalendar.time)
+                    val cell = historyCalendarDayCell(
+                        dayNumber = dayNumber,
+                        dateKey = dateKey,
+                        summary = activities[dateKey] ?: HistoryCalendarSummary(),
+                        selected = selectedDay == dateKey,
+                        today = today == dateKey,
+                    )
+                    week.addView(cell, LinearLayout.LayoutParams(0, dp(52), 1f))
+                } else {
+                    week.addView(View(this), LinearLayout.LayoutParams(0, dp(52), 1f))
+                }
+            }
+            box.addView(week)
+        }
+
+        val monthActivities = activities.filterKeys { it.startsWith(monthKey) }.values
+        val monthMetrics = LinearLayout(this)
+        monthMetrics.orientation = LinearLayout.HORIZONTAL
+        monthMetrics.addView(
+            compactMetric("Treinos", monthActivities.sumOf { it.strengthWorkouts }.toString()),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        monthMetrics.addView(
+            compactMetric("Corridas", monthActivities.sumOf { it.runs }.toString()),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        monthMetrics.addView(
+            compactMetric("Distancia", formatKm(monthActivities.sumOf { it.runningDistance })),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        box.addView(spacedRow(monthMetrics))
+
+        box.addView(label("PERIODO RAPIDO", muted, 12f, true))
+        val periods = LinearLayout(this)
+        periods.orientation = LinearLayout.HORIZONTAL
+        listOf(Pair(30, "30 dias"), Pair(90, "90 dias"), Pair(0, "Tudo")).forEachIndexed { index, period ->
+            val days = period.first.takeIf { it > 0 }
+            val active = historyQuickPeriodActive(days)
+            val button = actionButton(period.second, if (active) green else surface, if (active) bg else white)
+            button.setOnClickListener { applyHistoryQuickPeriod(days) }
+            val params = LinearLayout.LayoutParams(0, dp(48), 1f)
+            params.setMargins(if (index == 0) 0 else dp(6), dp(8), 0, 0)
+            periods.addView(button, params)
+        }
+        box.addView(periods)
+
+        val calendarActions = LinearLayout(this)
+        calendarActions.orientation = LinearLayout.HORIZONTAL
+        val currentMonth = actionButton("Mes atual", surface, white)
+        currentMonth.setOnClickListener { showCurrentHistoryMonth() }
+        calendarActions.addView(currentMonth, LinearLayout.LayoutParams(0, dp(48), 1f))
+        if (selectedDay.isNotBlank()) {
+            val clearDay = actionButton("Limpar dia", surface, muted)
+            clearDay.setOnClickListener { clearHistoryCalendarDay() }
+            calendarActions.addView(clearDay, LinearLayout.LayoutParams(0, dp(48), 1f))
+            box.addView(label("Dia selecionado: " + selectedDay, green, 13f, true))
+        }
+        box.addView(spacedRow(calendarActions))
+        box.addView(label("Verde indica musculacao; azul indica corrida. Toque em um dia para filtrar.", muted, 12f, false))
+        return box
+    }
+
+    private fun historyCalendarDayCell(
+        dayNumber: Int,
+        dateKey: String,
+        summary: HistoryCalendarSummary,
+        selected: Boolean,
+        today: Boolean,
+    ): View {
+        val cell = LinearLayout(this)
+        cell.orientation = LinearLayout.VERTICAL
+        cell.gravity = Gravity.CENTER
+        cell.setPadding(dp(2), dp(3), dp(2), dp(3))
+        cell.background = rounded(
+            if (selected) surface else if (today) surface2 else surface3,
+            dp(Mo2Radius.Sm),
+            if (selected) green else if (today) border else null,
+        )
+        cell.isClickable = true
+        cell.isFocusable = true
+
+        val number = label(dayNumber.toString(), if (selected || today) green else white, 13f, selected || today)
+        number.gravity = Gravity.CENTER
+        cell.addView(number, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        val markers = LinearLayout(this)
+        markers.orientation = LinearLayout.HORIZONTAL
+        markers.gravity = Gravity.CENTER
+        if (summary.strengthWorkouts > 0) {
+            val marker = View(this)
+            marker.background = rounded(green, dp(Mo2Radius.Pill))
+            markers.addView(marker, LinearLayout.LayoutParams(dp(6), dp(6)))
+        }
+        if (summary.runs > 0) {
+            val marker = View(this)
+            marker.background = rounded(Mo2Colors.Running, dp(Mo2Radius.Pill))
+            val params = LinearLayout.LayoutParams(dp(6), dp(6))
+            params.setMargins(if (summary.strengthWorkouts > 0) dp(3) else 0, 0, 0, 0)
+            markers.addView(marker, params)
+        }
+        cell.addView(markers, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(9)))
+
+        cell.contentDescription = dateKey + ", " + summary.strengthWorkouts + " treinos de musculacao, " +
+            summary.runs + " corridas"
+        cell.setOnClickListener { selectHistoryCalendarDay(dateKey) }
+        return cell
+    }
+
+    private fun historyCalendarActivities(): Map<String, HistoryCalendarSummary> {
+        val selectedType = prefs.getString("history_type", "all") ?: "all"
+        val result = linkedMapOf<String, HistoryCalendarSummary>()
+        if (selectedType != "run") {
+            val workoutKeys = linkedSetOf<String>()
+            val sets = allLogs()
+            for (index in 0 until sets.length()) {
+                val item = sets.getJSONObject(index)
+                val day = item.optString("day")
+                if (!isValidHistoryDay(day)) continue
+                val summary = result.getOrPut(day) { HistoryCalendarSummary() }
+                summary.strengthSets += 1
+                workoutKeys.add(strengthHistoryKey(day, item.optString("plan", "Treino")))
+            }
+            val sessions = strengthSessionLogs()
+            for (index in 0 until sessions.length()) {
+                val item = sessions.getJSONObject(index)
+                val day = item.optString("day")
+                if (!isValidHistoryDay(day)) continue
+                workoutKeys.add(strengthHistoryKey(day, item.optString("plan_title", "Treino")))
+            }
+            workoutKeys.forEach { key ->
+                val day = key.substringBefore("::")
+                result.getOrPut(day) { HistoryCalendarSummary() }.strengthWorkouts += 1
+            }
+        }
+        if (selectedType != "strength") {
+            val runs = runLogs()
+            for (index in 0 until runs.length()) {
+                val item = runs.getJSONObject(index)
+                val day = item.optString("day")
+                if (!isValidHistoryDay(day)) continue
+                val summary = result.getOrPut(day) { HistoryCalendarSummary() }
+                summary.runs += 1
+                summary.runningDistance += item.optDouble("distance")
+            }
+        }
+        return result
+    }
+
+    private fun historyCalendarMonth(): Calendar {
+        val stored = prefs.getString("history_calendar_month", "").orEmpty()
+        val parser = SimpleDateFormat("yyyy-MM", Locale.US)
+        parser.isLenient = false
+        val calendar = Calendar.getInstance()
+        val parsed = try {
+            if (stored.isBlank()) null else parser.parse(stored)
+        } catch (_: Exception) {
+            null
+        }
+        if (parsed != null) calendar.time = parsed
+        calendar.set(Calendar.DAY_OF_MONTH, 1)
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return calendar
+    }
+
+    private fun shiftHistoryCalendarMonth(delta: Int) {
+        val month = historyCalendarMonth()
+        month.add(Calendar.MONTH, delta)
+        prefs.edit()
+            .putString("history_calendar_month", SimpleDateFormat("yyyy-MM", Locale.US).format(month.time))
+            .apply()
+        render()
+    }
+
+    private fun showCurrentHistoryMonth() {
+        prefs.edit()
+            .putString("history_calendar_month", SimpleDateFormat("yyyy-MM", Locale.US).format(Date()))
+            .apply()
+        render()
+    }
+
+    private fun selectHistoryCalendarDay(day: String) {
+        prefs.edit()
+            .putString("history_calendar_day", day)
+            .putString("history_calendar_month", day.take(7))
+            .putString("history_from", day)
+            .putString("history_to", day)
+            .apply()
+        render()
+    }
+
+    private fun clearHistoryCalendarDay() {
+        val selected = prefs.getString("history_calendar_day", "").orEmpty()
+        val editor = prefs.edit().remove("history_calendar_day")
+        if (prefs.getString("history_from", "") == selected && prefs.getString("history_to", "") == selected) {
+            editor.remove("history_from").remove("history_to")
+        }
+        editor.apply()
+        render()
+    }
+
+    private fun historyQuickPeriodActive(days: Int?): Boolean {
+        if (prefs.getString("history_calendar_day", "").orEmpty().isNotBlank()) return false
+        val from = prefs.getString("history_from", "").orEmpty()
+        val to = prefs.getString("history_to", "").orEmpty()
+        if (days == null) return from.isBlank() && to.isBlank()
+        return from == historyDateOffset(-(days - 1)) && to == dayKey()
+    }
+
+    private fun applyHistoryQuickPeriod(days: Int?) {
+        val editor = prefs.edit().remove("history_calendar_day")
+        if (days == null) {
+            editor.remove("history_from").remove("history_to")
+        } else {
+            editor.putString("history_from", historyDateOffset(-(days - 1))).putString("history_to", dayKey())
+        }
+        editor.apply()
+        render()
+    }
+
+    private fun historyDateOffset(days: Int): String {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, days)
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(calendar.time)
     }
 
     private fun historyAdvancedFiltersButton(): View {
@@ -1995,10 +2309,22 @@ class MainActivity : Activity() {
         val apply = actionButton("Aplicar", green, bg)
         apply.setOnClickListener {
             hideKeyboard()
+            val fromValue = from.textValue().trim()
+            val toValue = to.textValue().trim()
+            if ((fromValue.isNotBlank() && !isValidHistoryDay(fromValue)) ||
+                (toValue.isNotBlank() && !isValidHistoryDay(toValue))) {
+                Toast.makeText(this, "Use datas validas no formato yyyy-mm-dd.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (fromValue.isNotBlank() && toValue.isNotBlank() && fromValue > toValue) {
+                Toast.makeText(this, "A data inicial deve vir antes da data final.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             prefs.edit()
-                .putString("history_from", from.textValue().trim())
-                .putString("history_to", to.textValue().trim())
+                .putString("history_from", fromValue)
+                .putString("history_to", toValue)
                 .putString("history_query", query.textValue().trim())
+                .remove("history_calendar_day")
                 .apply()
             render()
         }
@@ -2010,6 +2336,7 @@ class MainActivity : Activity() {
                 .remove("history_from")
                 .remove("history_to")
                 .remove("history_query")
+                .remove("history_calendar_day")
                 .putString("history_type", "all")
                 .apply()
             render()
@@ -2047,6 +2374,269 @@ class MainActivity : Activity() {
         if (bestLoad > 0.0) box.addView(label("Maior carga no filtro: " + formatLoad(bestLoad), muted, 13f, false))
         return box
     }
+
+    private fun historyTrendPanel(
+        strengthLogs: List<JSONObject>,
+        runs: List<JSONObject>,
+    ): View {
+        val points = historyWeekPoints(strengthLogs, runs)
+        val selectedType = prefs.getString("history_type", "all") ?: "all"
+        val box = card(surface2)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("EVOLUCAO EM 8 SEMANAS", green, 13f, true))
+        box.addView(label("Volume e distancia acompanham os filtros ativos.", muted, 13f, false))
+
+        val legend = LinearLayout(this)
+        legend.orientation = LinearLayout.HORIZONTAL
+        if (selectedType != "run") {
+            legend.addView(
+                historyLegendItem("Volume de musculacao", green),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+        if (selectedType != "strength") {
+            legend.addView(
+                historyLegendItem("Distancia corrida", Mo2Colors.Running),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+        }
+        box.addView(spacedRow(legend))
+
+        val chart = Mo2HistoryChartView(this, points)
+        val chartParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210))
+        chartParams.setMargins(0, dp(8), 0, dp(8))
+        box.addView(chart, chartParams)
+
+        val maxVolume = points.maxOfOrNull { it.strengthVolume } ?: 0.0
+        val maxDistance = points.maxOfOrNull { it.runningDistance } ?: 0.0
+        val scaleParts = mutableListOf<String>()
+        if (selectedType != "run") scaleParts.add("volume ate " + maxVolume.roundToInt() + " kg")
+        if (selectedType != "strength") scaleParts.add("corrida ate " + formatKm(maxDistance))
+        box.addView(label("Escalas independentes: " + scaleParts.joinToString(" | "), muted, 12f, false))
+
+        val current = points.lastOrNull()
+        val previous = points.getOrNull(points.lastIndex - 1)
+        if (current != null && previous != null) {
+            if (selectedType != "run") {
+                box.addView(historyTrendComparison("Musculacao", current.strengthVolume, previous.strengthVolume, true, green))
+            }
+            if (selectedType != "strength") {
+                box.addView(historyTrendComparison("Corrida", current.runningDistance, previous.runningDistance, false, Mo2Colors.Running))
+            }
+        }
+        return box
+    }
+
+    private fun historyLegendItem(text: String, color: Int): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val swatch = View(this)
+        swatch.background = rounded(color, dp(Mo2Radius.Pill))
+        row.addView(swatch, LinearLayout.LayoutParams(dp(10), dp(10)))
+        val title = label(text, white, 12f, true)
+        title.setPadding(dp(6), 0, 0, 0)
+        row.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        return row
+    }
+
+    private fun historyTrendComparison(
+        title: String,
+        current: Double,
+        previous: Double,
+        volume: Boolean,
+        color: Int,
+    ): TextView {
+        val currentText = if (volume) current.roundToInt().toString() + " kg" else formatKm(current)
+        val change = when {
+            current <= 0.0 && previous <= 0.0 -> "sem registro nesta semana"
+            previous <= 0.0 -> "novo registro nesta semana"
+            else -> {
+                val percent = (((current - previous) / previous) * 100.0).roundToInt()
+                (if (percent > 0) "+" else "") + percent + "% contra a semana anterior"
+            }
+        }
+        return label(title + ": " + currentText + " | " + change, color, 13f, true)
+    }
+
+    private fun historyWeekPoints(
+        strengthLogs: List<JSONObject>,
+        runs: List<JSONObject>,
+    ): List<Mo2HistoryPoint> {
+        val monday = Calendar.getInstance()
+        monday.set(Calendar.HOUR_OF_DAY, 0)
+        monday.set(Calendar.MINUTE, 0)
+        monday.set(Calendar.SECOND, 0)
+        monday.set(Calendar.MILLISECOND, 0)
+        monday.add(Calendar.DAY_OF_YEAR, -((monday.get(Calendar.DAY_OF_WEEK) + 5) % 7))
+        val dayFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val labelFormatter = SimpleDateFormat("dd/MM", Locale("pt", "BR"))
+
+        return (7 downTo 0).map { weeksAgo ->
+            val start = monday.clone() as Calendar
+            start.add(Calendar.DAY_OF_YEAR, -weeksAgo * 7)
+            val end = start.clone() as Calendar
+            end.add(Calendar.DAY_OF_YEAR, 6)
+            val from = dayFormatter.format(start.time)
+            val to = dayFormatter.format(end.time)
+            val volume = strengthLogs
+                    .filter { item ->
+                        item.optString("day").let { day -> day >= from && day <= to }
+                    }
+                .sumOf { it.optDouble("load") * it.optInt("reps") }
+            val distance = runs
+                .filter { it.optString("day") in from..to }
+                .sumOf { it.optDouble("distance") }
+            Mo2HistoryPoint(labelFormatter.format(start.time), volume, distance)
+        }
+    }
+
+    private fun historyPersonalRecordsPanel(): View {
+        val selectedType = prefs.getString("history_type", "all") ?: "all"
+        val strengthLogs = historyJsonItems(allLogs()).filter { it.optDouble("load") > 0.0 && it.optInt("reps") > 0 }
+        val runs = historyJsonItems(runLogs()).filter { it.optDouble("distance") > 0.0 }
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("RECORDES PESSOAIS", green, 13f, true))
+        box.addView(label("Melhores marcas de todo o historico, sem limitar pelo periodo selecionado.", muted, 13f, false))
+
+        var hasRecord = false
+        if (selectedType != "run" && strengthLogs.isNotEmpty()) {
+            hasRecord = true
+            val maxLoad = strengthLogs.maxByOrNull { it.optDouble("load") }
+            val bestEstimated = strengthLogs.maxByOrNull { estimatedOneRepMax(it) }
+            if (maxLoad != null) {
+                box.addView(historyRecordRow(
+                    title = "Maior carga",
+                    value = formatLoad(maxLoad.optDouble("load")),
+                    detail = maxLoad.optString("exercise", "Exercicio") + " | " + maxLoad.optInt("reps") + " reps | " + maxLoad.optString("day"),
+                    color = green,
+                ))
+            }
+            if (bestEstimated != null) {
+                box.addView(historyRecordRow(
+                    title = "Melhor e1RM estimado",
+                    value = formatLoad(estimatedOneRepMax(bestEstimated)),
+                    detail = bestEstimated.optString("exercise", "Exercicio") + " | formula de Epley pela melhor serie",
+                    color = green,
+                ))
+            }
+
+            box.addView(label("MELHORES POR EXERCICIO", muted, 12f, true))
+            strengthLogs
+                .groupBy { it.optString("exercise", "Exercicio") }
+                .mapValues { entry -> entry.value.maxByOrNull { estimatedOneRepMax(it) }!! }
+                .entries
+                .sortedByDescending { estimatedOneRepMax(it.value) }
+                .take(5)
+                .forEach { entry ->
+                    val item = entry.value
+                    box.addView(label(
+                        entry.key + ": e1RM " + formatLoad(estimatedOneRepMax(item)) +
+                            " | serie " + formatLoad(item.optDouble("load")) + " x " + item.optInt("reps"),
+                        white,
+                        13f,
+                        true,
+                    ))
+                }
+        }
+
+        if (selectedType != "strength" && runs.isNotEmpty()) {
+            hasRecord = true
+            val longest = runs.maxByOrNull { it.optDouble("distance") }
+            val fastest = runs
+                .filter { it.optDouble("distance") >= 1.0 && historyRunPaceSeconds(it) > 0L }
+                .minByOrNull { historyRunPaceSeconds(it) }
+            if (longest != null) {
+                box.addView(historyRecordRow(
+                    title = "Corrida mais longa",
+                    value = formatKm(longest.optDouble("distance")),
+                    detail = longest.optString("workout_title", "Corrida") + " | " + longest.optString("day"),
+                    color = Mo2Colors.Running,
+                ))
+            }
+            if (fastest != null) {
+                box.addView(historyRecordRow(
+                    title = "Melhor ritmo (minimo 1 km)",
+                    value = formatPaceSeconds(historyRunPaceSeconds(fastest)),
+                    detail = formatKm(fastest.optDouble("distance")) + " | " + fastest.optString("day"),
+                    color = Mo2Colors.Running,
+                ))
+            } else if (runs.any { it.optDouble("distance") >= 1.0 }) {
+                box.addView(label(
+                    "Melhor ritmo indisponivel: o registro precisa ter duracao ou velocidade plausivel.",
+                    muted,
+                    13f,
+                    false,
+                ))
+            }
+        }
+
+        if (!hasRecord) {
+            box.addView(label("Registre cargas ou corridas para liberar seus recordes pessoais.", muted, 14f, false))
+        }
+        return box
+    }
+
+    private fun historyRecordRow(
+        title: String,
+        value: String,
+        detail: String,
+        color: Int,
+    ): View {
+        val wrap = LinearLayout(this)
+        wrap.orientation = LinearLayout.VERTICAL
+        wrap.setPadding(0, dp(10), 0, dp(8))
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val marker = View(this)
+        marker.background = rounded(color, dp(Mo2Radius.Pill))
+        row.addView(marker, LinearLayout.LayoutParams(dp(4), dp(54)))
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.setPadding(dp(10), 0, dp(8), 0)
+        text.addView(label(title, white, 15f, true))
+        text.addView(label(detail, muted, 12f, false))
+        row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val valueView = label(value, color, 18f, true)
+        valueView.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        row.addView(valueView)
+        wrap.addView(row)
+        val divider = View(this)
+        divider.setBackgroundColor(border)
+        val dividerParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
+        dividerParams.setMargins(dp(14), dp(8), 0, 0)
+        wrap.addView(divider, dividerParams)
+        return wrap
+    }
+
+    private fun historyJsonItems(items: JSONArray): List<JSONObject> {
+        return (0 until items.length()).map { index -> items.getJSONObject(index) }
+    }
+
+    private fun estimatedOneRepMax(item: JSONObject): Double {
+        val load = item.optDouble("load")
+        val reps = item.optInt("reps").coerceIn(1, 30)
+        return load * (1.0 + reps / 30.0)
+    }
+
+    private fun historyRunPaceSeconds(item: JSONObject): Long {
+        val stored = item.optLong("pace_seconds_per_km", 0L)
+        if (isPlausibleRunningPace(stored)) return stored
+        val distance = item.optDouble("distance")
+        val seconds = item.optLong("duration_seconds", 0L).takeIf { it > 0L }
+            ?: parseHistoryDurationSeconds(item.optString("duration"))
+        if (distance > 0.0 && seconds > 0L) {
+            val calculated = (seconds.toDouble() / distance).roundToInt().toLong()
+            if (isPlausibleRunningPace(calculated)) return calculated
+        }
+        val speed = item.optDouble("speed")
+        val speedPace = if (speed > 0.0) (3600.0 / speed).roundToInt().toLong() else 0L
+        return speedPace.takeIf(::isPlausibleRunningPace) ?: 0L
+    }
+
+    private fun isPlausibleRunningPace(secondsPerKm: Long): Boolean = secondsPerKm in 120L..1800L
 
     private fun exerciseEvolutionPanel(strengthLogs: List<JSONObject>): View {
         val box = card(surface2)
@@ -5748,7 +6338,7 @@ class MainActivity : Activity() {
             "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
             "plan_editor" -> "Edite seu plano pessoal de musculacao e corrida direto no celular."
             "exercises" -> "Catalogo completo com busca, midia por link, favoritos e alternativas."
-            "history" -> "Filtros, metricas e evolucao por exercicio dos registros locais."
+            "history" -> "Calendario, recordes, graficos e edicao completa dos registros locais."
             "stats" -> "Indicadores de volume, frequencia e melhores cargas."
             "goals" -> "Metas semanais para manter treino e corrida em movimento."
             "coach" -> "Leitura simples do seu momento para ajustar a proxima sessao."

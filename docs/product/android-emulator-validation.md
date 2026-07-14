@@ -51,6 +51,11 @@ Quando houver emulador e celular conectados ao mesmo tempo, passe `-s SERIAL` no
 - O descanso nao duplica e emite o aviso ao terminar.
 - Uma corrida abre o countdown, atualiza velocidade/tempo e preserva a etapa ativa.
 - O Historico agrupa o treino do dia e permite editar series, corridas e velocidades das etapas.
+- O calendario do Historico troca de mes, marca musculacao/corrida e filtra o dia tocado.
+- Os atalhos de 30 dias, 90 dias e Tudo atualizam resumo, grafico e lista de atividades.
+- Datas invalidas ou com inicio posterior ao fim nao sao aplicadas.
+- Recordes pessoais mostram somente dados reais e identificam e1RM como estimativa.
+- O grafico de oito semanas exibe barras verdes para volume e azuis para distancia.
 - O Perfil exporta um JSON e a versao exibida corresponde ao APK instalado.
 - A interface nao corta textos em uma tela de aproximadamente 390 x 844.
 
@@ -65,6 +70,21 @@ Limpe os logs antes de abrir o app:
 ```
 
 Procure por `FATAL EXCEPTION`, `ANR` ou falha ao iniciar `br.com.mo2log.mobile.MainActivity`.
+
+Para abrir diretamente o Historico durante a validacao:
+
+```powershell
+& $adb -s emulator-5554 shell am force-stop br.com.mo2log.mobile
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab history
+```
+
+Os painéis inferiores também podem ser abertos sem alterar filtros ou preferências:
+
+```powershell
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab history --es section trend
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab history --es section records
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab history --es section activity
+```
 
 ## Aparelho fisico
 

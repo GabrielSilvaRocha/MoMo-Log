@@ -56,6 +56,7 @@ app/src/main/java/br/com/mo2log/mobile/
     |-- Mo2Components.kt
     |-- Mo2DesignTokens.kt
     |-- Mo2Drawables.kt
+    |-- Mo2HistoryChartView.kt
     `-- Mo2NavIconView.kt
 ```
 
@@ -71,3 +72,11 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Substitui marcadores genericos do menu inferior por icones Android nativos e acessiveis.
 - Mantem a navegacao acima da barra do sistema e melhora o comportamento do botao Voltar.
 - Separa a versao do APK da versao do plano para preservar o ponto atual do treino em releases visuais.
+
+## v10.3.0
+
+- Historico inclui calendario mensal, filtros de 30/90 dias e selecao por dia.
+- Recordes pessoais consolidam cargas, e1RM estimado, distancia e pace.
+- Registros com pace impossivel sao sinalizados e nao entram nos recordes pessoais.
+- Grafico nativo mostra oito semanas de volume de musculacao e corrida.
+- Nenhuma migracao destrutiva e necessaria; backups anteriores continuam aceitos.
