@@ -80,3 +80,12 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Registros com pace impossivel sao sinalizados e nao entram nos recordes pessoais.
 - Grafico nativo mostra oito semanas de volume de musculacao e corrida.
 - Nenhuma migracao destrutiva e necessaria; backups anteriores continuam aceitos.
+
+## v10.4.0
+
+- Previsao de 5 km combina corridas validas, meta pessoal, confianca e tendencia recente.
+- Sem amostras reais, o app mostra uma referencia inicial baseada no treino de ritmo da semana.
+- Coach adaptativo usa RPE, prontidao, consistencia e evolucao prevista antes de sugerir alteracoes.
+- Distancia semanal usa os quilometros registrados em cada corrida concluida.
+- Voz pode ser desativada, testada ou repetida durante a corrida e inclui alertas em 30 e 10 segundos.
+- Registros com duracao impossivel permanecem salvos, mas nao contaminam previsoes ou recomendacoes.

@@ -4,14 +4,13 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v10.3.0.
+- Android nativo pessoal: v10.4.0.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v10.4.0 - Corrida adaptativa com previsao de 5 km e refinamento dos comandos de voz.
 - v10.5.0 - Progressao de musculacao, deload e volume por grupo muscular.
 - v10.6.0 - Personalizacao por equipamentos, favoritos, alternativas e exercicios proprios.
 - v10.7.0 - Integracao opcional com Android Health Connect.
@@ -413,3 +412,16 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Recordes usam todo o historico; resumo, grafico e atividades continuam reagindo aos filtros ativos.
 - A estrutura dos dados pessoais permanece inalterada e compativel com os backups existentes.
 - O app Android passa para versionCode 1030 / versionName 10.3.0.
+
+## v10.4.0 - Corrida adaptativa e previsao de 5 km
+
+- Corrida ganha previsao de 5 km com meta editavel, pace, velocidade, confianca e tendencia.
+- A previsao usa corridas reais com ritmo plausivel e recorre ao bloco de ritmo do plano enquanto faltam amostras.
+- Coach de ritmo passa a considerar consistencia semanal, RPE, prontidao e tendencia da previsao.
+- Corridas marcadas manualmente e registros de teste com ritmo impossivel nao alteram a adaptacao automatica.
+- Resumo semanal passa a somar a distancia realmente salva, em vez da distancia total planejada do treino.
+- Comandos de voz ganham controle liga/desliga, teste, repeticao da instrucao e aviso opcional aos 10 segundos.
+- Voz anuncia inicio, 30 segundos, 10 segundos, troca de etapa, velocidade ajustada, pausa, retomada e conclusao.
+- Numeros de distancia e velocidade passam a ser pronunciados em portugues brasileiro.
+- Meta e configuracoes de voz usam preferencias aditivas e continuam protegidas pelo backup JSON atual.
+- O app Android passa para versionCode 1040 / versionName 10.4.0.

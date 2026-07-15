@@ -50,6 +50,13 @@ Quando houver emulador e celular conectados ao mesmo tempo, passe `-s SERIAL` no
 - Uma serie pode ser marcada, editada e mantida apos fechar e abrir o app.
 - O descanso nao duplica e emite o aviso ao terminar.
 - Uma corrida abre o countdown, atualiza velocidade/tempo e preserva a etapa ativa.
+- A previsao de 5 km mostra tempo, pace, velocidade, confianca, meta e tendencia sem aceitar ritmos impossiveis.
+- Sem corridas validas, a previsao deixa claro que usa a referencia inicial do bloco de ritmo.
+- A meta de 5 km aceita valores entre 15 minutos e 2 horas e permanece apos reiniciar o app.
+- O Coach de Ritmo ignora corridas marcadas manualmente e registros de teste fora da faixa plausivel.
+- Voz pode ser ativada, desativada e testada; o botao Repetir instrucao funciona durante a corrida.
+- Os avisos de voz ocorrem no inicio, aos 30 segundos, opcionalmente aos 10 segundos e na troca de etapa.
+- Pausa, retomada, alteracao de velocidade e conclusao tambem emitem comandos sem sobrepor textos da tela.
 - O Historico agrupa o treino do dia e permite editar series, corridas e velocidades das etapas.
 - O calendario do Historico troca de mes, marca musculacao/corrida e filtra o dia tocado.
 - Os atalhos de 30 dias, 90 dias e Tudo atualizam resumo, grafico e lista de atividades.
@@ -76,6 +83,16 @@ Para abrir diretamente o Historico durante a validacao:
 ```powershell
 & $adb -s emulator-5554 shell am force-stop br.com.mo2log.mobile
 & $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab history
+```
+
+Para abrir diretamente a Corrida e inspecionar previsao, coach e voz:
+
+```powershell
+& $adb -s emulator-5554 shell am force-stop br.com.mo2log.mobile
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab running
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab running --es section forecast
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab running --es section coach
+& $adb -s emulator-5554 shell am start -n br.com.mo2log.mobile/.MainActivity --es tab running --es section voice
 ```
 
 Os painéis inferiores também podem ser abertos sem alterar filtros ou preferências:

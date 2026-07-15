@@ -5,10 +5,12 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -27,6 +29,7 @@ import android.view.animation.AlphaAnimation
 import android.view.animation.TranslateAnimation
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
@@ -53,6 +56,7 @@ import java.util.Locale
 import java.util.UUID
 import java.net.URL
 import kotlin.math.max
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 data class ExercisePlan(
@@ -126,6 +130,16 @@ data class RunningAdjustment(
     val distanceScale: Double,
     val headline: String,
     val reason: String,
+)
+
+data class RunningForecast(
+    val predictedSeconds: Long,
+    val goalSeconds: Long,
+    val sampleCount: Int,
+    val confidence: String,
+    val source: String,
+    val trendSeconds: Long?,
+    val usesMeasuredRuns: Boolean,
 )
 
 data class HistoryActivity(
@@ -303,8 +317,8 @@ class MainActivity : Activity() {
     private var runningActiveContent: View? = null
     private var runningPauseButton: Button? = null
     private var pendingRunSummary: JSONObject? = null
-    private var requestedHistorySection = ""
-    private var historyScrollTarget: View? = null
+    private var requestedSection = ""
+    private var pageScrollTarget: View? = null
     private val restTimerRunnable = object : Runnable {
         override fun run() {
             restTimerText?.let { view ->
@@ -335,7 +349,7 @@ class MainActivity : Activity() {
         val persistedTab = prefs.getString("current_tab", "home") ?: "home"
         val requestedTab = intent.getStringExtra("tab")?.takeIf { tab -> navItems.any { it.id == tab } }
         currentTab = requestedTab ?: persistedTab
-        requestedHistorySection = intent.getStringExtra("section").orEmpty()
+        requestedSection = intent.getStringExtra("section").orEmpty()
         syncTrainingPlanVersion()
         selectedPlanIndex = prefs.getInt("selected_plan", todayPlanIndex())
         selectedExerciseIndex = prefs.getInt("selected_exercise", 0)
@@ -398,7 +412,7 @@ class MainActivity : Activity() {
         runningCountdownPanel = null
         runningActiveContent = null
         runningPauseButton = null
-        historyScrollTarget = null
+        pageScrollTarget = null
         updateSessionWakeLock()
 
         val page = LinearLayout(this)
@@ -443,10 +457,16 @@ class MainActivity : Activity() {
         applySystemBarInsets(page, root, navigation)
         setContentView(page)
 
-        historyScrollTarget?.let { target ->
+        pageScrollTarget?.let { target ->
             scroll.post {
-                scroll.scrollTo(0, (target.top - dp(Mo2Spacing.Md)).coerceAtLeast(0))
-                requestedHistorySection = ""
+                var targetTop = target.top
+                var parent = target.parent
+                while (parent is View && parent !== root) {
+                    targetTop += parent.top
+                    parent = parent.parent
+                }
+                scroll.scrollTo(0, (targetTop - dp(Mo2Spacing.Md)).coerceAtLeast(0))
+                requestedSection = ""
             }
         }
 
@@ -1347,8 +1367,15 @@ class MainActivity : Activity() {
         root.addView(runningThisWeekPanel())
         root.addView(runningFullPlanButton())
         if (prefs.getBoolean("running_full_plan_open", false)) root.addView(runningFullPlanPanel())
-        root.addView(treadmillModePanel())
-        root.addView(runningSmartCoachPanel())
+        val treadmillPanel = treadmillModePanel()
+        root.addView(treadmillPanel)
+        if (requestedSection == "treadmill") pageScrollTarget = treadmillPanel
+        val coachPanel = runningSmartCoachPanel()
+        root.addView(coachPanel)
+        if (requestedSection == "coach") pageScrollTarget = coachPanel
+        val voicePanel = runningVoiceSettingsPanel()
+        root.addView(voicePanel)
+        if (requestedSection == "voice") pageScrollTarget = voicePanel
         root.addView(runningHistoryPanel())
     }
 
@@ -1369,6 +1396,140 @@ class MainActivity : Activity() {
         apply.setOnClickListener { applySmartRunningAdjustment(adjustment) }
         box.addView(buttonParams(apply))
         return box
+    }
+
+    private fun runningFiveKmForecastPanel(): View {
+        val forecast = runningFiveKmForecast()
+        val paceSeconds = (forecast.predictedSeconds.toDouble() / 5.0).roundToInt().toLong()
+        val predictedSpeed = 3600.0 / paceSeconds.coerceAtLeast(1L).toDouble()
+        val goalDelta = forecast.predictedSeconds - forecast.goalSeconds
+        val comparison = when {
+            kotlin.math.abs(goalDelta) <= 10L -> Pair("Projecao alinhada com a meta", green)
+            goalDelta > 0L -> Pair("Faltam " + formatDuration(goalDelta) + " para a meta", amber)
+            else -> Pair("Projecao " + formatDuration(-goalDelta) + " mais rapida que a meta", green)
+        }
+        val trend = forecast.trendSeconds?.let { seconds ->
+            when {
+                seconds <= -10L -> "Tendencia: melhora de " + formatDuration(-seconds)
+                seconds >= 10L -> "Tendencia: piora de " + formatDuration(seconds)
+                else -> "Tendencia: estavel"
+            }
+        } ?: "Tendencia: aguardando mais corridas validas"
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("PREVISAO 5 KM", Mo2Colors.Running, 13f, true))
+        box.addView(label(formatDuration(forecast.predictedSeconds), white, 34f, true))
+        box.addView(label(forecast.source, muted, 13f, false))
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(compactMetric("Pace", formatPaceSeconds(paceSeconds)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Velocidade", String.format(Locale("pt", "BR"), "%.1f", predictedSpeed)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Confianca", forecast.confidence), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+
+        box.addView(label("Meta: " + formatDuration(forecast.goalSeconds), white, 14f, true))
+        box.addView(label(comparison.first, comparison.second, 14f, true))
+        box.addView(label(trend, if ((forecast.trendSeconds ?: 0L) <= 0L) green else amber, 13f, false))
+
+        val goal = actionButton("Ajustar meta de 5 km", surface2, Mo2Colors.Running)
+        goal.setOnClickListener { showRunningGoalDialog() }
+        box.addView(buttonParams(goal))
+        return box
+    }
+
+    private fun showRunningGoalDialog() {
+        val currentGoal = prefs.getLong("running_goal_5k_seconds", 1800L).coerceIn(900L, 7200L)
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(14), dp(14), dp(14), dp(8))
+        content.addView(label("META DE 5 KM", Mo2Colors.Running, 13f, true))
+        content.addView(label("Tempo alvo", white, 23f, true))
+        val target = input("mm:ss ou hh:mm:ss", formatDuration(currentGoal))
+        content.addView(target)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Salvar", null)
+            .create()
+        dialog.setOnShowListener {
+            styleHistoryDialog(dialog, content)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val seconds = parseHistoryDurationSeconds(target.textValue())
+                if (seconds !in 900L..7200L) {
+                    Toast.makeText(this, "Defina uma meta entre 15 minutos e 2 horas.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                prefs.edit().putLong("running_goal_5k_seconds", seconds).apply()
+                dialog.dismiss()
+                render()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun runningVoiceSettingsPanel(): View {
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("COMANDOS DE VOZ", Mo2Colors.Running, 13f, true))
+        box.addView(label("Coach na esteira", white, 22f, true))
+
+        val tenSecondCue = runningVoiceCheckBox(
+            "Aviso adicional aos 10 segundos",
+            prefs.getBoolean("running_voice_10_seconds", true),
+        ) { checked ->
+            prefs.edit().putBoolean("running_voice_10_seconds", checked).apply()
+        }
+        val enabled = runningVoiceCheckBox(
+            "Avisos de voz durante a corrida",
+            isRunningVoiceEnabled(),
+        ) { checked ->
+            prefs.edit().putBoolean("running_voice_enabled", checked).apply()
+            tenSecondCue.isEnabled = checked
+            tenSecondCue.alpha = if (checked) 1f else 0.45f
+            if (!checked) voiceCoach?.stop()
+        }
+        tenSecondCue.isEnabled = enabled.isChecked
+        tenSecondCue.alpha = if (enabled.isChecked) 1f else 0.45f
+        box.addView(enabled)
+        box.addView(tenSecondCue)
+
+        val test = actionButton("Testar voz", surface2, Mo2Colors.Running)
+        test.setOnClickListener {
+            when {
+                !isRunningVoiceEnabled() -> Toast.makeText(this, "Ative os avisos de voz primeiro.", Toast.LENGTH_SHORT).show()
+                !voiceCoachReady -> Toast.makeText(this, "A voz do Android ainda nao esta pronta.", Toast.LENGTH_SHORT).show()
+                else -> speakRunCue("Comandos de voz ativos. Bom treino.", flush = true)
+            }
+        }
+        box.addView(buttonParams(test))
+        return box
+    }
+
+    private fun runningVoiceCheckBox(
+        text: String,
+        checked: Boolean,
+        onChanged: (Boolean) -> Unit,
+    ): CheckBox {
+        val checkBox = CheckBox(this)
+        checkBox.text = text
+        checkBox.isChecked = checked
+        checkBox.setTextColor(white)
+        checkBox.textSize = 15f
+        checkBox.gravity = Gravity.CENTER_VERTICAL
+        checkBox.minHeight = dp(48)
+        checkBox.buttonTintList = ColorStateList(
+            arrayOf(
+                intArrayOf(-android.R.attr.state_enabled),
+                intArrayOf(android.R.attr.state_checked),
+                intArrayOf(),
+            ),
+            intArrayOf(muted, Mo2Colors.Running, border),
+        )
+        checkBox.setOnCheckedChangeListener { _, isChecked -> onChanged(isChecked) }
+        return checkBox
     }
 
     private fun treadmillModePanel(): View {
@@ -1413,7 +1574,7 @@ class MainActivity : Activity() {
         val selected = workouts.firstOrNull { it.id == selectedRunId } ?: todayRunningWorkout() ?: workouts.first()
         selectedRunId = selected.id
         val completed = workouts.count { isRunWorkoutCompleted(it) }
-        val distanceDone = workouts.filter { isRunWorkoutCompleted(it) }.sumOf { totalRunDistance(it) }
+        val distanceDone = completedRunningDistance(workouts)
 
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
@@ -1436,6 +1597,9 @@ class MainActivity : Activity() {
         progressParams.setMargins(0, dp(14), 0, 0)
         overview.addView(progress, progressParams)
         box.addView(overview)
+        val forecastPanel = runningFiveKmForecastPanel()
+        box.addView(forecastPanel)
+        if (requestedSection == "forecast") pageScrollTarget = forecastPanel
 
         val listHeader = LinearLayout(this)
         listHeader.orientation = LinearLayout.VERTICAL
@@ -1591,6 +1755,7 @@ class MainActivity : Activity() {
 
         runningStageText = label("", Mo2Colors.Running, 15f, true)
         activeContent.addView(runningStageText)
+        activeContent.addView(activeRunVoiceControls(workout))
 
         val timeCard = card(surface2)
         timeCard.orientation = LinearLayout.VERTICAL
@@ -1675,6 +1840,24 @@ class MainActivity : Activity() {
         refreshRunningSessionViews()
         runningSessionHandler.post(runningSessionRunnable)
         return screen
+    }
+
+    private fun activeRunVoiceControls(workout: RunningWorkout): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val enabled = runningVoiceCheckBox("Voz", isRunningVoiceEnabled()) { checked ->
+            prefs.edit().putBoolean("running_voice_enabled", checked).apply()
+            if (!checked) voiceCoach?.stop()
+        }
+        row.addView(enabled, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val repeat = actionButton("Repetir instrucao", surface2, Mo2Colors.Running)
+        repeat.textSize = 14f
+        repeat.isSingleLine = true
+        repeat.setPadding(dp(4), 0, dp(4), 0)
+        repeat.setOnClickListener { repeatCurrentRunCue(workout) }
+        row.addView(repeat, LinearLayout.LayoutParams(0, dp(50), 1f))
+        return spacedRow(row)
     }
 
     private fun refreshRunningSessionViews() {
@@ -1965,13 +2148,13 @@ class MainActivity : Activity() {
         root.addView(historyMetricsPanel(strengthLogs, strengthActivities, runs))
         val trendPanel = historyTrendPanel(strengthLogs, runs)
         root.addView(trendPanel)
-        if (requestedHistorySection == "trend") historyScrollTarget = trendPanel
+        if (requestedSection == "trend") pageScrollTarget = trendPanel
         val recordsPanel = historyPersonalRecordsPanel()
         root.addView(recordsPanel)
-        if (requestedHistorySection == "records") historyScrollTarget = recordsPanel
+        if (requestedSection == "records") pageScrollTarget = recordsPanel
         val activityPanel = historyActivityPanel(strengthActivities, runs)
         root.addView(activityPanel)
-        if (requestedHistorySection == "activity") historyScrollTarget = activityPanel
+        if (requestedSection == "activity") pageScrollTarget = activityPanel
         if (strengthLogs.isNotEmpty()) root.addView(exerciseEvolutionPanel(strengthLogs))
 
         val export = actionButton("Copiar exportacao completa", green, bg)
@@ -2859,8 +3042,8 @@ class MainActivity : Activity() {
         top.addView(historyTypeBadge("CORRIDA", Mo2Colors.Running))
         box.addView(top)
 
-        val paceSeconds = item.optLong("pace_seconds_per_km", 0L)
-        val pace = if (paceSeconds > 0L) formatPaceSeconds(paceSeconds) else formatPaceForSpeed(item.optDouble("speed"))
+        val paceSeconds = historyRunPaceSeconds(item)
+        val pace = if (paceSeconds > 0L) formatPaceSeconds(paceSeconds) else "ritmo indisponivel"
         box.addView(label(
             formatKm(item.optDouble("distance")) + " | " + item.optString("duration", "-") + " | " + pace,
             Mo2Colors.Running,
@@ -3245,6 +3428,10 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Informe velocidade ou duracao valida.", Toast.LENGTH_SHORT).show()
             return false
         }
+        if (durationInput <= 0L && (speedInput == null || speedInput !in 1.0..30.0)) {
+            Toast.makeText(this, "Velocidade precisa estar entre 1 e 30 km/h.", Toast.LENGTH_SHORT).show()
+            return false
+        }
         if (rpeRaw.isNotBlank() && (rpe == null || rpe !in 1.0..10.0)) {
             Toast.makeText(this, "RPE precisa estar entre 1 e 10.", Toast.LENGTH_SHORT).show()
             return false
@@ -3255,8 +3442,16 @@ class MainActivity : Activity() {
         } else {
             ((distance / speedInput!!) * 3600.0).roundToInt().toLong().coerceAtLeast(1L)
         }
-        val speed = if (speedInput != null && speedInput > 0.0) speedInput else distance / (durationSeconds.toDouble() / 3600.0)
+        val speed = if (durationInput > 0L) {
+            distance / (durationSeconds.toDouble() / 3600.0)
+        } else {
+            speedInput!!
+        }
         val paceSeconds = (durationSeconds.toDouble() / distance).roundToInt().toLong()
+        if (!isPlausibleRunningPace(paceSeconds)) {
+            Toast.makeText(this, "A duracao precisa equivaler a um ritmo entre 2:00 e 30:00 por km.", Toast.LENGTH_SHORT).show()
+            return false
+        }
         val logs = runLogs()
         val index = findHistoryRecordIndex(logs, target, "run")
         if (index < 0) {
@@ -5088,7 +5283,9 @@ class MainActivity : Activity() {
             .putBoolean("running_active_paused", false)
             .putString("running_session_started_at", timestamp())
             .remove("running_active_pause_started_at")
+            .remove("running_start_announced")
             .remove("running_30_announced_key")
+            .remove("running_10_announced_key")
             .apply()
         Toast.makeText(this, "Timer de 5 segundos iniciado.", Toast.LENGTH_SHORT).show()
         render()
@@ -5101,14 +5298,22 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val countdownEndAt = prefs.getLong("running_countdown_end_at", 0L)
         if (countdownEndAt > now) return false
+        if (countdownEndAt > 0L) {
+            val alreadyAnnounced = prefs.getBoolean("running_start_announced", false)
+            prefs.edit()
+                .remove("running_countdown_end_at")
+                .putBoolean("running_start_announced", true)
+                .apply()
+            if (!alreadyAnnounced) {
+                speakRunCue("Comece. Primeira etapa: " + speakableStageCue(workout.stages.first()) + ".", flush = true)
+            }
+        }
         if (isActiveRunPaused()) return false
 
         var stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
         var distanceDone = prefs.getString("running_active_distance_done", "0.0")?.toDoubleOrNull() ?: 0.0
         val speed = currentActiveRunSpeed(workout)
         val lastTick = prefs.getLong("running_active_last_tick_at", if (countdownEndAt > 0L) countdownEndAt else now)
-        if (countdownEndAt > 0L && countdownEndAt <= now) prefs.edit().remove("running_countdown_end_at").apply()
-
         val elapsedMs = max(0L, now - lastTick)
         if (elapsedMs > 0L && speed > 0.0) {
             distanceDone += speed * (elapsedMs.toDouble() / 3600000.0)
@@ -5117,22 +5322,28 @@ class MainActivity : Activity() {
         while (stageIndex < workout.stages.size && distanceDone >= workout.stages[stageIndex].distanceKm) {
             distanceDone -= workout.stages[stageIndex].distanceKm
             stageIndex += 1
-            prefs.edit().remove("running_30_announced_key").apply()
+            prefs.edit()
+                .remove("running_30_announced_key")
+                .remove("running_10_announced_key")
+                .apply()
             if (stageIndex < workout.stages.size) {
                 prefs.edit().putString("running_active_speed", workout.stages[stageIndex].speedKmh.toString()).apply()
-                speakRunCue("Etapa concluida. A proxima etapa sera " + speakableStageCue(workout.stages[stageIndex]) + ".")
+                speakRunCue("Etapa concluida. Agora: " + speakableStageCue(workout.stages[stageIndex]) + ".", flush = true)
             }
         }
 
         if (stageIndex >= workout.stages.size) {
+            val elapsed = activeRunElapsedSeconds()
+            val distance = totalRunDistance(workout)
             val log = saveRunCompletion(
                 workout,
                 manual = false,
                 rerender = false,
-                distanceOverride = totalRunDistance(workout),
-                elapsedSecondsOverride = activeRunElapsedSeconds(),
+                distanceOverride = distance,
+                elapsedSecondsOverride = elapsed,
                 completedStagesOverride = workout.stages.size,
             )
+            if (log != null) announceRunCompletion(distance, elapsed, completed = true)
             clearActiveRun()
             if (log != null) pendingRunSummary = log
             return true
@@ -5163,6 +5374,7 @@ class MainActivity : Activity() {
             .putString("running_active_speed", speed.toString())
             .putString("running_active_stage_speeds", stageSpeeds.toString())
             .apply()
+        speakRunCue("Velocidade ajustada para " + speakableSpeed(speed) + ".", flush = true)
         refreshRunningSessionViews()
     }
 
@@ -5197,14 +5409,17 @@ class MainActivity : Activity() {
         }
         val currentStage = prefs.getInt("running_active_stage", 0)
         if (currentStage >= workout.stages.lastIndex) {
+            val elapsed = activeRunElapsedSeconds()
+            val distance = totalRunDistance(workout)
             val log = saveRunCompletion(
                 workout,
                 manual = false,
                 rerender = false,
-                distanceOverride = totalRunDistance(workout),
-                elapsedSecondsOverride = activeRunElapsedSeconds(),
+                distanceOverride = distance,
+                elapsedSecondsOverride = elapsed,
                 completedStagesOverride = workout.stages.size,
             )
+            if (log != null) announceRunCompletion(distance, elapsed, completed = true)
             clearActiveRun()
             if (log != null) pendingRunSummary = log
             render()
@@ -5217,8 +5432,9 @@ class MainActivity : Activity() {
             .putString("running_active_speed", workout.stages[nextStage].speedKmh.toString())
             .putLong("running_active_last_tick_at", System.currentTimeMillis())
             .remove("running_30_announced_key")
+            .remove("running_10_announced_key")
             .apply()
-        speakRunCue("Proxima etapa: " + speakableStageCue(workout.stages[nextStage]) + ".")
+        speakRunCue("Proxima etapa: " + speakableStageCue(workout.stages[nextStage]) + ".", flush = true)
         refreshRunningSessionViews()
     }
 
@@ -5235,7 +5451,7 @@ class MainActivity : Activity() {
                 .putLong("running_active_last_tick_at", now)
                 .remove("running_active_pause_started_at")
                 .apply()
-            speakRunCue("Treino retomado.")
+            speakRunCue("Treino retomado.", flush = true)
         } else {
             if (updateActiveRunProgress()) {
                 render()
@@ -5246,7 +5462,7 @@ class MainActivity : Activity() {
                 .putLong("running_active_pause_started_at", now)
                 .putLong("running_active_last_tick_at", now)
                 .apply()
-            speakRunCue("Treino pausado.")
+            speakRunCue("Treino pausado.", flush = true)
         }
         refreshRunningSessionViews()
         runningSessionHandler.removeCallbacks(runningSessionRunnable)
@@ -5259,14 +5475,17 @@ class MainActivity : Activity() {
             return
         }
         val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        val distance = activeRunCompletedDistance(workout)
+        val elapsed = activeRunElapsedSeconds()
         val log = saveRunCompletion(
             workout,
             manual = false,
             rerender = false,
-            distanceOverride = activeRunCompletedDistance(workout),
-            elapsedSecondsOverride = activeRunElapsedSeconds(),
+            distanceOverride = distance,
+            elapsedSecondsOverride = elapsed,
             completedStagesOverride = stageIndex,
         )
+        if (log != null) announceRunCompletion(distance, elapsed, completed = false)
         clearActiveRun()
         if (log != null) pendingRunSummary = log
         render()
@@ -5355,10 +5574,7 @@ class MainActivity : Activity() {
         val workout = runningWorkoutById(log.optString("run_workout_id"))
         val distance = log.optDouble("distance", 0.0)
         val seconds = log.optLong("duration_seconds", workout?.let { estimatedWorkoutSeconds(it) } ?: 0L)
-        val paceSeconds = log.optLong(
-            "pace_seconds_per_km",
-            if (distance <= 0.0) 0L else (seconds.toDouble() / distance).roundToInt().toLong(),
-        )
+        val paceSeconds = historyRunPaceSeconds(log)
         val completedStages = log.optInt("completed_stages", workout?.stages?.size ?: 0)
         val totalStages = log.optInt("total_stages", workout?.stages?.size ?: completedStages)
 
@@ -5375,7 +5591,7 @@ class MainActivity : Activity() {
             Mo2Colors.Running,
         ))
         content.addView(summaryMetricRow(
-            Triple("Pace", formatPaceSeconds(paceSeconds), "medio"),
+            Triple("Pace", if (paceSeconds > 0L) formatPaceSeconds(paceSeconds) else "-", "medio"),
             Triple("Etapas", completedStages.toString() + "/" + totalStages, "concluidas"),
             green,
         ))
@@ -5470,7 +5686,9 @@ class MainActivity : Activity() {
             .remove("running_active_pause_started_at")
             .remove("running_active_paused_total_ms")
             .remove("running_session_started_at")
+            .remove("running_start_announced")
             .remove("running_30_announced_key")
+            .remove("running_10_announced_key")
             .apply()
     }
 
@@ -5498,31 +5716,88 @@ class MainActivity : Activity() {
     }
 
     private fun announceRunTransitionIfNeeded(workout: RunningWorkout, stageIndex: Int, remainingSeconds: Long) {
-        if (remainingSeconds !in 1L..30L) return
         val key = workout.id + ":" + stageIndex
-        if (prefs.getString("running_30_announced_key", "") == key) return
-        val message = if (stageIndex < workout.stages.lastIndex) {
-            "Em 30 segundos, voce termina a etapa atual. A proxima etapa sera " + speakableStageCue(workout.stages[stageIndex + 1]) + "."
-        } else {
-            "Em 30 segundos, voce termina a etapa atual e conclui o treino."
+        if (remainingSeconds in 28L..30L && prefs.getString("running_30_announced_key", "") != key) {
+            val message = if (stageIndex < workout.stages.lastIndex) {
+                "Em 30 segundos, voce termina " + workout.stages[stageIndex].title + ". Depois: " +
+                    speakableStageCue(workout.stages[stageIndex + 1]) + "."
+            } else {
+                "Em 30 segundos, voce termina a ultima etapa e conclui o treino."
+            }
+            prefs.edit().putString("running_30_announced_key", key).apply()
+            speakRunCue(message, flush = true)
         }
-        prefs.edit().putString("running_30_announced_key", key).apply()
-        speakRunCue(message)
+        if (prefs.getBoolean("running_voice_10_seconds", true) &&
+            remainingSeconds in 8L..10L && prefs.getString("running_10_announced_key", "") != key) {
+            val message = if (stageIndex < workout.stages.lastIndex) {
+                "Dez segundos. Prepare para " + workout.stages[stageIndex + 1].title + "."
+            } else {
+                "Dez segundos para concluir o treino."
+            }
+            prefs.edit().putString("running_10_announced_key", key).apply()
+            speakRunCue(message, flush = true)
+        }
+    }
+
+    private fun repeatCurrentRunCue(workout: RunningWorkout) {
+        if (!isRunningVoiceEnabled()) {
+            Toast.makeText(this, "Ative a voz para repetir a instrucao.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!voiceCoachReady) {
+            Toast.makeText(this, "A voz do Android ainda nao esta pronta.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
+        val stage = workout.stages[stageIndex]
+        val speed = currentActiveRunSpeed(workout)
+        val remaining = activeRunStageRemainingKm(workout)
+        val next = if (stageIndex < workout.stages.lastIndex) {
+            " Proxima etapa: " + speakableStageCue(workout.stages[stageIndex + 1]) + "."
+        } else {
+            " Esta e a ultima etapa."
+        }
+        speakRunCue(
+            "Etapa atual: " + stage.title + ", restam " + speakableDistance(remaining) +
+                ", a " + speakableSpeed(speed) + "." + next,
+            flush = true,
+        )
+    }
+
+    private fun announceRunCompletion(distance: Double, seconds: Long, completed: Boolean) {
+        val status = if (completed) "Treino concluido." else "Treino encerrado."
+        speakRunCue(
+            status + " Distancia " + speakableDistance(distance) + ". Tempo " + speakableDuration(seconds) + ".",
+            flush = true,
+        )
     }
 
     private fun initVoiceCoach() {
         voiceCoach = TextToSpeech(this) { status ->
-            voiceCoachReady = status == TextToSpeech.SUCCESS
-            if (voiceCoachReady) {
-                voiceCoach?.language = Locale("pt", "BR")
-                voiceCoach?.setSpeechRate(0.95f)
+            voiceCoachReady = false
+            if (status == TextToSpeech.SUCCESS) {
+                val languageStatus = voiceCoach?.setLanguage(Locale("pt", "BR")) ?: TextToSpeech.LANG_NOT_SUPPORTED
+                voiceCoachReady = languageStatus != TextToSpeech.LANG_MISSING_DATA && languageStatus != TextToSpeech.LANG_NOT_SUPPORTED
+                if (voiceCoachReady) {
+                    voiceCoach?.setSpeechRate(0.92f)
+                    voiceCoach?.setPitch(1.0f)
+                    voiceCoach?.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build(),
+                    )
+                }
             }
         }
     }
 
-    private fun speakRunCue(text: String) {
-        if (!voiceCoachReady) return
-        voiceCoach?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "mo2log_run_" + System.currentTimeMillis())
+    private fun isRunningVoiceEnabled(): Boolean = prefs.getBoolean("running_voice_enabled", true)
+
+    private fun speakRunCue(text: String, flush: Boolean = false) {
+        if (!isRunningVoiceEnabled() || !voiceCoachReady) return
+        val queueMode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+        voiceCoach?.speak(text, queueMode, null, "mo2log_run_" + System.currentTimeMillis())
     }
 
     private fun saveRun(distance: Double, speed: Double, notes: String) {
@@ -6097,40 +6372,131 @@ class MainActivity : Activity() {
         return stages
     }
 
-    private fun smartRunningAdjustment(): RunningAdjustment {
-        val currentOffset = prefs.getString("running_speed_offset", "0.0")?.toDoubleOrNull() ?: 0.0
-        val currentScale = prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0
-        val recent = recentRunLogItems(4)
-        val weekWorkouts = currentRunningWeekWorkouts()
-        val completedThisWeek = weekWorkouts.count { isRunWorkoutCompleted(it) }
-        val plannedAvgSpeed = plannedAverageSpeed(weekWorkouts)
+    private fun runningFiveKmForecast(): RunningForecast {
+        val goal = prefs.getLong("running_goal_5k_seconds", 1800L).coerceIn(900L, 7200L)
+        val samples = recentRunLogItems(20)
+            .filterNot { it.optBoolean("manual", false) }
+            .mapNotNull { item ->
+                projectedFiveKmSeconds(item)?.let { seconds -> Pair(seconds, item.optDouble("distance")) }
+            }
+            .take(8)
 
-        if (recent.isEmpty()) {
-            return RunningAdjustment(
-                speedOffset = roundSpeed(currentOffset),
-                distanceScale = roundScale(currentScale),
-                headline = "Base atual mantida",
-                reason = "Sem corridas salvas ainda. Complete pelo menos um treino para calibrar ritmo e distancia.",
+        if (samples.isEmpty()) {
+            val referenceSpeed = currentRunningWeekWorkouts()
+                .flatMap { it.stages }
+                .firstOrNull { it.title.equals("Ritmo", ignoreCase = true) }
+                ?.speedKmh
+                ?.takeIf { it > 0.0 }
+                ?: 8.0
+            val predicted = ((5.0 / referenceSpeed) * 3600.0).roundToInt().toLong().coerceIn(900L, 7200L)
+            return RunningForecast(
+                predictedSeconds = predicted,
+                goalSeconds = goal,
+                sampleCount = 0,
+                confidence = "Inicial",
+                source = "Referencia do bloco de ritmo da semana",
+                trendSeconds = null,
+                usesMeasuredRuns = false,
             )
         }
 
-        val avgRecentSpeed = recent.map { it.optDouble("speed") }.filter { it > 0.0 }.average()
+        val recent = samples.take(5)
+        val predicted = medianSeconds(recent.map { it.first })
+        val distance = recent.sumOf { it.second }
+        val confidence = when {
+            recent.size >= 5 && distance >= 20.0 -> "Alta"
+            recent.size >= 2 && distance >= 6.0 -> "Media"
+            else -> "Baixa"
+        }
+        val trend = if (samples.size >= 4) {
+            medianSeconds(samples.take(2).map { it.first }) - medianSeconds(samples.drop(2).take(2).map { it.first })
+        } else {
+            null
+        }
+        return RunningForecast(
+            predictedSeconds = predicted,
+            goalSeconds = goal,
+            sampleCount = recent.size,
+            confidence = confidence,
+            source = "Mediana de " + recent.size + " corrida" + (if (recent.size == 1) " valida" else "s validas"),
+            trendSeconds = trend,
+            usesMeasuredRuns = true,
+        )
+    }
+
+    private fun projectedFiveKmSeconds(item: JSONObject): Long? {
+        val distance = item.optDouble("distance")
+        if (distance !in 1.0..20.0) return null
+        val pace = historyRunPaceSeconds(item)
+        if (pace <= 0L) return null
+        val measuredSeconds = pace.toDouble() * distance
+        val projected = (measuredSeconds * (5.0 / distance).pow(1.06)).roundToInt().toLong()
+        return projected.takeIf { it in 900L..7200L }
+    }
+
+    private fun medianSeconds(values: List<Long>): Long {
+        if (values.isEmpty()) return 0L
+        val sorted = values.sorted()
+        val middle = sorted.size / 2
+        return if (sorted.size % 2 == 1) sorted[middle] else (sorted[middle - 1] + sorted[middle]) / 2L
+    }
+
+    private fun validRecentRunItems(limit: Int): List<JSONObject> {
+        return recentRunLogItems(max(limit * 3, limit))
+            .filterNot { it.optBoolean("manual", false) }
+            .filter { projectedFiveKmSeconds(it) != null }
+            .take(limit)
+    }
+
+    private fun smartRunningAdjustment(): RunningAdjustment {
+        val currentOffset = prefs.getString("running_speed_offset", "0.0")?.toDoubleOrNull() ?: 0.0
+        val currentScale = prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0
+        val recent = validRecentRunItems(6)
+        val weekWorkouts = currentRunningWeekWorkouts()
+        val completedThisWeek = validCompletedRunCount(weekWorkouts)
+        val plannedAvgSpeed = plannedAverageSpeed(weekWorkouts)
+        val forecast = runningFiveKmForecast()
+        val recentSpeeds = recent.mapNotNull { item ->
+            historyRunPaceSeconds(item).takeIf { it > 0L }?.let { 3600.0 / it.toDouble() }
+        }
+        val avgRecentSpeed = recentSpeeds.takeIf { it.isNotEmpty() }?.average()
+        val recentRpe = recent.map { it.optInt("rpe", 0) }.filter { it in 1..10 }
+        val avgRpe = recentRpe.takeIf { it.isNotEmpty() }?.average()
+        val readiness = readinessStatus()
         var suggestedOffset = currentOffset
         var suggestedScale = currentScale
         val headline: String
         val reason: String
 
         when {
-            completedThisWeek >= 4 && avgRecentSpeed >= plannedAvgSpeed - 0.2 -> {
+            readiness == "red" || (avgRpe != null && avgRpe >= 9.0) -> {
+                suggestedOffset = (currentOffset - 0.2).coerceIn(-2.0, 2.0)
+                suggestedScale = (currentScale - 0.04).coerceIn(0.60, 1.40)
+                headline = "Reduzir e recuperar"
+                reason = "Prontidao ou RPE recente pede cautela. Reduza velocidade e distancia antes de voltar a progredir."
+            }
+            readiness == "yellow" || (avgRpe != null && avgRpe >= 8.0) || (forecast.trendSeconds ?: 0L) >= 45L -> {
+                suggestedOffset = (currentOffset - 0.1).coerceIn(-2.0, 2.0)
+                suggestedScale = (currentScale - 0.02).coerceIn(0.60, 1.40)
+                headline = "Consolidar esta semana"
+                reason = "O esforco ou a tendencia de 5 km subiu. Um ajuste pequeno ajuda a recuperar consistencia sem abandonar o ciclo."
+            }
+            completedThisWeek >= 4 && avgRecentSpeed != null && avgRecentSpeed >= plannedAvgSpeed - 0.2 &&
+                (avgRpe == null || avgRpe <= 7.5) && (forecast.trendSeconds == null || forecast.trendSeconds <= 10L) -> {
                 suggestedOffset = (currentOffset + 0.1).coerceIn(-2.0, 2.0)
                 suggestedScale = (currentScale + 0.02).coerceIn(0.60, 1.40)
                 headline = "Subir levemente"
-                reason = "Voce esta concluindo bem a semana. Proximo passo seguro: +0,1 km/h e um pequeno aumento de distancia."
+                reason = "Consistencia, RPE e previsao de 5 km estao controlados. Proximo passo: +0,1 km/h e um pequeno aumento de distancia."
             }
-            completedThisWeek >= 2 && avgRecentSpeed >= plannedAvgSpeed -> {
+            completedThisWeek >= 2 && avgRecentSpeed != null && avgRecentSpeed >= plannedAvgSpeed &&
+                (avgRpe == null || avgRpe <= 7.5) -> {
                 suggestedOffset = (currentOffset + 0.1).coerceIn(-2.0, 2.0)
                 headline = "Acelerar um pouco"
-                reason = "Ritmo recente esta igual ou acima do planejado. Aumente so 0,1 km/h para manter controle."
+                reason = "Ritmo valido esta igual ou acima do planejado com esforco controlado. Aumente somente 0,1 km/h."
+            }
+            recent.isEmpty() -> {
+                headline = "Base atual mantida"
+                reason = "Ainda nao ha corrida com ritmo plausivel para adaptar o plano. Registros incompletos ou de teste sao ignorados."
             }
             completedThisWeek <= 1 && currentRunningPlanWeek() > 1 -> {
                 suggestedOffset = (currentOffset - 0.1).coerceIn(-2.0, 2.0)
@@ -6140,7 +6506,7 @@ class MainActivity : Activity() {
             }
             else -> {
                 headline = "Manter ritmo"
-                reason = "Semana em progresso normal. Mantenha o ajuste atual e registre a proxima corrida."
+                reason = "Consistencia e previsao estao estaveis. Mantenha o ajuste atual e registre a proxima corrida com RPE."
             }
         }
 
@@ -6177,6 +6543,31 @@ class MainActivity : Activity() {
         val distance = workouts.sumOf { totalRunDistance(it) }
         val seconds = workouts.sumOf { estimatedWorkoutSeconds(it) }
         return if (distance <= 0.0 || seconds <= 0L) 0.0 else distance / (seconds.toDouble() / 3600.0)
+    }
+
+    private fun validCompletedRunCount(workouts: List<RunningWorkout>): Int {
+        val workoutIds = workouts.map { it.id }.toSet()
+        val completedIds = mutableSetOf<String>()
+        val logs = runLogs()
+        for (index in 0 until logs.length()) {
+            val item = logs.getJSONObject(index)
+            val workoutId = item.optString("run_workout_id")
+            if (workoutId in workoutIds && !item.optBoolean("manual", false) && projectedFiveKmSeconds(item) != null) {
+                completedIds.add(workoutId)
+            }
+        }
+        return completedIds.size
+    }
+
+    private fun completedRunningDistance(workouts: List<RunningWorkout>): Double {
+        val workoutIds = workouts.map { it.id }.toSet()
+        val logs = runLogs()
+        var distance = 0.0
+        for (index in 0 until logs.length()) {
+            val item = logs.getJSONObject(index)
+            if (item.optString("run_workout_id") in workoutIds) distance += item.optDouble("distance")
+        }
+        return roundKm(distance)
     }
 
     private fun signedSpeedOffset(value: Double): String {
@@ -6243,7 +6634,31 @@ class MainActivity : Activity() {
     }
 
     private fun speakableStageCue(stage: RunningStage): String {
-        return String.format(Locale.US, "%.2f quilometros a %.1f quilometros por hora", stage.distanceKm, stage.speedKmh)
+        return stage.title + ", " + speakableDistance(stage.distanceKm) + ", a " + speakableSpeed(stage.speedKmh)
+    }
+
+    private fun speakableDistance(distanceKm: Double): String {
+        return if (distanceKm < 1.0) {
+            (distanceKm * 1000.0).roundToInt().toString() + " metros"
+        } else {
+            String.format(Locale("pt", "BR"), "%.2f quilometros", distanceKm)
+        }
+    }
+
+    private fun speakableSpeed(speedKmh: Double): String {
+        return String.format(Locale("pt", "BR"), "%.1f quilometros por hora", speedKmh)
+    }
+
+    private fun speakableDuration(totalSeconds: Long): String {
+        val safeSeconds = totalSeconds.coerceAtLeast(0L)
+        val hours = safeSeconds / 3600L
+        val minutes = (safeSeconds % 3600L) / 60L
+        val seconds = safeSeconds % 60L
+        val parts = mutableListOf<String>()
+        if (hours > 0L) parts.add(hours.toString() + if (hours == 1L) " hora" else " horas")
+        if (minutes > 0L) parts.add(minutes.toString() + if (minutes == 1L) " minuto" else " minutos")
+        if (seconds > 0L || parts.isEmpty()) parts.add(seconds.toString() + if (seconds == 1L) " segundo" else " segundos")
+        return parts.joinToString(" e ")
     }
 
     private fun formatKm(value: Double): String = String.format(Locale("pt", "BR"), "%.2f km", value)
