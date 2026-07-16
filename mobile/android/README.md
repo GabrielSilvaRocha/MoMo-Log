@@ -55,6 +55,7 @@ app/src/main/java/br/com/mo2log/mobile/
 `-- ui/
     |-- Mo2Components.kt
     |-- Mo2DesignTokens.kt
+    |-- Mo2DragHandleView.kt
     |-- Mo2Drawables.kt
     |-- Mo2HistoryChartView.kt
     `-- Mo2NavIconView.kt
@@ -89,3 +90,13 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Distancia semanal usa os quilometros registrados em cada corrida concluida.
 - Voz pode ser desativada, testada ou repetida durante a corrida e inclui alertas em 30 e 10 segundos.
 - Registros com duracao impossivel permanecem salvos, mas nao contaminam previsoes ou recomendacoes.
+
+## v10.5.0
+
+- Redesenha a aba Treino conforme a referencia do Figma sem remover registro, timer, GIFs, substituicoes ou coach.
+- Checkboxes de series podem ser desmarcadas e mantem carga/repeticoes para uma nova conclusao.
+- Edicoes posteriores a conclusao sincronizam o checklist e o log usado por historico, volume e estatisticas.
+- Rolagem permanece no mesmo ponto depois de concluir uma serie.
+- Progresso e proximo exercicio usam o primeiro item realmente pendente, inclusive quando o treino e feito fora de ordem.
+- Exercicios concluidos ficam verdes e podem ser reordenados com gesto de segurar por tres segundos e arrastar.
+- Descanso ganha `-30`, `+30`, timer branco e alerta sonoro confiavel ao finalizar.

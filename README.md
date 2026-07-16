@@ -4,18 +4,18 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v10.4.0.
+- Android nativo pessoal: v10.5.0.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v10.5.0 - Progressao de musculacao, deload e volume por grupo muscular.
-- v10.6.0 - Personalizacao por equipamentos, favoritos, alternativas e exercicios proprios.
-- v10.7.0 - Integracao opcional com Android Health Connect.
-- v10.8.0 - Backup versionado, restauracao e migracao segura dos dados.
-- v10.9.0 - Acessibilidade, desempenho, estabilidade e testes automatizados.
+- v10.6.0 - Progressao de musculacao, deload e volume por grupo muscular.
+- v10.7.0 - Personalizacao por equipamentos, favoritos, alternativas e exercicios proprios.
+- v10.8.0 - Integracao opcional com Android Health Connect.
+- v10.9.0 - Backup versionado, restauracao e migracao segura dos dados.
+- v10.10.0 - Acessibilidade, desempenho, estabilidade e testes automatizados.
 - v11.0.0 - Experiencia pessoal madura com musculacao, corrida e planejamento integrados.
 
 ## v8.1.2 - Android Offline Auto Login
@@ -425,3 +425,16 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Numeros de distancia e velocidade passam a ser pronunciados em portugues brasileiro.
 - Meta e configuracoes de voz usam preferencias aditivas e continuam protegidas pelo backup JSON atual.
 - O app Android passa para versionCode 1040 / versionName 10.4.0.
+
+## v10.5.0 - Treino fluido e redesign da musculacao
+
+- Aba Treino adota a hierarquia visual do Figma com cabecalho compacto, resumo da sessao, exercicio atual e lista de exercicios com estados claros.
+- Marcar ou desmarcar uma serie cria ou remove o respectivo registro local sem perder carga e repeticoes digitadas.
+- Alteracoes de carga e repeticoes feitas depois da conclusao atualizam imediatamente o historico e o volume considerado.
+- Concluir uma serie preserva a posicao vertical da tela e concluir um exercicio seleciona o primeiro exercicio ainda pendente.
+- Progresso da sessao passa a usar exercicios realmente concluidos, independentemente da ordem escolhida.
+- Exercicios concluidos ficam verdes e a lista pode ser reordenada ao segurar um item por tres segundos e arrasta-lo.
+- Reordenacao migra os checklists salvos para que series, cargas e repeticoes continuem ligadas ao exercicio correto.
+- Timer de descanso usa texto branco, controles de menos/mais 30 segundos e notificacao sonora em dois tons ao finalizar.
+- Campos de series recebem cabecalhos fixos, checkbox nativa, estados responsivos e acoes sem quebra de texto.
+- O app Android passa para versionCode 1050 / versionName 10.5.0.
