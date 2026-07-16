@@ -100,3 +100,10 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Progresso e proximo exercicio usam o primeiro item realmente pendente, inclusive quando o treino e feito fora de ordem.
 - Exercicios concluidos ficam verdes e podem ser reordenados com gesto de segurar por tres segundos e arrastar.
 - Descanso ganha `-30`, `+30`, timer branco e alerta sonoro confiavel ao finalizar.
+
+## v10.6.0
+
+- Move GIF, descricao, cuidados tecnicos e metadados do catalogo para o bloco Exercicio Atual.
+- Remove o painel separado Detalhe do Exercicio da aba Treino para reduzir redundancia.
+- Mantem atalhos de equipamento indisponivel, abertura no catalogo, troca de exercicio, registro de series e conclusao do treino.
+- Exibe aviso compacto quando o exercicio planejado ainda nao tem midia vinculada no catalogo.

@@ -438,3 +438,11 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Timer de descanso usa texto branco, controles de menos/mais 30 segundos e notificacao sonora em dois tons ao finalizar.
 - Campos de series recebem cabecalhos fixos, checkbox nativa, estados responsivos e acoes sem quebra de texto.
 - O app Android passa para versionCode 1050 / versionName 10.5.0.
+
+## v10.6.0 - Exercicio atual sem redundancia
+
+- Aba Treino passa a concentrar GIF, descricao de execucao, cuidados tecnicos, grupo muscular, equipamento e nivel diretamente no bloco Exercicio Atual.
+- O antigo painel Detalhe do Exercicio foi removido do fluxo da tela para evitar repeticao de informacoes e rolagem desnecessaria.
+- Atalhos de equipamento indisponivel e abertura no catalogo permanecem acessiveis no proprio contexto do exercicio atual.
+- Quando o exercicio ainda nao tem midia vinculada ao catalogo, o app mostra um aviso compacto sem bloquear o registro das series.
+- O app Android passa para versionCode 1060 / versionName 10.6.0.

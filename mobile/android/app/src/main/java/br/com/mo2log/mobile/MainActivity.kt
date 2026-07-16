@@ -1123,8 +1123,6 @@ class MainActivity : Activity() {
         root.addView(deferred)
         root.postDelayed({
             if (!root.isAttachedToWindow || currentTab != "workout") return@postDelayed
-            val media = selectedExerciseMediaPanel()
-            deferred.addView(media)
             deferred.addView(sectionTitle("Exercicios do treino"))
             val exerciseList = exerciseList()
             deferred.addView(exerciseList)
@@ -1134,7 +1132,7 @@ class MainActivity : Activity() {
             deferred.addView(smartStrengthCoachPanel())
 
             val target = when (deferredSection) {
-                "workout_media" -> media
+                "workout_media" -> register
                 "workout_exercises" -> exerciseList
                 "workout_support" -> support
                 else -> null
@@ -1411,89 +1409,6 @@ class MainActivity : Activity() {
         stop.setOnClickListener { clearRestTimer() }
         row.addView(stop, LinearLayout.LayoutParams(0, dp(50), 1f))
         box.addView(spacedRow(row))
-        return box
-    }
-
-    private fun selectedExerciseMediaPanel(): View {
-        val planned = currentExercise()
-        val matched = catalogMatchForWorkoutExercise(planned.name)
-        val box = card()
-        box.orientation = LinearLayout.VERTICAL
-        box.addView(label("DETALHE DO EXERCICIO", green, 13f, true))
-        box.addView(label(planned.name, white, 24f, true))
-        box.addView(label(planned.target + " | descanso " + planned.rest, white, 15f, true))
-        box.addView(label(planned.notes, muted, 14f, false))
-
-        if (matched == null) {
-            box.addView(label("Ainda nao encontrei uma midia confiavel no catalogo para este item do treino.", muted, 15f, false))
-            box.addView(label("Use a aba Exercicios para buscar uma alternativa quando necessario.", muted, 14f, false))
-            val swap = actionButton("Buscar troca recomendada", surface2, green)
-            swap.setOnClickListener { swapCurrentExerciseForRecommended() }
-            box.addView(buttonParams(swap))
-            return box
-        }
-
-        val unavailable = isEquipmentUnavailable(matched.equipment)
-        box.addView(label("Catalogo: " + matched.name, white, 17f, true))
-        box.addView(label(exerciseMeta(matched), muted, 14f, false))
-        box.addView(label(mediaHealthLabel(matched), muted, 13f, false))
-        if (unavailable) {
-            box.addView(label("Equipamento marcado como indisponivel: " + matched.equipment, danger, 14f, true))
-        }
-
-        if (matched.links.isNotEmpty()) {
-            val media = RemoteExerciseMediaView(this, matched.links)
-            val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
-            mediaParams.setMargins(0, dp(12), 0, dp(12))
-            box.addView(media, mediaParams)
-        } else {
-            box.addView(label("Este exercicio existe no catalogo, mas ainda nao tem frames remotos.", amber, 14f, true))
-        }
-
-        box.addView(label("Descricao", green, 14f, true))
-        box.addView(label(matched.description.ifBlank { "Exercicio do catalogo para " + matched.muscle + " com foco em " + matched.primary.ifBlank { matched.subgroup } + "." }, white, 15f, false))
-        if (matched.technicalCare.isNotBlank()) {
-            box.addView(label("Cuidados tecnicos", green, 14f, true))
-            box.addView(label(matched.technicalCare, muted, 14f, false))
-        }
-        box.addView(label("Grupo e equipamento", green, 14f, true))
-        box.addView(label(matched.muscle + " | " + matched.equipment.ifBlank { "equipamento variavel" } + " | nivel " + matched.level.ifBlank { "-" }, white, 14f, false))
-
-        val alternatives = recommendedSwapOptions(matched, "same_muscle").take(4)
-        box.addView(label("Alternativas do mesmo musculo", green, 14f, true))
-        if (alternatives.isEmpty()) {
-            box.addView(label("Nenhuma alternativa livre encontrada agora. Abra o catalogo para escolher manualmente.", muted, 14f, false))
-        } else {
-            alternatives.forEach { alternative ->
-                val item = LinearLayout(this)
-                item.orientation = LinearLayout.VERTICAL
-                item.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
-                item.background = rounded(surface2, dp(Mo2Radius.Md), border)
-                item.addView(label(alternative.name, white, 15f, true))
-                item.addView(label(exerciseMeta(alternative), muted, 12f, false))
-                item.setOnClickListener { applyRecommendedExerciseSwap(alternative) }
-                val itemParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                itemParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
-                box.addView(item, itemParams)
-            }
-        }
-
-        val swap = actionButton("Trocar exercicio", surface2, green)
-        swap.setOnClickListener { swapCurrentExerciseForRecommended() }
-        box.addView(buttonParams(swap))
-        val unavailableButton = actionButton(if (unavailable) "Rever equipamento" else "Equipamento indisponivel", surface2, if (unavailable) danger else amber)
-        unavailableButton.setOnClickListener { showEquipmentUnavailableDialog(matched) }
-        box.addView(buttonParams(unavailableButton))
-
-        val open = actionButton("Abrir no catalogo", surface2, green)
-        open.setOnClickListener {
-            prefs.edit()
-                .putString("catalog_muscle", matched.muscle)
-                .putString("catalog_selected", matched.id)
-                .apply()
-            switchTab("exercises")
-        }
-        box.addView(buttonParams(open))
         return box
     }
 
@@ -4570,6 +4485,7 @@ class MainActivity : Activity() {
 
     private fun registerPanel(): View {
         val exercise = currentExercise()
+        val matched = catalogMatchForWorkoutExercise(exercise.name)
         val lastSet = lastSetFor(exercise.name)
         val sets = plannedSetsForCurrentExercise()
         val doneCount = countDonePlannedSets(sets)
@@ -4590,6 +4506,7 @@ class MainActivity : Activity() {
         if (lastSet != null) {
             box.addView(label("Ultima concluida: " + lastSet.optInt("reps") + " reps | " + lastSet.optDouble("load") + " kg", muted, 13f, false))
         }
+        box.addView(currentExerciseGuidancePanel(exercise, matched))
         box.addView(dashboardProgressLine("Series", doneCount.toString() + " de " + sets.length() + " concluidas", progressPercent(doneCount, sets.length()), green))
         box.addView(restTimerPanel())
 
@@ -4621,6 +4538,70 @@ class MainActivity : Activity() {
         finish.setOnClickListener { finishStrengthWorkout() }
         actions.addView(finish, LinearLayout.LayoutParams(0, dp(54), 1f))
         box.addView(spacedRow(actions))
+        return box
+    }
+
+    private fun currentExerciseGuidancePanel(exercise: ExercisePlan, matched: CatalogExercise?): View {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm))
+
+        if (matched == null) {
+            box.addView(label("Midia do catalogo ainda nao vinculada a este exercicio.", amber, 14f, true))
+            box.addView(label("Use Trocar exercicio ou a aba Exercicios se quiser buscar uma alternativa com GIF.", muted, 13f, false))
+            return box
+        }
+
+        val unavailable = isEquipmentUnavailable(matched.equipment)
+        box.addView(label("EXECUCAO", green, 13f, true))
+        box.addView(label(
+            exerciseMeta(matched) + " | " + mediaHealthLabel(matched),
+            muted,
+            13f,
+            false,
+        ))
+        if (unavailable) {
+            box.addView(label("Equipamento marcado como indisponivel: " + matched.equipment, danger, 14f, true))
+        }
+
+        if (matched.links.isNotEmpty()) {
+            val media = RemoteExerciseMediaView(this, matched.links)
+            val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
+            mediaParams.setMargins(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm))
+            box.addView(media, mediaParams)
+        } else {
+            box.addView(label("Este exercicio existe no catalogo, mas ainda nao tem GIF remoto.", amber, 14f, true))
+        }
+
+        val description = matched.description.ifBlank {
+            "Exercicio do catalogo para " + matched.muscle + " com foco em " + matched.primary.ifBlank { matched.subgroup } + "."
+        }
+        box.addView(label(description, white, 14f, false))
+        if (matched.technicalCare.isNotBlank()) {
+            box.addView(label("Cuidado: " + matched.technicalCare, muted, 13f, false))
+        }
+        box.addView(label(
+            matched.muscle + " | " + matched.equipment.ifBlank { "equipamento variavel" } + " | nivel " + matched.level.ifBlank { "-" },
+            muted,
+            13f,
+            false,
+        ))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val unavailableButton = actionButton(if (unavailable) "Rever equipamento" else "Equipamento indisponivel", surface2, if (unavailable) danger else amber)
+        unavailableButton.setOnClickListener { showEquipmentUnavailableDialog(matched) }
+        row.addView(unavailableButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val open = actionButton("Abrir catalogo", surface2, green)
+        open.setOnClickListener {
+            prefs.edit()
+                .putString("catalog_muscle", matched.muscle)
+                .putString("catalog_selected", matched.id)
+                .apply()
+            switchTab("exercises")
+        }
+        row.addView(open, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
         return box
     }
 
