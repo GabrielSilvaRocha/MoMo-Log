@@ -318,6 +318,7 @@ class MainActivity : Activity() {
     private var runningPaceText: TextView? = null
     private var runningElapsedText: TextView? = null
     private var runningSpeedText: TextView? = null
+    private var runningStageProgressText: TextView? = null
     private var runningNextText: TextView? = null
     private var runningTreadmillText: TextView? = null
     private var runningCountdownPanel: View? = null
@@ -1683,12 +1684,13 @@ class MainActivity : Activity() {
         val top = LinearLayout(this)
         top.orientation = LinearLayout.HORIZONTAL
         top.gravity = Gravity.CENTER_VERTICAL
+        top.addView(runningWorkoutCheck(completed, active), LinearLayout.LayoutParams(dp(44), dp(44)))
         val titleBox = LinearLayout(this)
         titleBox.orientation = LinearLayout.VERTICAL
         titleBox.addView(label(workout.dayName + " | " + workout.title, if (completed) green else white, 17f, true))
-        titleBox.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), muted, 13f, false))
+        titleBox.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)) + " | " + runningStageSummary(workout), muted, 13f, false))
         top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(Mo2Components.badge(this, if (completed) "Feito" else if (expanded) "Aberto" else "Pendente", completed))
+        top.addView(Mo2Components.badge(this, if (completed) "Feito" else if (active) "Rodando" else if (expanded) "Aberto" else "Pendente", completed || active))
         item.addView(top)
 
         if (expanded) {
@@ -1722,6 +1724,30 @@ class MainActivity : Activity() {
             item.addView(spacedRow(row))
         }
         return item
+    }
+
+    private fun runningWorkoutCheck(completed: Boolean, active: Boolean): CheckBox {
+        val check = CheckBox(this)
+        check.isChecked = completed
+        check.isEnabled = false
+        check.alpha = if (completed || active) 1f else 0.72f
+        check.contentDescription = if (completed) "Treino de corrida concluido" else "Treino de corrida pendente"
+        check.buttonTintList = ColorStateList(
+            arrayOf(
+                intArrayOf(-android.R.attr.state_enabled, android.R.attr.state_checked),
+                intArrayOf(-android.R.attr.state_enabled),
+                intArrayOf(),
+            ),
+            intArrayOf(green, if (active) Mo2Colors.Running else border, border),
+        )
+        return check
+    }
+
+    private fun runningStageSummary(workout: RunningWorkout): String {
+        val hardStages = workout.stages.count { stage ->
+            stage.title.contains("Tiro", true) || stage.title.contains("Ritmo", true)
+        }
+        return workout.stages.size.toString() + " etapas" + if (hardStages > 0) " | " + hardStages + " fortes" else ""
     }
 
     private fun runningFullPlanButton(): View {
@@ -1810,6 +1836,8 @@ class MainActivity : Activity() {
 
         runningStageText = label("", Mo2Colors.Running, 15f, true)
         activeContent.addView(runningStageText)
+        runningStageProgressText = label("", muted, 13f, false)
+        activeContent.addView(runningStageProgressText)
         activeContent.addView(activeRunVoiceControls(workout))
 
         val timeCard = card(surface2)
@@ -1931,6 +1959,8 @@ class MainActivity : Activity() {
         val stageIndex = prefs.getInt("running_active_stage", 0).coerceIn(workout.stages.indices)
         val stage = workout.stages[stageIndex]
         val remainingKm = activeRunStageRemainingKm(workout)
+        val completedKm = (stage.distanceKm - remainingKm).coerceIn(0.0, stage.distanceKm)
+        val stagePercent = if (stage.distanceKm <= 0.0) 0 else ((completedKm / stage.distanceKm) * 100.0).roundToInt().coerceIn(0, 100)
         val speed = currentActiveRunSpeed(workout)
         val remainingSeconds = if (speed <= 0.0) 0L else ((remainingKm / speed) * 3600.0).roundToInt().toLong()
         val paused = isActiveRunPaused()
@@ -1940,6 +1970,7 @@ class MainActivity : Activity() {
         runningSessionTitleText?.text = workout.title
         runningSessionSubtitleText?.text = "Etapa " + (stageIndex + 1) + " de " + workout.stages.size + " | Esteira"
         runningStageText?.text = (if (paused) "PAUSADO | " else "ETAPA ATUAL | ") + stage.title
+        runningStageProgressText?.text = "Avanco da etapa: " + stagePercent + "% | feito " + formatKm(completedKm) + " de " + formatKm(stage.distanceKm)
         runningRemainingText?.text = formatDuration(remainingSeconds)
         runningDistanceText?.text = formatKm(remainingKm)
         runningPaceText?.text = formatPaceForSpeed(speed)
@@ -3154,13 +3185,22 @@ class MainActivity : Activity() {
         divider.setBackgroundColor(border)
         row.addView(divider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
         row.addView(label("ETAPA " + (index + 1) + " | " + stage.optString("title", "Etapa"), white, 14f, true))
+        val distance = stage.optDouble("distance")
+        val speed = stage.optDouble("speed")
+        val durationSeconds = if (distance > 0.0 && speed > 0.0) ((distance / speed) * 3600.0).roundToInt().toLong() else 0L
         row.addView(label(
-            formatKm(stage.optDouble("distance")) + " | " + formatSpeed(stage.optDouble("speed")),
+            formatKm(distance) + " | " + formatSpeed(speed) + if (durationSeconds > 0L) " | " + formatDuration(durationSeconds) else "",
             Mo2Colors.Running,
             14f,
             true,
         ))
-        val edit = actionButton("Editar velocidade", surface, Mo2Colors.Running)
+        val note = stage.optString("note")
+        if (note.isNotBlank()) row.addView(label(note, muted, 12f, false))
+        val plannedSpeed = stage.optDouble("planned_speed", speed)
+        if (plannedSpeed > 0.0 && kotlin.math.abs(plannedSpeed - speed) >= 0.05) {
+            row.addView(label("Planejado: " + formatSpeed(plannedSpeed), muted, 12f, false))
+        }
+        val edit = actionButton("Editar etapa", surface, Mo2Colors.Running)
         edit.setOnClickListener { showEditRunStageDialog(run, index) }
         row.addView(buttonParams(edit))
         return row
@@ -3312,11 +3352,16 @@ class MainActivity : Activity() {
         content.setPadding(dp(14), dp(14), dp(14), dp(8))
         content.addView(label("EDITAR ETAPA " + (stageIndex + 1), Mo2Colors.Running, 13f, true))
         content.addView(label(stage.optString("title", "Etapa"), white, 22f, true))
-        content.addView(label("Distancia registrada: " + formatKm(stage.optDouble("distance")), muted, 14f, false))
+        val title = input("Nome da etapa", stage.optString("title", "Etapa"))
+        content.addView(title)
+        val distance = input("Distancia km", stage.optString("distance"))
+        distance.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         val speed = input("Velocidade km/h", stage.optString("speed"))
         speed.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-        content.addView(speed)
-        content.addView(label("A alteracao atualiza esta etapa sem apagar a distancia, duracao ou as demais etapas da corrida.", muted, 13f, false))
+        content.addView(historyEditorRow(distance, speed))
+        val note = textArea("Observacao da etapa", stage.optString("note"))
+        content.addView(note)
+        content.addView(label("A alteracao recalcula o total da corrida a partir das etapas salvas.", muted, 13f, false))
 
         val dialog = AlertDialog.Builder(this)
             .setView(content)
@@ -3326,7 +3371,7 @@ class MainActivity : Activity() {
         dialog.setOnShowListener {
             styleHistoryDialog(dialog, content)
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                if (updateRunStageSpeed(item, stageIndex, speed.textValue())) {
+                if (updateRunStageDetails(item, stageIndex, title.textValue(), distance.textValue(), speed.textValue(), note.textValue())) {
                     dialog.dismiss()
                     render()
                 }
@@ -3335,8 +3380,24 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    private fun updateRunStageSpeed(target: JSONObject, stageIndex: Int, speedRaw: String): Boolean {
+    private fun updateRunStageDetails(
+        target: JSONObject,
+        stageIndex: Int,
+        titleRaw: String,
+        distanceRaw: String,
+        speedRaw: String,
+        noteRaw: String,
+    ): Boolean {
+        val distance = distanceRaw.replace(',', '.').toDoubleOrNull()
         val speed = speedRaw.replace(',', '.').toDoubleOrNull()
+        if (titleRaw.isBlank()) {
+            Toast.makeText(this, "Informe o nome da etapa.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        if (distance == null || distance <= 0.0) {
+            Toast.makeText(this, "Informe uma distancia maior que zero.", Toast.LENGTH_SHORT).show()
+            return false
+        }
         if (speed == null || speed !in 1.0..30.0) {
             Toast.makeText(this, "Informe uma velocidade entre 1 e 30 km/h.", Toast.LENGTH_SHORT).show()
             return false
@@ -3354,25 +3415,43 @@ class MainActivity : Activity() {
             return false
         }
         val stage = stages.getJSONObject(stageIndex)
+            .put("title", titleRaw.trim())
+            .put("distance", roundKm(distance))
             .put("speed", roundSpeed(speed))
+            .put("note", noteRaw.trim())
             .put("edited_at", timestamp())
         stages.put(stageIndex, stage)
+        applyRunStageTotals(updated, stages)
         updated.put("stages", stages).put("edited_at", timestamp())
-        if (stages.length() == 1) {
-            val distance = stage.optDouble("distance")
-            if (distance > 0.0) {
-                val durationSeconds = ((distance / speed) * 3600.0).roundToInt().toLong().coerceAtLeast(1L)
-                updated
-                    .put("speed", roundSpeed(speed))
-                    .put("duration", formatDuration(durationSeconds))
-                    .put("duration_seconds", durationSeconds)
-                    .put("pace_seconds_per_km", (durationSeconds.toDouble() / distance).roundToInt().toLong())
-            }
-        }
         logs.put(index, updated)
         prefs.edit().putString("run_logs", logs.toString()).apply()
-        Toast.makeText(this, "Velocidade da etapa atualizada.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Etapa atualizada.", Toast.LENGTH_SHORT).show()
         return true
+    }
+
+    private fun applyRunStageTotals(run: JSONObject, stages: JSONArray) {
+        var distance = 0.0
+        var durationSeconds = 0L
+        for (index in 0 until stages.length()) {
+            val stage = stages.getJSONObject(index)
+            val stageDistance = stage.optDouble("distance").coerceAtLeast(0.0)
+            val stageSpeed = stage.optDouble("speed").coerceAtLeast(0.0)
+            distance += stageDistance
+            if (stageDistance > 0.0 && stageSpeed > 0.0) {
+                durationSeconds += ((stageDistance / stageSpeed) * 3600.0).roundToInt().toLong().coerceAtLeast(1L)
+            }
+        }
+        val safeDistance = roundKm(distance)
+        val safeDuration = durationSeconds.coerceAtLeast(1L)
+        val avgSpeed = if (safeDistance <= 0.0) 0.0 else safeDistance / (safeDuration.toDouble() / 3600.0)
+        run
+            .put("distance", safeDistance)
+            .put("speed", roundSpeed(avgSpeed))
+            .put("duration", formatDuration(safeDuration))
+            .put("duration_seconds", safeDuration)
+            .put("pace_seconds_per_km", if (safeDistance <= 0.0) 0L else (safeDuration.toDouble() / safeDistance).roundToInt().toLong())
+            .put("total_stages", stages.length())
+            .put("completed_stages", run.optInt("completed_stages", stages.length()).coerceIn(0, stages.length()))
     }
 
     private fun historyEditorRow(first: EditText, second: EditText): View {

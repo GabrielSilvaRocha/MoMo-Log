@@ -446,3 +446,12 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Atalhos de equipamento indisponivel e abertura no catalogo permanecem acessiveis no proprio contexto do exercicio atual.
 - Quando o exercicio ainda nao tem midia vinculada ao catalogo, o app mostra um aviso compacto sem bloquear o registro das series.
 - O app Android passa para versionCode 1060 / versionName 10.6.0.
+
+## v10.7.0 - Corrida semanal e etapas editaveis
+
+- Aba Corrida melhora o bloco Essa Semana com checkbox visual por treino, status Rodando/Feito/Pendente e resumo de etapas.
+- Tela de corrida ativa passa a mostrar o avanco da etapa atual com percentual, distancia feita e distancia total da etapa.
+- Historico de corrida mostra duracao estimada e observacao de cada etapa ao expandir o treino intervalado.
+- Edicao de etapa passa a permitir alterar nome, distancia, velocidade e observacao, nao apenas velocidade.
+- Ao editar uma etapa, o app recalcula distancia total, duracao, velocidade media, pace e quantidade de etapas do registro.
+- O app Android passa para versionCode 1070 / versionName 10.7.0.

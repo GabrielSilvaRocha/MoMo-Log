@@ -107,3 +107,11 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Remove o painel separado Detalhe do Exercicio da aba Treino para reduzir redundancia.
 - Mantem atalhos de equipamento indisponivel, abertura no catalogo, troca de exercicio, registro de series e conclusao do treino.
 - Exibe aviso compacto quando o exercicio planejado ainda nao tem midia vinculada no catalogo.
+
+## v10.7.0
+
+- Aba Corrida destaca o status semanal com checkbox preenchido, treino rodando e resumo das etapas.
+- Corrida ativa mostra progresso da etapa atual com percentual e distancia feita.
+- Historico de corrida exibe duracao e notas por etapa.
+- Editor de etapa permite alterar nome, distancia, velocidade e observacao.
+- Totais da corrida sao recalculados automaticamente depois da edicao das etapas.
