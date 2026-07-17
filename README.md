@@ -455,3 +455,25 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Edicao de etapa passa a permitir alterar nome, distancia, velocidade e observacao, nao apenas velocidade.
 - Ao editar uma etapa, o app recalcula distancia total, duracao, velocidade media, pace e quantidade de etapas do registro.
 - O app Android passa para versionCode 1070 / versionName 10.7.0.
+
+## v10.8.0 - Dashboard inicial inteligente
+
+- Home ganha Central Pessoal com leitura de semana, tarefas do dia, saude dos dados locais e ultima atividade.
+- Acoes rapidas passam a expor treino, corrida, historico e backup diretamente na tela inicial.
+- Proximo passo do dia considera check-in, musculacao planejada, corrida planejada, backup e registros ja feitos.
+- O app Android prepara a transicao para a serie 11 com foco em uso pessoal offline.
+
+## v10.9.0 - Historico consolidado
+
+- Historico ganha cabecalho V11 com resumo filtrado de treinos, volume e distancia corrida.
+- Filtros ativos ficam explicitos para reduzir risco de interpretar dados incompletos como historico total.
+- Atalhos de atividades e backup ficam no topo do Historico sem remover calendario, recordes, graficos ou edicao.
+- Registros locais continuam editaveis e excluiveis no proprio aparelho.
+
+## v11.0.0 - Estavel pessoal offline
+
+- Mo2 Log passa para uma versao estavel pessoal com Home, Treino, Corrida, Historico e Backup integrados para uso offline.
+- Cockpit e Home usam rotulos V11, mantendo dados locais existentes e sem migracao destrutiva.
+- Central Pessoal destaca o que fazer agora, ultima atividade registrada e status de backup.
+- Historico V11 reforca revisao, edicao e exportacao local antes de treinos futuros.
+- O app Android passa para versionCode 1100 / versionName 11.0.0.

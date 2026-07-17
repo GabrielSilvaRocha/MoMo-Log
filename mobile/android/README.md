@@ -115,3 +115,21 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Historico de corrida exibe duracao e notas por etapa.
 - Editor de etapa permite alterar nome, distancia, velocidade e observacao.
 - Totais da corrida sao recalculados automaticamente depois da edicao das etapas.
+
+## v10.8.0
+
+- Home recebe Central Pessoal com resumo da semana, tarefas do dia, saude dos dados e ultima atividade.
+- Acoes rapidas deixam Treino, Corrida, Historico e Backup acessiveis com um toque.
+- Proximo passo do dia passa a considerar check-in, treino planejado, corrida, backup e registros ja salvos.
+
+## v10.9.0
+
+- Historico recebe cabecalho V11 com resumo dos filtros atuais.
+- Filtros ativos ficam descritos em texto para evitar leitura errada de periodos parciais.
+- Atalhos de atividades e backup ficam antes de calendario, recordes, graficos e lista editavel.
+
+## v11.0.0
+
+- Versao estavel pessoal offline com Home, Treino, Corrida, Historico e Backup integrados.
+- Cockpit e Home usam identidade V11 sem apagar dados locais existentes.
+- Central Pessoal mostra proximo passo, ultima atividade e status de backup.

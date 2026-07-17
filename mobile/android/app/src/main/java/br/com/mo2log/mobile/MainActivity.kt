@@ -690,7 +690,9 @@ class MainActivity : Activity() {
         val stats = computeStats(allLogs())
 
         root.addView(weeklyDashboardPanel())
+        root.addView(stablePersonalDashboardPanel())
         root.addView(todayDashboardPanel())
+        root.addView(quickActionsPanel())
         root.addView(weeklyAgendaDashboardPanel())
         root.addView(dailyCommandPanel())
         root.addView(readinessCheckInPanel())
@@ -728,6 +730,66 @@ class MainActivity : Activity() {
         insightBox.addView(label("INSIGHTS", green, 13f, true))
         localInsights().forEach { insight -> insightBox.addView(label("- " + insight, white, 15f, false)) }
         root.addView(insightBox)
+    }
+
+    private fun stablePersonalDashboardPanel(): View {
+        val stats = computeStats(allLogs())
+        val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
+        val weekSets = stats.optInt("week_sets")
+        val weekRuns = currentRunningWeekWorkouts()
+        val runningDone = weekRuns.count { isRunWorkoutCompleted(it) }
+        val strengthToday = todayLogs().length() > 0 || hasCompletedStrengthSession(dayKey())
+        val runToday = todayRunCount() > 0
+        val checkInDone = readinessStatus().isNotBlank()
+        val backupDone = prefs.getString("last_backup_day", "") == dayKey()
+        val doneCount = listOf(strengthToday, runToday, checkInDone, backupDone).count { it }
+        val weeklyScore = ((progressPercent(weekSets, weekTarget).coerceAtMost(100) + progressPercent(runningDone, weekRuns.size).coerceAtMost(100)) / 2)
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("MO2 LOG V11", green, 13f, true))
+        box.addView(label("Central pessoal estavel", white, 26f, true))
+        box.addView(label("Offline, local e pronto para academia: treino, corrida, historico e backup no mesmo fluxo.", muted, 14f, false))
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(compactMetric("Semana", weeklyScore.toString() + "%"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Hoje", doneCount.toString() + "/4"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Dados", localDataHealthLabel()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+
+        box.addView(label("Proximo passo: " + stableNextActionLine(), white, 15f, true))
+        box.addView(label("Ultima atividade: " + latestActivitySummary(), muted, 13f, false))
+        box.addView(label(dataSafetyLine(), if (backupDone) green else amber, 13f, true))
+        return box
+    }
+
+    private fun quickActionsPanel(): View {
+        val box = card(surface2)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("ACOES RAPIDAS", green, 13f, true))
+        box.addView(label("Comece pelo que voce vai usar agora.", white, 20f, true))
+
+        val firstRow = LinearLayout(this)
+        firstRow.orientation = LinearLayout.HORIZONTAL
+        val workout = actionButton("Iniciar treino", green, bg)
+        workout.setOnClickListener { switchTab("workout") }
+        firstRow.addView(workout, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val running = actionButton("Iniciar corrida", surface3, Mo2Colors.Running)
+        running.setOnClickListener { switchTab("running") }
+        firstRow.addView(running, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(firstRow))
+
+        val secondRow = LinearLayout(this)
+        secondRow.orientation = LinearLayout.HORIZONTAL
+        val history = actionButton("Historico", surface3, white)
+        history.setOnClickListener { switchTab("history") }
+        secondRow.addView(history, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val backup = actionButton("Backup", surface3, green)
+        backup.setOnClickListener { exportToClipboard() }
+        secondRow.addView(backup, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(secondRow))
+        return box
     }
 
     private fun weeklyDashboardPanel(): View {
@@ -858,6 +920,79 @@ class MainActivity : Activity() {
         return roundKm(total)
     }
 
+    private fun stableNextActionLine(): String {
+        val mission = todayMission()
+        val strengthDone = todayLogs().length() > 0 || hasCompletedStrengthSession(dayKey())
+        val runDone = todayRunCount() > 0
+        val checkInDone = readinessStatus().isNotBlank()
+        val backupDone = prefs.getString("last_backup_day", "") == dayKey()
+        val run = todayRunningWorkout()
+        return when {
+            !checkInDone -> "fazer check-in rapido antes de decidir intensidade."
+            isStrengthDayToday() && !strengthDone -> "abrir " + currentPlan().title + " e registrar as series."
+            run != null && !runDone -> "abrir corrida: " + run.title + "."
+            !backupDone -> "copiar backup local depois do treino."
+            else -> mission.first.lowercase(Locale("pt", "BR")) + " concluido ou em dia; revisar historico se quiser ajustar."
+        }
+    }
+
+    private fun localDataHealthLabel(): String {
+        val total = allLogs().length() + runLogs().length() + strengthSessionLogs().length()
+        return when {
+            total <= 0 -> "novo"
+            prefs.getString("last_backup_day", "") == dayKey() -> "ok"
+            total >= 20 -> "backup"
+            else -> "local"
+        }
+    }
+
+    private fun dataSafetyLine(): String {
+        val backupDay = prefs.getString("last_backup_day", "").orEmpty()
+        return if (backupDay == dayKey()) {
+            "Backup de hoje ja foi copiado."
+        } else if (backupDay.isBlank()) {
+            "Backup ainda nao feito neste aparelho. Use Acoes Rapidas > Backup."
+        } else {
+            "Ultimo backup: " + backupDay + ". Copie novamente depois de registrar novos treinos."
+        }
+    }
+
+    private fun latestActivitySummary(): String {
+        var latestKey = ""
+        var latestText = "nenhum registro local ainda."
+        val sets = allLogs()
+        for (index in 0 until sets.length()) {
+            val item = sets.getJSONObject(index)
+            val key = item.optString("day") + item.optString("time")
+            if (key >= latestKey) {
+                latestKey = key
+                latestText = item.optString("day") + " " + item.optString("time") + " | " +
+                    item.optString("exercise", "Serie") + " " + item.optInt("reps") + " reps"
+            }
+        }
+        val runs = runLogs()
+        for (index in 0 until runs.length()) {
+            val item = runs.getJSONObject(index)
+            val key = item.optString("day") + item.optString("time")
+            if (key >= latestKey) {
+                latestKey = key
+                latestText = item.optString("day") + " " + item.optString("time") + " | " +
+                    item.optString("workout_title", "Corrida") + " " + formatKm(item.optDouble("distance"))
+            }
+        }
+        val sessions = strengthSessionLogs()
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            val key = item.optString("day") + item.optString("time")
+            if (key >= latestKey) {
+                latestKey = key
+                latestText = item.optString("day") + " " + item.optString("time") + " | " +
+                    item.optString("plan_title", "Treino") + " concluido"
+            }
+        }
+        return latestText
+    }
+
     private fun isStrengthDayToday(): Boolean {
         val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
         return day == 2 || day == 4 || day == 6
@@ -899,7 +1034,7 @@ class MainActivity : Activity() {
 
         val box = card(surface2)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("COCKPIT V10", green, 13f, true))
+        box.addView(label("COCKPIT V11", green, 13f, true))
         box.addView(label(mission.first, white, 24f, true))
         box.addView(label(mission.second, muted, 14f, false))
         box.addView(label("Semana: " + weekSets + "/" + weekTarget + " series (" + weekPercent + "%) | Corridas " + runningDone + "/" + runningTotal, white, 15f, true))
@@ -2227,6 +2362,7 @@ class MainActivity : Activity() {
         val strengthSessions = filteredStrengthSessionHistory()
         val strengthActivities = strengthHistoryActivities(strengthLogs, strengthSessions)
         val runs = filteredRunHistory()
+        root.addView(historyStableSummaryPanel(strengthLogs, strengthActivities, runs))
         root.addView(historyTypeSelectorPanel())
         root.addView(historyCalendarPanel())
         root.addView(historyAdvancedFiltersButton())
@@ -2246,6 +2382,60 @@ class MainActivity : Activity() {
         val export = actionButton("Copiar exportacao completa", green, bg)
         export.setOnClickListener { exportToClipboard() }
         root.addView(buttonParams(export))
+    }
+
+    private fun historyStableSummaryPanel(
+        strengthLogs: List<JSONObject>,
+        strengthActivities: List<HistoryActivity>,
+        runs: List<JSONObject>,
+    ): View {
+        val volume = strengthLogs.sumOf { it.optDouble("load") * it.optInt("reps") }.roundToInt()
+        val distance = roundKm(runs.sumOf { it.optDouble("distance") })
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("HISTORICO V11", green, 13f, true))
+        box.addView(label("Registros locais editaveis", white, 24f, true))
+        box.addView(label("Use esta tela para revisar, corrigir ou excluir o que ficou salvo no celular.", muted, 14f, false))
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(compactMetric("Treinos", strengthActivities.size.toString()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Volume", volume.toString() + " kg"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Corrida", formatKm(distance)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+        box.addView(label("Filtro atual: " + historyFilterSummary(), muted, 13f, false))
+
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val activity = actionButton("Atividades", surface2, white)
+        activity.setOnClickListener {
+            requestedSection = "activity"
+            render()
+        }
+        row.addView(activity, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val export = actionButton("Backup", surface2, green)
+        export.setOnClickListener { exportToClipboard() }
+        row.addView(export, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun historyFilterSummary(): String {
+        val type = when (prefs.getString("history_type", "all") ?: "all") {
+            "run" -> "corrida"
+            "strength" -> "musculacao"
+            else -> "todos"
+        }
+        val from = prefs.getString("history_from", "").orEmpty()
+        val to = prefs.getString("history_to", "").orEmpty()
+        val query = prefs.getString("history_query", "").orEmpty()
+        val period = when {
+            from.isNotBlank() && to.isNotBlank() -> from + " ate " + to
+            from.isNotBlank() -> "desde " + from
+            to.isNotBlank() -> "ate " + to
+            else -> "sem periodo fixo"
+        }
+        return type + " | " + period + if (query.isNotBlank()) " | busca: " + query else ""
     }
 
     private fun historyTypeSelectorPanel(): View {
