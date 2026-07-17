@@ -133,3 +133,11 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Versao estavel pessoal offline com Home, Treino, Corrida, Historico e Backup integrados.
 - Cockpit e Home usam identidade V11 sem apagar dados locais existentes.
 - Central Pessoal mostra proximo passo, ultima atividade e status de backup.
+
+## v11.1.0
+
+- Normaliza navegacao e selecoes persistidas na abertura para evitar estados invalidos depois de atualizacoes.
+- Backup `personal_backup_v2` preserva os tipos originais das preferencias locais.
+- Importacao valida o arquivo e mostra a quantidade de series, treinos e corridas antes da confirmacao.
+- Cria uma copia automatica antes de restaurar e oferece `Desfazer ultima importacao` no Perfil.
+- Mantem compatibilidade com backups `personal_backup_v1` e formatos legados.

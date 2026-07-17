@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.Bitmap
@@ -264,6 +265,10 @@ class MainActivity : Activity() {
     private val versionName = BuildConfig.VERSION_NAME
     // Change only when the bundled plan changes so visual releases never reset an active workout.
     private val trainingPlanVersion = "10.1.0"
+    private val backupSource = "mo2log_native_android"
+    private val backupSchema = "personal_backup_v2"
+    private val supportedBackupSchemas = setOf("personal_backup_v1", backupSchema)
+    private val preImportBackupKey = "pre_import_backup_snapshot"
     private val bg = Mo2Colors.Background
     private val surface = Mo2Colors.Surface
     private val surface2 = Mo2Colors.SurfaceAlt
@@ -356,14 +361,9 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val persistedTab = prefs.getString("current_tab", "home") ?: "home"
-        val requestedTab = intent.getStringExtra("tab")?.takeIf { tab -> navItems.any { it.id == tab } }
-        currentTab = requestedTab ?: persistedTab
-        requestedSection = intent.getStringExtra("section").orEmpty()
         syncTrainingPlanVersion()
-        selectedPlanIndex = prefs.getInt("selected_plan", todayPlanIndex())
-        selectedExerciseIndex = prefs.getInt("selected_exercise", 0)
-        selectedRunId = prefs.getString("selected_run_id", todayRunningWorkout()?.id ?: currentRunningWeekWorkouts().first().id) ?: currentRunningWeekWorkouts().first().id
+        restorePersistedState(intent.getStringExtra("tab"))
+        requestedSection = intent.getStringExtra("section").orEmpty()
         render()
         window.decorView.post { initVoiceCoach() }
     }
@@ -403,6 +403,36 @@ class MainActivity : Activity() {
         if (!prefs.contains("run_distance")) editor.putString("run_distance", "5.0")
         if (!prefs.contains("run_speed")) editor.putString("run_speed", "8.0")
         if (!prefs.contains("running_plan_start_day")) editor.putString("running_plan_start_day", dayKey())
+        editor.apply()
+    }
+
+    private fun restorePersistedState(preferredTab: String? = null) {
+        val persistedTab = prefs.getString("current_tab", "home").orEmpty()
+        currentTab = listOfNotNull(preferredTab, persistedTab, "home")
+            .first { candidate -> navItems.any { it.id == candidate } }
+
+        val availablePlans = plans
+        selectedPlanIndex = prefs.getInt("selected_plan", todayPlanIndex())
+            .coerceIn(availablePlans.indices)
+        selectedExerciseIndex = prefs.getInt("selected_exercise", 0)
+            .coerceIn(availablePlans[selectedPlanIndex].exercises.indices)
+
+        val selectedRun = prefs.getString("selected_run_id", "").orEmpty()
+        val fallbackRun = todayRunningWorkout()?.id
+            ?: currentRunningWeekWorkouts().firstOrNull()?.id
+            ?: runningPlan.firstOrNull()?.id
+            ?: ""
+        selectedRunId = selectedRun.takeIf { runningWorkoutById(it) != null } ?: fallbackRun
+
+        val editor = prefs.edit()
+            .putString("current_tab", currentTab)
+            .putInt("selected_plan", selectedPlanIndex)
+            .putInt("selected_exercise", selectedExerciseIndex)
+            .putString("selected_run_id", selectedRunId)
+        val activeRunId = prefs.getString("running_active_id", "").orEmpty()
+        if (activeRunId.isNotBlank() && runningWorkoutById(activeRunId) == null) {
+            clearActiveRunState(editor)
+        }
         editor.apply()
     }
 
@@ -4545,6 +4575,12 @@ class MainActivity : Activity() {
         }
         row.addView(importClipboard, LinearLayout.LayoutParams(0, dp(50), 1f))
         backup.addView(spacedRow(row))
+        if (prefs.contains(preImportBackupKey)) {
+            val undoImport = actionButton("Desfazer ultima importacao", surface, amber)
+            undoImport.setOnClickListener { showUndoBackupImportDialog() }
+            backup.addView(buttonParams(undoImport))
+            backup.addView(label("Uma copia automatica dos dados anteriores esta disponivel neste aparelho.", muted, 12f, false))
+        }
         root.addView(backup)
 
         val dangerBox = card(surface)
@@ -6413,7 +6449,13 @@ class MainActivity : Activity() {
     }
 
     private fun clearActiveRun() {
-        prefs.edit()
+        val editor = prefs.edit()
+        clearActiveRunState(editor)
+        editor.apply()
+    }
+
+    private fun clearActiveRunState(editor: SharedPreferences.Editor) {
+        editor
             .remove("running_active_id")
             .remove("running_active_stage")
             .remove("running_active_distance_done")
@@ -6429,7 +6471,6 @@ class MainActivity : Activity() {
             .remove("running_start_announced")
             .remove("running_30_announced_key")
             .remove("running_10_announced_key")
-            .apply()
     }
 
     private fun activeRunningWorkout(): RunningWorkout? {
@@ -6581,22 +6622,49 @@ class MainActivity : Activity() {
 
     private fun backupPayload(): JSONObject {
         val preferences = JSONObject()
+        val preferenceTypes = JSONObject()
         prefs.all.forEach { entry ->
+            if (entry.key == preImportBackupKey) return@forEach
             when (val value = entry.value) {
-                is String -> preferences.put(entry.key, value)
-                is Boolean -> preferences.put(entry.key, value)
-                is Int -> preferences.put(entry.key, value)
-                is Long -> preferences.put(entry.key, value)
-                is Float -> preferences.put(entry.key, value.toDouble())
-                else -> preferences.put(entry.key, value?.toString() ?: "")
+                is String -> {
+                    preferences.put(entry.key, value)
+                    preferenceTypes.put(entry.key, "string")
+                }
+                is Boolean -> {
+                    preferences.put(entry.key, value)
+                    preferenceTypes.put(entry.key, "boolean")
+                }
+                is Int -> {
+                    preferences.put(entry.key, value)
+                    preferenceTypes.put(entry.key, "int")
+                }
+                is Long -> {
+                    preferences.put(entry.key, value)
+                    preferenceTypes.put(entry.key, "long")
+                }
+                is Float -> {
+                    preferences.put(entry.key, value.toDouble())
+                    preferenceTypes.put(entry.key, "float")
+                }
+                is Set<*> -> {
+                    val values = JSONArray()
+                    value.filterIsInstance<String>().sorted().forEach { item -> values.put(item) }
+                    preferences.put(entry.key, values)
+                    preferenceTypes.put(entry.key, "string_set")
+                }
+                else -> {
+                    preferences.put(entry.key, value?.toString() ?: "")
+                    preferenceTypes.put(entry.key, "string")
+                }
             }
         }
         return JSONObject()
-            .put("source", "mo2log_native_android")
-            .put("schema", "personal_backup_v1")
+            .put("source", backupSource)
+            .put("schema", backupSchema)
             .put("version", versionName)
             .put("exported_at", timestamp())
             .put("preferences", preferences)
+            .put("preference_types", preferenceTypes)
             .put("strength_logs", allLogs())
             .put("strength_sessions", strengthSessionLogs())
             .put("run_logs", runLogs())
@@ -6614,40 +6682,181 @@ class MainActivity : Activity() {
         }
         try {
             val payload = JSONObject(raw.trim())
-            val editor = prefs.edit()
-            val preferences = payload.optJSONObject("preferences")
-            if (preferences != null) {
-                val keys = preferences.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    when (val value = preferences.get(key)) {
-                        is Boolean -> editor.putBoolean(key, value)
-                        is Int -> editor.putInt(key, value)
-                        is Long -> editor.putLong(key, value)
-                        is Double -> editor.putString(key, value.toString())
-                        else -> editor.putString(key, value.toString())
-                    }
+            validateBackupPayload(payload)
+            showBackupImportConfirmation(payload)
+        } catch (error: Exception) {
+            Toast.makeText(this, error.message ?: "JSON de backup invalido.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun validateBackupPayload(payload: JSONObject) {
+        val source = payload.optString("source")
+        val schema = payload.optString("schema")
+        val hasLegacyContent = payload.optJSONArray("strength_logs") != null ||
+            payload.optJSONArray("strength_sessions") != null ||
+            payload.optJSONArray("run_logs") != null ||
+            payload.optJSONObject("goals") != null
+        if (source.isNotBlank() && source != backupSource) {
+            throw IllegalArgumentException("Este backup nao pertence ao Mo2 LOG Android.")
+        }
+        if (schema.isNotBlank() && schema !in supportedBackupSchemas) {
+            throw IllegalArgumentException("Versao de backup ainda nao suportada: " + schema + ".")
+        }
+        if (payload.optJSONObject("preferences") == null && !hasLegacyContent) {
+            throw IllegalArgumentException("O JSON nao contem dados restauraveis do Mo2 LOG.")
+        }
+        listOf("strength_logs", "strength_sessions", "run_logs").forEach { key ->
+            if (payload.has(key) && payload.optJSONArray(key) == null) {
+                throw IllegalArgumentException("O campo " + key + " esta corrompido no backup.")
+            }
+        }
+    }
+
+    private fun showBackupImportConfirmation(payload: JSONObject) {
+        val summary = backupSummary(payload)
+        val backupVersion = payload.optString("version", "legado")
+        val exportedAt = payload.optString("exported_at", "data nao informada")
+        val message = "Backup v" + backupVersion + " | " + exportedAt + "\n\n" +
+            summary.first + " series, " + summary.second + " treinos de musculacao e " +
+            summary.third + " corridas.\n\n" +
+            "Antes de importar, o app guardara automaticamente uma copia dos dados atuais."
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Importar este backup?")
+            .setMessage(message)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Importar") { _, _ -> applyBackupPayload(payload, createSafetySnapshot = true) }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun backupSummary(payload: JSONObject): Triple<Int, Int, Int> {
+        val summary = payload.optJSONObject("summary")
+        if (summary != null) {
+            return Triple(
+                summary.optInt("strength_log_count"),
+                summary.optInt("strength_session_count"),
+                summary.optInt("run_log_count"),
+            )
+        }
+        val preferences = payload.optJSONObject("preferences")
+        return Triple(
+            backupArrayLength(payload, preferences, "strength_logs", "set_logs"),
+            backupArrayLength(payload, preferences, "strength_sessions", "strength_session_logs"),
+            backupArrayLength(payload, preferences, "run_logs", "run_logs"),
+        )
+    }
+
+    private fun backupArrayLength(payload: JSONObject, preferences: JSONObject?, payloadKey: String, preferenceKey: String): Int {
+        payload.optJSONArray(payloadKey)?.let { return it.length() }
+        val raw = preferences?.optString(preferenceKey).orEmpty()
+        return try {
+            JSONArray(raw).length()
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun applyBackupPayload(payload: JSONObject, createSafetySnapshot: Boolean) {
+        val safetySnapshot = if (createSafetySnapshot) backupPayload().toString() else null
+        val editor = prefs.edit()
+        val preferences = payload.optJSONObject("preferences")
+        val preferenceTypes = payload.optJSONObject("preference_types")
+        if (preferences != null) restorePreferences(editor, preferences, preferenceTypes)
+
+        payload.optJSONArray("strength_logs")?.let { editor.putString("set_logs", it.toString()) }
+        payload.optJSONArray("strength_sessions")?.let { editor.putString("strength_session_logs", it.toString()) }
+        payload.optJSONArray("run_logs")?.let { editor.putString("run_logs", it.toString()) }
+        payload.optJSONObject("goals")?.let { goals ->
+            editor.putString("goal_week_sets", goals.optString("week_sets", "60"))
+            editor.putString("goal_week_volume", goals.optString("week_volume", "12000"))
+            editor.putString("body_weight", goals.optString("body_weight", ""))
+        }
+        clearActiveRunState(editor)
+        editor.remove("rest_timer_end_at")
+        if (safetySnapshot != null) editor.putString(preImportBackupKey, safetySnapshot) else editor.remove(preImportBackupKey)
+        editor.putString("last_restore_at", timestamp())
+        editor.putString("last_restore_version", payload.optString("version", "legado"))
+
+        if (!editor.commit()) {
+            Toast.makeText(this, "Nao foi possivel gravar o backup neste aparelho.", Toast.LENGTH_LONG).show()
+            return
+        }
+        syncTrainingPlanVersion()
+        restorePersistedState(currentTab)
+        Toast.makeText(this, if (createSafetySnapshot) "Backup importado com copia de seguranca." else "Importacao desfeita.", Toast.LENGTH_LONG).show()
+        render()
+    }
+
+    private fun restorePreferences(
+        editor: SharedPreferences.Editor,
+        preferences: JSONObject,
+        preferenceTypes: JSONObject?,
+    ) {
+        val keys = preferences.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            if (key == preImportBackupKey) continue
+            val value = preferences.get(key)
+            val explicitType = preferenceTypes?.optString(key).orEmpty()
+            val type = explicitType.ifBlank { legacyPreferenceType(key, value) }
+            when (type) {
+                "boolean" -> editor.putBoolean(key, value.toString().toBooleanStrictOrNull() ?: false)
+                "int" -> editor.putInt(key, value.toString().toIntOrNull() ?: 0)
+                "long" -> editor.putLong(key, value.toString().toLongOrNull() ?: 0L)
+                "float" -> editor.putFloat(key, value.toString().toFloatOrNull() ?: 0f)
+                "string_set" -> {
+                    val array = value as? JSONArray ?: JSONArray()
+                    val values = mutableSetOf<String>()
+                    for (index in 0 until array.length()) array.optString(index).takeIf { it.isNotBlank() }?.let(values::add)
+                    editor.putStringSet(key, values)
                 }
-            } else {
-                if (payload.has("strength_logs")) editor.putString("set_logs", payload.getJSONArray("strength_logs").toString())
-                if (payload.has("strength_sessions")) editor.putString("strength_session_logs", payload.getJSONArray("strength_sessions").toString())
-                if (payload.has("run_logs")) editor.putString("run_logs", payload.getJSONArray("run_logs").toString())
-                payload.optJSONObject("goals")?.let { goals ->
-                    editor.putString("goal_week_sets", goals.optString("week_sets", "60"))
-                    editor.putString("goal_week_volume", goals.optString("week_volume", "12000"))
-                    editor.putString("body_weight", goals.optString("body_weight", ""))
+                else -> editor.putString(key, value.toString())
+            }
+        }
+    }
+
+    private fun legacyPreferenceType(key: String, value: Any): String {
+        return when {
+            prefs.all[key] is Long || key in setOf(
+                "running_goal_5k_seconds",
+                "rest_timer_end_at",
+                "running_active_last_tick_at",
+                "running_countdown_end_at",
+                "running_active_started_at_ms",
+                "running_active_pause_started_at",
+                "running_active_paused_total_ms",
+            ) -> "long"
+            prefs.all[key] is Int -> "int"
+            prefs.all[key] is Boolean -> "boolean"
+            prefs.all[key] is Float -> "float"
+            value is Boolean -> "boolean"
+            value is Int -> "int"
+            value is Long -> "long"
+            else -> "string"
+        }
+    }
+
+    private fun showUndoBackupImportDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Desfazer ultima importacao?")
+            .setMessage("Os dados que estavam no aparelho antes da ultima importacao serao restaurados.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Desfazer") { _, _ ->
+                val raw = prefs.getString(preImportBackupKey, "").orEmpty()
+                try {
+                    val payload = JSONObject(raw)
+                    validateBackupPayload(payload)
+                    applyBackupPayload(payload, createSafetySnapshot = false)
+                } catch (_: Exception) {
+                    Toast.makeText(this, "A copia de seguranca nao esta mais valida.", Toast.LENGTH_LONG).show()
                 }
             }
-            editor
-                .remove("rest_timer_end_at")
-                .remove("running_active_id")
-                .remove("running_countdown_end_at")
-                .apply()
-            Toast.makeText(this, "Backup importado.", Toast.LENGTH_SHORT).show()
-            render()
-        } catch (_: Exception) {
-            Toast.makeText(this, "JSON de backup invalido.", Toast.LENGTH_SHORT).show()
-        }
+            .show()
     }
 
     private fun readClipboardText(): String {

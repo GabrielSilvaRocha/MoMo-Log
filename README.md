@@ -4,19 +4,19 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v10.5.0.
+- Android nativo pessoal: v11.1.0.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v10.6.0 - Progressao de musculacao, deload e volume por grupo muscular.
-- v10.7.0 - Personalizacao por equipamentos, favoritos, alternativas e exercicios proprios.
-- v10.8.0 - Integracao opcional com Android Health Connect.
-- v10.9.0 - Backup versionado, restauracao e migracao segura dos dados.
-- v10.10.0 - Acessibilidade, desempenho, estabilidade e testes automatizados.
-- v11.0.0 - Experiencia pessoal madura com musculacao, corrida e planejamento integrados.
+- v11.2.0 - Progressao de carga, volume por grupo muscular e sugestoes de evolucao.
+- v11.3.0 - Corrida adaptativa com ajuste do plano de 5 km pelo desempenho real.
+- v11.4.0 - Calendario unificado, reagendamento e recuperacao de treinos.
+- v11.5.0 - Catalogo aprimorado, exercicios proprios e cache de midia.
+- v11.6.0 - Backup versionado com migracoes e verificacao ampliada de integridade.
+- v12.0.0 - Consolidacao de UI, desempenho, acessibilidade e testes do uso pessoal.
 
 ## v8.1.2 - Android Offline Auto Login
 
@@ -477,3 +477,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Central Pessoal destaca o que fazer agora, ultima atividade registrada e status de backup.
 - Historico V11 reforca revisao, edicao e exportacao local antes de treinos futuros.
 - O app Android passa para versionCode 1100 / versionName 11.0.0.
+
+## v11.1.0 - Restauracao segura e estabilidade local
+
+- A abertura normaliza aba, treino, exercicio e corrida selecionados para impedir indices invalidos depois de atualizacoes ou backups antigos.
+- Sessoes de corrida vinculadas a um plano inexistente sao encerradas com seguranca sem afetar o historico ja salvo.
+- Backup passa ao esquema `personal_backup_v2`, preservando explicitamente os tipos de `String`, `Boolean`, `Int`, `Long`, `Float` e conjuntos.
+- Importacao valida origem, esquema e colecoes antes de gravar, mostra uma previa com totais e exige confirmacao.
+- O app cria uma copia automatica dos dados atuais antes da importacao e permite desfazer a ultima restauracao pelo Perfil.
+- Backups `personal_backup_v1` e formatos legados continuam aceitos com conversao compativel de tipos.
+- O app Android passa para versionCode 1110 / versionName 11.1.0.
