@@ -479,7 +479,9 @@ class MainActivity : Activity() {
         val focusedRunningSession = currentTab == "running" && activeRunningWorkout() != null
         val focusedStrengthSession = currentTab == "workout"
         if (!focusedRunningSession && !focusedStrengthSession) {
-            root.addView(header())
+            if (currentTab !in setOf("home", "running", "more")) {
+                root.addView(header())
+            }
             root.addView(pageIntro())
         }
 
@@ -825,8 +827,11 @@ class MainActivity : Activity() {
     private fun weeklyDashboardPanel(): View {
         val stats = computeStats(allLogs())
         val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
+        val volumeTarget = prefs.getString("goal_week_volume", "12000")?.toIntOrNull() ?: 12000
         val weekSets = stats.optInt("week_sets")
+        val weekVolume = stats.optInt("week_volume")
         val strengthPercent = progressPercent(weekSets, weekTarget)
+        val volumePercent = progressPercent(weekVolume, volumeTarget)
         val weekRuns = currentRunningWeekWorkouts()
         val runningDone = weekRuns.count { isRunWorkoutCompleted(it) }
         val runningPercent = progressPercent(runningDone, weekRuns.size)
@@ -838,14 +843,20 @@ class MainActivity : Activity() {
         box.addView(label("Semana " + currentRunningPlanWeek() + " de 6", white, 30f, true))
         box.addView(label("Musculacao, corrida e prontidao em uma visao rapida para treinar hoje.", muted, 15f, false))
 
-        val metrics = LinearLayout(this)
-        metrics.orientation = LinearLayout.HORIZONTAL
-        metrics.addView(compactMetric("Series", weekSets.toString() + "/" + weekTarget), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        metrics.addView(compactMetric("Corridas", runningDone.toString() + "/" + weekRuns.size), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        metrics.addView(compactMetric("Distancia", formatKm(distance)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        box.addView(spacedRow(metrics))
+        val strengthMetrics = LinearLayout(this)
+        strengthMetrics.orientation = LinearLayout.HORIZONTAL
+        strengthMetrics.addView(compactMetric("Series", weekSets.toString() + "/" + weekTarget), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        strengthMetrics.addView(compactMetric("Volume", weekVolume.toString() + " kg"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(strengthMetrics))
+
+        val runningMetrics = LinearLayout(this)
+        runningMetrics.orientation = LinearLayout.HORIZONTAL
+        runningMetrics.addView(compactMetric("Corridas", runningDone.toString() + "/" + weekRuns.size), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        runningMetrics.addView(compactMetric("Distancia", formatKm(distance)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(runningMetrics))
 
         box.addView(dashboardProgressLine("Musculacao", weekSets.toString() + " series de " + weekTarget, strengthPercent, green))
+        box.addView(dashboardProgressLine("Volume", weekVolume.toString() + " kg de " + volumeTarget + " kg", volumePercent, green))
         box.addView(dashboardProgressLine("Corrida 5 km", runningDone.toString() + " de " + weekRuns.size + " treinos concluidos", runningPercent, Mo2Colors.Running))
         box.addView(label(readinessLine(stats), muted, 14f, false))
 

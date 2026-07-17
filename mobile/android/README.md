@@ -166,3 +166,10 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Consolida Home, Treino, Corrida, Historico, Estatisticas, Coach, Catalogo e Perfil na experiencia V12.
 - Mantem dados, plano em andamento, backup e funcionamento pessoal local-first.
 - Android usa versionCode 1200 e versionName 12.0.0.
+
+## v12.0.1
+
+- Remove o header global de Inicio, Corrida e Mais sem alterar os demais fluxos.
+- Dashboard Semanal mostra volume acumulado, meta de volume e progresso semanal.
+- Indicadores ficam distribuidos em duas linhas para evitar textos comprimidos.
+- Android usa versionCode 1201 e versionName 12.0.1.
