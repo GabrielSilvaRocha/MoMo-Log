@@ -4,19 +4,18 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v11.1.0.
+- Android nativo pessoal: v12.0.0.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v11.2.0 - Progressao de carga, volume por grupo muscular e sugestoes de evolucao.
-- v11.3.0 - Corrida adaptativa com ajuste do plano de 5 km pelo desempenho real.
-- v11.4.0 - Calendario unificado, reagendamento e recuperacao de treinos.
-- v11.5.0 - Catalogo aprimorado, exercicios proprios e cache de midia.
-- v11.6.0 - Backup versionado com migracoes e verificacao ampliada de integridade.
-- v12.0.0 - Consolidacao de UI, desempenho, acessibilidade e testes do uso pessoal.
+- v12.1.0 - Ampliacao dos testes de interface e diagnostico de desempenho em aparelhos reais.
+- v12.2.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
+- v12.3.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
+- v12.4.0 - Comparacoes mensais e metas pessoais de longo prazo.
+- v13.0.0 - Nova consolidacao da experiencia pessoal offline.
 
 ## v8.1.2 - Android Offline Auto Login
 
@@ -487,3 +486,56 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - O app cria uma copia automatica dos dados atuais antes da importacao e permite desfazer a ultima restauracao pelo Perfil.
 - Backups `personal_backup_v1` e formatos legados continuam aceitos com conversao compativel de tipos.
 - O app Android passa para versionCode 1110 / versionName 11.1.0.
+
+## v11.2.0 - Progressao e volume muscular
+
+- Central de Evolucao compara series e volume dos ultimos sete dias com a semana anterior.
+- Estatisticas mostram volume acumulado por grupo muscular nos ultimos 28 dias e sinalizam concentracoes.
+- Progressao do exercicio atual combina carga sugerida, volume e justificativa usando o historico local.
+
+## v11.3.0 - Corrida adaptativa consolidada
+
+- Coach de corrida combina desempenho valido, RPE, prontidao e previsao de 5 km para ajustar ritmo e distancia.
+- Corridas manuais ou registros sem pace plausivel nao distorcem a adaptacao automatica.
+- Previsao e proxima decisao de corrida passam a aparecer tambem no Coach integrado.
+
+## v11.4.0 - Reagendamento e recuperacao
+
+- Cada corrida recebe uma data efetiva calculada a partir do inicio do ciclo.
+- Treinos podem ser reagendados, devolvidos ao plano original ou recuperados hoje.
+- A selecao automatica do treino do dia respeita datas personalizadas e pendencias.
+
+## v11.5.0 - Catalogo preparado para o treino
+
+- Catalogo mostra quantidade e tamanho do cache de midia.
+- Acao Preparar treino baixa antecipadamente as midias dos exercicios do plano atual.
+- Limpeza de cache permanece disponivel sem afetar historico, plano ou favoritos.
+
+## v11.6.0 - Integridade local
+
+- Perfil verifica colecoes JSON, quantidade de registros, idade do backup e tamanho do cache.
+- Status Integro, Atencao ou Revisar orienta quando criar um novo backup.
+- Backup tipado e reversao segura da v11.1 continuam preservados.
+
+## v11.7.0 - Relatorio pessoal comparativo
+
+- Relatorio V12 reune consistencia, series, volume, corrida e previsao de 5 km.
+- Comparacao semanal pode ser copiada para o clipboard sem servidor ou conta externa.
+
+## v11.8.0 - Acessibilidade e desempenho
+
+- Perfil oferece texto ampliado e movimento reduzido em pop-ups.
+- Calculos de evolucao usam janelas locais limitadas e cache de grupo muscular por exercicio.
+- Catalogo renderiza 30 resultados por vez e permite carregar mais sem perder busca ou filtros.
+
+## v11.9.0 - Testes automatizados
+
+- Motor `Mo2ProgressEngine` separa tendencia, consistencia, integridade e equilibrio de volume da interface Android.
+- Suite JUnit cobre crescimento, nova linha de base, limites de consistencia, backup antigo e concentracao muscular.
+
+## v12.0.0 - Experiencia pessoal integrada
+
+- Home, Treino, Corrida, Historico, Estatisticas, Coach, Catalogo e Perfil compartilham a identidade V12.
+- Central de Evolucao integra musculacao e corrida sem remover os fluxos anteriores.
+- Aplicativo continua pessoal, local-first e funcional sem PC ou backend; internet segue opcional para baixar midias.
+- O app Android passa para versionCode 1200 / versionName 12.0.0.

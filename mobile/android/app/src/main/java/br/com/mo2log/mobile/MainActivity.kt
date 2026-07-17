@@ -777,8 +777,8 @@ class MainActivity : Activity() {
 
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("MO2 LOG V11", green, 13f, true))
-        box.addView(label("Central pessoal estavel", white, 26f, true))
+        box.addView(label("MO2 LOG V12", green, 13f, true))
+        box.addView(label("Central pessoal integrada", white, 26f, true))
         box.addView(label("Offline, local e pronto para academia: treino, corrida, historico e backup no mesmo fluxo.", muted, 14f, false))
 
         val metrics = LinearLayout(this)
@@ -968,11 +968,13 @@ class MainActivity : Activity() {
 
     private fun localDataHealthLabel(): String {
         val total = allLogs().length() + runLogs().length() + strengthSessionLogs().length()
-        return when {
-            total <= 0 -> "novo"
-            prefs.getString("last_backup_day", "") == dayKey() -> "ok"
-            total >= 20 -> "backup"
-            else -> "local"
+        if (total <= 0) return "novo"
+        val backupDay = prefs.getString("last_backup_day", "").orEmpty()
+        val age = if (isValidDayKey(backupDay)) daysBetween(backupDay, dayKey()) else null
+        return when (Mo2ProgressEngine.dataHealth(invalidLocalCollectionCount(), age, total).status) {
+            "Integro" -> "ok"
+            "Revisar" -> "revisar"
+            else -> "backup"
         }
     }
 
@@ -1064,7 +1066,7 @@ class MainActivity : Activity() {
 
         val box = card(surface2)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("COCKPIT V11", green, 13f, true))
+        box.addView(label("COCKPIT V12", green, 13f, true))
         box.addView(label(mission.first, white, 24f, true))
         box.addView(label(mission.second, muted, 14f, false))
         box.addView(label("Semana: " + weekSets + "/" + weekTarget + " series (" + weekPercent + "%) | Corridas " + runningDone + "/" + runningTotal, white, 15f, true))
@@ -1838,6 +1840,8 @@ class MainActivity : Activity() {
     private fun runningWeekWorkoutItem(workout: RunningWorkout, expanded: Boolean): View {
         val completed = isRunWorkoutCompleted(workout)
         val active = activeRunningWorkout()?.id == workout.id
+        val scheduledDay = scheduledDayFor(workout)
+        val overdue = !completed && scheduledDay < dayKey()
         val item = card(if (expanded) surface3 else surface)
         item.orientation = LinearLayout.VERTICAL
         item.setOnClickListener {
@@ -1854,6 +1858,7 @@ class MainActivity : Activity() {
         titleBox.orientation = LinearLayout.VERTICAL
         titleBox.addView(label(workout.dayName + " | " + workout.title, if (completed) green else white, 17f, true))
         titleBox.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)) + " | " + runningStageSummary(workout), muted, 13f, false))
+        titleBox.addView(label("Agendado: " + formatDayForDisplay(scheduledDay) + if (overdue) " | atrasado" else "", if (overdue) amber else muted, 12f, overdue))
         top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         top.addView(Mo2Components.badge(this, if (completed) "Feito" else if (active) "Rodando" else if (expanded) "Aberto" else "Pendente", completed || active))
         item.addView(top)
@@ -1873,6 +1878,18 @@ class MainActivity : Activity() {
                 item.addView(stageRow, params)
             }
 
+            val scheduleRow = LinearLayout(this)
+            scheduleRow.orientation = LinearLayout.HORIZONTAL
+            val reschedule = actionButton("Reagendar", surface2, Mo2Colors.Running)
+            reschedule.setOnClickListener { showRescheduleRunningWorkoutDialog(workout) }
+            scheduleRow.addView(reschedule, LinearLayout.LayoutParams(0, dp(48), 1f))
+            val recover = actionButton(if (scheduledDay == dayKey()) "Agendado hoje" else "Recuperar hoje", surface2, if (overdue) amber else white)
+            recover.isEnabled = !completed && scheduledDay != dayKey()
+            recover.alpha = if (recover.isEnabled) 1f else 0.55f
+            recover.setOnClickListener { rescheduleRunningWorkout(workout, dayKey()) }
+            scheduleRow.addView(recover, LinearLayout.LayoutParams(0, dp(48), 1f))
+            item.addView(spacedRow(scheduleRow))
+
             val row = LinearLayout(this)
             row.orientation = LinearLayout.HORIZONTAL
             val start = actionButton(if (active) "Em andamento" else "Iniciar", green, bg)
@@ -1889,6 +1906,64 @@ class MainActivity : Activity() {
             item.addView(spacedRow(row))
         }
         return item
+    }
+
+    private fun showRescheduleRunningWorkoutDialog(workout: RunningWorkout) {
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(14), dp(14), dp(14), dp(8))
+        content.addView(label("REAGENDAR CORRIDA", Mo2Colors.Running, 13f, true))
+        content.addView(label(workout.title, white, 22f, true))
+        content.addView(label("Informe a nova data no formato ano-mes-dia.", muted, 14f, false))
+        val day = input("yyyy-mm-dd", scheduledDayFor(workout))
+        content.addView(day)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setNegativeButton("Cancelar", null)
+            .setNeutralButton("Plano original", null)
+            .setPositiveButton("Salvar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Mo2Colors.Running)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = day.textValue().trim()
+                if (!isValidDayKey(value)) {
+                    Toast.makeText(this, "Use uma data valida no formato yyyy-mm-dd.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                rescheduleRunningWorkout(workout, value)
+                dialog.dismiss()
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                clearRunningWorkoutSchedule(workout)
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun rescheduleRunningWorkout(workout: RunningWorkout, day: String) {
+        val overrides = safeObject("running_schedule_overrides")
+        overrides.put(workout.id, day)
+        selectedRunId = workout.id
+        prefs.edit()
+            .putString("running_schedule_overrides", overrides.toString())
+            .putString("selected_run_id", workout.id)
+            .apply()
+        Toast.makeText(this, "Corrida reagendada para " + formatDayForDisplay(day) + ".", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun clearRunningWorkoutSchedule(workout: RunningWorkout) {
+        val overrides = safeObject("running_schedule_overrides")
+        overrides.remove(workout.id)
+        prefs.edit().putString("running_schedule_overrides", overrides.toString()).apply()
+        Toast.makeText(this, "Data original do plano restaurada.", Toast.LENGTH_SHORT).show()
+        render()
     }
 
     private fun runningWorkoutCheck(completed: Boolean, active: Boolean): CheckBox {
@@ -1934,7 +2009,7 @@ class MainActivity : Activity() {
             box.addView(label("Semana " + entry.key, amber, 16f, true))
             entry.value.forEach { workout ->
                 val marker = if (isRunWorkoutCompleted(workout)) "[x] " else "[ ] "
-                box.addView(label(marker + workout.dayName + ": " + workout.title + " | " + formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), white, 13f, false))
+                box.addView(label(marker + formatDayForDisplay(scheduledDayFor(workout)) + " | " + workout.dayName + ": " + workout.title + " | " + formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), white, 13f, false))
             }
         }
         return box
@@ -2423,7 +2498,7 @@ class MainActivity : Activity() {
         val distance = roundKm(runs.sumOf { it.optDouble("distance") })
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("HISTORICO V11", green, 13f, true))
+        box.addView(label("HISTORICO V12", green, 13f, true))
         box.addView(label("Registros locais editaveis", white, 24f, true))
         box.addView(label("Use esta tela para revisar, corrigir ou excluir o que ficou salvo no celular.", muted, 14f, false))
 
@@ -4046,7 +4121,10 @@ class MainActivity : Activity() {
 
     private fun renderStats(root: LinearLayout) {
         val stats = computeStats(allLogs())
-        root.addView(sectionTitle("Estatisticas"))
+        root.addView(sectionTitle("Central de evolucao"))
+        root.addView(v12EvolutionPanel())
+        root.addView(v12MuscleVolumePanel())
+        root.addView(v12CurrentProgressionPanel())
         root.addView(metricGrid(listOf(
             Pair("Series totais", stats.optInt("total_sets").toString()),
             Pair("Volume total", stats.optInt("total_volume").toString() + " kg"),
@@ -4067,6 +4145,168 @@ class MainActivity : Activity() {
         prs.addView(label("TOP EXERCICIOS POR CARGA", green, 13f, true))
         bestLoadsByExercise().forEach { line -> prs.addView(label(line, white, 15f, false)) }
         root.addView(prs)
+    }
+
+    private fun v12EvolutionPanel(): View {
+        val current = periodSummary(historyDateOffset(-6), dayKey())
+        val previous = periodSummary(historyDateOffset(-13), historyDateOffset(-7))
+        val setTrend = Mo2ProgressEngine.trend(current.optDouble("sets"), previous.optDouble("sets"))
+        val volumeTrend = Mo2ProgressEngine.trend(current.optDouble("volume"), previous.optDouble("volume"))
+        val runTrend = Mo2ProgressEngine.trend(current.optDouble("run_distance"), previous.optDouble("run_distance"))
+        val consistency = Mo2ProgressEngine.consistencyScore(
+            current.optInt("strength_sessions") + current.optInt("runs"),
+            8,
+            current.optInt("active_days"),
+            5,
+        )
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("EVOLUCAO V12", green, 13f, true))
+        box.addView(label("Ultimos 7 dias", white, 27f, true))
+        box.addView(label("Comparacao com os 7 dias anteriores usando somente registros salvos no aparelho.", muted, 14f, false))
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(compactMetric("Consistencia", consistency.toString() + "%"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Treinos", (current.optInt("strength_sessions") + current.optInt("runs")).toString()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(compactMetric("Dias ativos", current.optInt("active_days").toString()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+
+        box.addView(v12TrendLine("Series", current.optInt("sets").toString(), setTrend))
+        box.addView(v12TrendLine("Volume", current.optInt("volume").toString() + " kg", volumeTrend))
+        box.addView(v12TrendLine("Corrida", formatKm(current.optDouble("run_distance")), runTrend))
+
+        val copy = actionButton("Copiar relatorio V12", surface2, green)
+        copy.setOnClickListener { copyV12Report(current, previous, consistency) }
+        box.addView(buttonParams(copy))
+        return box
+    }
+
+    private fun v12TrendLine(title: String, value: String, trend: Mo2Trend): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(0, dp(12), 0, 0)
+        row.addView(label(title + ": " + value, white, 15f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val trendText = trend.percent?.let { percent ->
+            (if (percent > 0) "+" else "") + percent + "%"
+        } ?: trend.direction
+        val color = when (trend.direction) {
+            "subiu" -> green
+            "caiu" -> amber
+            else -> muted
+        }
+        row.addView(label(trendText, color, 14f, true))
+        return row
+    }
+
+    private fun periodSummary(from: String, to: String): JSONObject {
+        var sets = 0
+        var volume = 0.0
+        var strengthSessions = 0
+        var runs = 0
+        var runDistance = 0.0
+        val activeDays = mutableSetOf<String>()
+
+        val setLogs = allLogs()
+        for (index in 0 until setLogs.length()) {
+            val item = setLogs.getJSONObject(index)
+            val day = item.optString("day")
+            if (day !in from..to) continue
+            sets += 1
+            volume += item.optDouble("load") * item.optInt("reps")
+            if (day.isNotBlank()) activeDays.add(day)
+        }
+        val sessions = strengthSessionLogs()
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            val day = item.optString("day")
+            if (day in from..to && item.optString("status", "completed") == "completed") strengthSessions += 1
+        }
+        val runItems = runLogs()
+        for (index in 0 until runItems.length()) {
+            val item = runItems.getJSONObject(index)
+            val day = item.optString("day")
+            if (day !in from..to) continue
+            runs += 1
+            runDistance += item.optDouble("distance")
+            if (day.isNotBlank()) activeDays.add(day)
+        }
+        return JSONObject()
+            .put("sets", sets)
+            .put("volume", volume.roundToInt())
+            .put("strength_sessions", strengthSessions)
+            .put("runs", runs)
+            .put("run_distance", roundKm(runDistance))
+            .put("active_days", activeDays.size)
+    }
+
+    private fun v12MuscleVolumePanel(): View {
+        val volumes = muscleVolumes(historyDateOffset(-27), dayKey())
+        val box = card(surface)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("VOLUME POR GRUPO", green, 13f, true))
+        box.addView(label("Ultimos 28 dias", white, 22f, true))
+        if (volumes.isEmpty()) {
+            box.addView(label("Registre series com carga para liberar a comparacao muscular.", muted, 14f, false))
+            return box
+        }
+        val maximum = volumes.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+        volumes.entries.sortedByDescending { it.value }.take(7).forEach { entry ->
+            val percent = ((entry.value / maximum) * 100.0).roundToInt()
+            box.addView(dashboardProgressLine(entry.key, entry.value.roundToInt().toString() + " kg", percent, green))
+        }
+        box.addView(label(Mo2ProgressEngine.volumeBalance(volumes), muted, 14f, false))
+        return box
+    }
+
+    private fun muscleVolumes(from: String, to: String): Map<String, Double> {
+        val result = mutableMapOf<String, Double>()
+        val muscleByExercise = mutableMapOf<String, String>()
+        val logs = allLogs()
+        for (index in 0 until logs.length()) {
+            val item = logs.getJSONObject(index)
+            val day = item.optString("day")
+            if (day !in from..to) continue
+            val exercise = item.optString("exercise", "Outro")
+            val muscle = muscleByExercise.getOrPut(exercise) {
+                catalogMatchForWorkoutExercise(exercise)?.muscle ?: "Outros"
+            }
+            val volume = item.optDouble("load") * item.optInt("reps")
+            result[muscle] = (result[muscle] ?: 0.0) + volume
+        }
+        return result.filterValues { it > 0.0 }
+    }
+
+    private fun v12CurrentProgressionPanel(): View {
+        val exercise = currentExercise()
+        val adjustment = strengthAdjustmentFor(exercise)
+        val box = card(surface2)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("PROXIMA PROGRESSAO", green, 13f, true))
+        box.addView(label(exercise.name, white, 22f, true))
+        box.addView(label("Carga sugerida: " + formatLoad(adjustment.nextLoad), white, 16f, true))
+        box.addView(label("Volume sugerido: " + adjustment.suggestedSetCount + " series", white, 15f, true))
+        box.addView(label(adjustment.loadReason, muted, 14f, false))
+        box.addView(label(adjustment.volumeReason, muted, 14f, false))
+        val open = actionButton("Abrir exercicio no treino", green, bg)
+        open.setOnClickListener { switchTab("workout") }
+        box.addView(buttonParams(open))
+        return box
+    }
+
+    private fun copyV12Report(current: JSONObject, previous: JSONObject, consistency: Int) {
+        val report = listOf(
+            "Mo2 LOG v" + versionName + " - Relatorio pessoal",
+            "Periodo: " + historyDateOffset(-6) + " a " + dayKey(),
+            "Consistencia: " + consistency + "%",
+            "Series: " + current.optInt("sets") + " (anterior " + previous.optInt("sets") + ")",
+            "Volume: " + current.optInt("volume") + " kg (anterior " + previous.optInt("volume") + " kg)",
+            "Corrida: " + formatKm(current.optDouble("run_distance")) + " (anterior " + formatKm(previous.optDouble("run_distance")) + ")",
+            "Previsao 5 km: " + formatDuration(runningFiveKmForecast().predictedSeconds),
+        ).joinToString("\n")
+        copyTextToClipboard("Mo2 LOG relatorio V12", report, "Relatorio V12 copiado.")
     }
 
     private fun renderExercises(root: LinearLayout) {
@@ -4090,10 +4330,16 @@ class MainActivity : Activity() {
         val hiddenIds = hiddenCatalogIds()
         summary.addView(label(catalogItems.size.toString() + " exercicios", white, 25f, true))
         summary.addView(label(favoriteIds.size.toString() + " favoritos | " + hiddenIds.size + " ocultos. Busque por nome, musculo ou equipamento.", muted, 15f, false))
-        summary.addView(label(mediaCacheFileCount().toString() + " frames salvos em cache local para abrir mais rapido.", muted, 14f, false))
-        val clearCache = actionButton("Limpar cache de imagens", surface2, white)
+        summary.addView(label(mediaCacheFileCount().toString() + " frames | " + mediaCacheSizeLabel() + " em cache local.", muted, 14f, false))
+        val cacheRow = LinearLayout(this)
+        cacheRow.orientation = LinearLayout.HORIZONTAL
+        val preload = actionButton("Preparar treino", green, bg)
+        preload.setOnClickListener { prefetchCurrentWorkoutMedia() }
+        cacheRow.addView(preload, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val clearCache = actionButton("Limpar cache", surface2, white)
         clearCache.setOnClickListener { clearMediaCache() }
-        summary.addView(buttonParams(clearCache))
+        cacheRow.addView(clearCache, LinearLayout.LayoutParams(0, dp(50), 1f))
+        summary.addView(spacedRow(cacheRow))
         root.addView(summary)
 
         val muscleOptions = listOf("Todos", "Favoritos", "Ocultos") + catalogItems.map { it.muscle }.distinct().sorted()
@@ -4107,14 +4353,22 @@ class MainActivity : Activity() {
         searchRow.orientation = LinearLayout.HORIZONTAL
         val applySearch = actionButton("Buscar", green, bg)
         applySearch.setOnClickListener {
-            prefs.edit().putString("catalog_query", search.textValue()).remove("catalog_selected").apply()
+            prefs.edit()
+                .putString("catalog_query", search.textValue())
+                .putInt("catalog_result_limit", 30)
+                .remove("catalog_selected")
+                .apply()
             hideKeyboard()
             render()
         }
         searchRow.addView(applySearch, LinearLayout.LayoutParams(0, dp(50), 1f))
         val clearSearch = actionButton("Limpar", surface2, white)
         clearSearch.setOnClickListener {
-            prefs.edit().remove("catalog_query").remove("catalog_selected").apply()
+            prefs.edit()
+                .remove("catalog_query")
+                .remove("catalog_selected")
+                .putInt("catalog_result_limit", 30)
+                .apply()
             hideKeyboard()
             render()
         }
@@ -4130,7 +4384,11 @@ class MainActivity : Activity() {
             val active = selectedMuscle == muscle
             val button = pill(muscle, active, 178, 50)
             button.setOnClickListener {
-                prefs.edit().putString("catalog_muscle", muscle).remove("catalog_selected").apply()
+                prefs.edit()
+                    .putString("catalog_muscle", muscle)
+                    .putInt("catalog_result_limit", 30)
+                    .remove("catalog_selected")
+                    .apply()
                 render()
             }
             muscleRow.addView(button)
@@ -4230,7 +4488,8 @@ class MainActivity : Activity() {
         val list = card()
         list.orientation = LinearLayout.VERTICAL
         list.addView(label("EXERCICIOS DISPONIVEIS (" + filtered.size + ")", green, 13f, true))
-        filtered.take(80).forEach { exercise ->
+        val resultLimit = prefs.getInt("catalog_result_limit", 30).coerceIn(30, 120)
+        filtered.take(resultLimit).forEach { exercise ->
             val item = card(if (exercise.id == selected.id) surface2 else surface)
             item.orientation = LinearLayout.VERTICAL
             item.setOnClickListener {
@@ -4242,8 +4501,18 @@ class MainActivity : Activity() {
             item.addView(label(exerciseMeta(exercise), muted, 13f, false))
             list.addView(item)
         }
-        if (filtered.size > 80) {
-            list.addView(label("Mostrando 80 de " + filtered.size + ". Use a busca para refinar.", amber, 14f, true))
+        if (filtered.size > resultLimit) {
+            list.addView(label("Mostrando " + resultLimit + " de " + filtered.size + ". Use a busca ou carregue mais.", muted, 14f, false))
+            if (resultLimit < 120) {
+                val more = actionButton("Mostrar mais 30", surface2, green)
+                more.setOnClickListener {
+                    prefs.edit().putInt("catalog_result_limit", (resultLimit + 30).coerceAtMost(120)).apply()
+                    render()
+                }
+                list.addView(buttonParams(more))
+            } else {
+                list.addView(label("Limite de 120 itens na tela. Use a busca para acessar os demais.", amber, 14f, true))
+            }
         }
         root.addView(list)
     }
@@ -4462,10 +4731,12 @@ class MainActivity : Activity() {
     private fun renderCoach(root: LinearLayout) {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("COACH LOCAL", green, 13f, true))
-        box.addView(label("Inteligencia, relatorios e adaptacao", white, 24f, true))
+        box.addView(label("COACH V12", green, 13f, true))
+        box.addView(label("Musculacao e corrida no mesmo contexto", white, 24f, true))
         localInsights().forEach { insight -> box.addView(label("- " + insight, white, 15f, false)) }
         root.addView(box)
+        root.addView(v12CoachDecisionPanel())
+        root.addView(runningFiveKmForecastPanel())
 
         val report = card()
         report.orientation = LinearLayout.VERTICAL
@@ -4475,6 +4746,28 @@ class MainActivity : Activity() {
         report.addView(label("Consistencia semanal: " + stats.optInt("week_sets") + " series.", muted, 15f, false))
         report.addView(label("Se a academia estiver cheia, troque por exercicio do mesmo padrao: empurrar, puxar, pernas ou core.", muted, 15f, false))
         root.addView(report)
+    }
+
+    private fun v12CoachDecisionPanel(): View {
+        val strength = strengthAdjustmentFor(currentExercise())
+        val running = smartRunningAdjustment()
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("PROXIMAS DECISOES", green, 13f, true))
+        box.addView(label("Musculacao", white, 18f, true))
+        box.addView(label(currentExercise().name + ": " + formatLoad(strength.nextLoad) + " em " + strength.suggestedSetCount + " series.", muted, 14f, false))
+        box.addView(label("Corrida", Mo2Colors.Running, 18f, true))
+        box.addView(label(running.headline + ". " + running.reason, muted, 14f, false))
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val workout = actionButton("Abrir treino", green, bg)
+        workout.setOnClickListener { switchTab("workout") }
+        row.addView(workout, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val run = actionButton("Abrir corrida", surface2, Mo2Colors.Running)
+        run.setOnClickListener { switchTab("running") }
+        row.addView(run, LinearLayout.LayoutParams(0, dp(50), 1f))
+        box.addView(spacedRow(row))
+        return box
     }
 
     private fun renderProfile(root: LinearLayout) {
@@ -4518,6 +4811,8 @@ class MainActivity : Activity() {
             false,
         ))
         root.addView(data)
+        root.addView(v12DataHealthPanel())
+        root.addView(v12AccessibilityPanel())
 
         val planning = card(surface)
         planning.orientation = LinearLayout.VERTICAL
@@ -4591,6 +4886,103 @@ class MainActivity : Activity() {
         clear.setOnClickListener { showClearLocalDataDialog() }
         dangerBox.addView(buttonParams(clear))
         root.addView(dangerBox)
+    }
+
+    private fun v12DataHealthPanel(): View {
+        val recordCount = allLogs().length() + strengthSessionLogs().length() + runLogs().length()
+        val invalidCollections = invalidLocalCollectionCount()
+        val backupDay = prefs.getString("last_backup_day", "").orEmpty()
+        val backupAge = if (isValidDayKey(backupDay)) daysBetween(backupDay, dayKey()) else null
+        val health = Mo2ProgressEngine.dataHealth(invalidCollections, backupAge, recordCount)
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("INTEGRIDADE V12", green, 13f, true))
+        box.addView(label(health.status, if (health.status == "Integro") green else amber, 24f, true))
+        val detail = if (health.issues.isEmpty()) {
+            "Colecoes locais legiveis e backup dentro do periodo recomendado."
+        } else {
+            health.issues.joinToString(" | ")
+        }
+        box.addView(label(detail, muted, 14f, false))
+        box.addView(label(recordCount.toString() + " registros | cache " + mediaCacheSizeLabel(), white, 14f, true))
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val verify = actionButton("Verificar", surface2, white)
+        verify.setOnClickListener {
+            Toast.makeText(this, "Integridade: " + health.status + ". " + detail, Toast.LENGTH_LONG).show()
+        }
+        row.addView(verify, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val backup = actionButton("Criar backup", green, bg)
+        backup.setOnClickListener { exportToClipboard() }
+        row.addView(backup, LinearLayout.LayoutParams(0, dp(48), 1f))
+        box.addView(spacedRow(row))
+        return box
+    }
+
+    private fun v12AccessibilityPanel(): View {
+        val box = card(surface)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("ACESSIBILIDADE", green, 13f, true))
+        box.addView(label("Leitura e movimento", white, 22f, true))
+        box.addView(label("Preferencias aplicadas localmente em todas as proximas aberturas.", muted, 14f, false))
+        val largeText = runningVoiceCheckBox(
+            "Texto ampliado",
+            prefs.getBoolean("accessibility_large_text", false),
+        ) { checked ->
+            prefs.edit().putBoolean("accessibility_large_text", checked).apply()
+            render()
+        }
+        val reducedMotion = runningVoiceCheckBox(
+            "Movimento reduzido em pop-ups",
+            prefs.getBoolean("accessibility_reduce_motion", false),
+        ) { checked ->
+            prefs.edit().putBoolean("accessibility_reduce_motion", checked).apply()
+        }
+        box.addView(largeText)
+        box.addView(reducedMotion)
+        return box
+    }
+
+    private fun invalidLocalCollectionCount(): Int {
+        val arrayKeys = setOf(
+            "set_logs",
+            "strength_session_logs",
+            "run_logs",
+            "favorite_catalog_ids",
+            "hidden_catalog_ids",
+            "running_active_stage_speeds",
+            "custom_workout_plans",
+        )
+        val objectKeys = setOf(
+            "unavailable_equipment",
+            "preferred_catalog_alternatives",
+            "running_schedule_overrides",
+        )
+        var invalid = 0
+        prefs.all.forEach { entry ->
+            val raw = entry.value as? String ?: return@forEach
+            val expectsArray = entry.key in arrayKeys || entry.key.startsWith("planned_sets_")
+            val expectsObject = entry.key in objectKeys
+            if (!expectsArray && !expectsObject) return@forEach
+            try {
+                if (expectsArray) JSONArray(raw) else JSONObject(raw)
+            } catch (_: Exception) {
+                invalid += 1
+            }
+        }
+        return invalid
+    }
+
+    private fun daysBetween(from: String, to: String): Int? {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        parser.isLenient = false
+        return try {
+            val start = parser.parse(from)?.time ?: return null
+            val end = parser.parse(to)?.time ?: return null
+            max(0L, (end - start) / 86400000L).toInt()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun showClearLocalDataDialog() {
@@ -5810,6 +6202,11 @@ class MainActivity : Activity() {
 
     private fun smoothPopupAnimation(): AnimationSet {
         val set = AnimationSet(true)
+        if (prefs.getBoolean("accessibility_reduce_motion", false)) {
+            set.addAnimation(AlphaAnimation(1f, 1f))
+            set.duration = 0L
+            return set
+        }
         val fade = AlphaAnimation(0f, 1f)
         val slide = TranslateAnimation(0f, 0f, dp(18).toFloat(), 0f)
         set.addAnimation(fade)
@@ -7551,11 +7948,58 @@ class MainActivity : Activity() {
     }
 
     private fun todayRunningWorkout(): RunningWorkout? {
-        val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
+        runningPlan.firstOrNull { workout ->
+            !isRunWorkoutCompleted(workout) && scheduledDayFor(workout) == dayKey()
+        }?.let { return it }
         val workouts = currentRunningWeekWorkouts()
-        return workouts.firstOrNull { it.dayIndex == day }
-            ?: workouts.firstOrNull { it.dayIndex > day }
+        return workouts
+            .filterNot { isRunWorkoutCompleted(it) }
+            .sortedBy { scheduledDayFor(it) }
+            .firstOrNull { scheduledDayFor(it) >= dayKey() }
+            ?: workouts.firstOrNull { !isRunWorkoutCompleted(it) }
             ?: workouts.firstOrNull()
+    }
+
+    private fun scheduledDayFor(workout: RunningWorkout): String {
+        val override = safeObject("running_schedule_overrides").optString(workout.id)
+        if (isValidDayKey(override)) return override
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        parser.isLenient = false
+        val start = try {
+            parser.parse(prefs.getString("running_plan_start_day", dayKey()).orEmpty()) ?: Date()
+        } catch (_: Exception) {
+            Date()
+        }
+        val calendar = Calendar.getInstance()
+        calendar.time = start
+        while (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
+        }
+        calendar.add(Calendar.WEEK_OF_YEAR, workout.week - 1)
+        calendar.add(Calendar.DAY_OF_YEAR, workout.dayIndex - 1)
+        return parser.format(calendar.time)
+    }
+
+    private fun isValidDayKey(value: String): Boolean {
+        if (!Regex("\\d{4}-\\d{2}-\\d{2}").matches(value)) return false
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        parser.isLenient = false
+        return try {
+            parser.parse(value) != null
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun formatDayForDisplay(value: String): String {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        parser.isLenient = false
+        return try {
+            val parsed = parser.parse(value) ?: return value
+            SimpleDateFormat("dd/MM", Locale("pt", "BR")).format(parsed)
+        } catch (_: Exception) {
+            value
+        }
     }
 
     private fun runningWorkoutById(id: String): RunningWorkout? = runningPlan.firstOrNull { it.id == id }
@@ -7839,6 +8283,59 @@ class MainActivity : Activity() {
         return mediaCacheDir().listFiles()?.count { it.isFile && it.length() > 0L } ?: 0
     }
 
+    private fun mediaCacheSizeLabel(): String {
+        val bytes = mediaCacheDir().listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+        return if (bytes < 1024L * 1024L) {
+            (bytes / 1024L).coerceAtLeast(0L).toString() + " KB"
+        } else {
+            String.format(Locale("pt", "BR"), "%.1f MB", bytes.toDouble() / (1024.0 * 1024.0))
+        }
+    }
+
+    private fun prefetchCurrentWorkoutMedia() {
+        val exercises = currentPlan().exercises
+        Toast.makeText(this, "Preparando midias do treino em segundo plano.", Toast.LENGTH_SHORT).show()
+        Thread {
+            var downloaded = 0
+            var available = 0
+            exercises.forEach { exercise ->
+                val match = catalogMatchForWorkoutExercise(exercise.name) ?: return@forEach
+                match.links.forEach { link ->
+                    val file = File(mediaCacheDir(), Integer.toHexString(link.hashCode()) + ".img")
+                    if (file.exists() && file.length() > 0L) {
+                        available += 1
+                    } else if (downloadMediaFrame(link, file)) {
+                        downloaded += 1
+                        available += 1
+                    }
+                }
+            }
+            runOnUiThread {
+                Toast.makeText(
+                    this,
+                    available.toString() + " midias prontas" + if (downloaded > 0) " (" + downloaded + " novas)." else ".",
+                    Toast.LENGTH_LONG,
+                ).show()
+                if (currentTab == "exercises") render()
+            }
+        }.start()
+    }
+
+    private fun downloadMediaFrame(link: String, file: File): Boolean {
+        return try {
+            mediaCacheDir().mkdirs()
+            val connection = URL(link).openConnection()
+            connection.connectTimeout = 7000
+            connection.readTimeout = 9000
+            val bytes = connection.getInputStream().use { input -> input.readBytes() }
+            if (bytes.isEmpty()) return false
+            file.writeBytes(bytes)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun clearMediaCache() {
         mediaCacheDir().listFiles()?.forEach { file ->
             if (file.isFile) file.delete()
@@ -7913,7 +8410,7 @@ class MainActivity : Activity() {
         input.setSingleLine(true)
         input.setTextColor(white)
         input.setHintTextColor(muted)
-        input.textSize = 16f
+        input.textSize = accessibleTextSize(16f)
         input.setPadding(dp(14), 0, dp(14), 0)
         input.background = rounded(surface2, dp(8), border)
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54))
@@ -7932,7 +8429,7 @@ class MainActivity : Activity() {
         input.gravity = Gravity.TOP
         input.setTextColor(white)
         input.setHintTextColor(muted)
-        input.textSize = 14f
+        input.textSize = accessibleTextSize(14f)
         input.setPadding(dp(14), dp(12), dp(14), dp(12))
         input.background = rounded(surface2, dp(8), border)
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150))
@@ -7948,7 +8445,12 @@ class MainActivity : Activity() {
     }
 
     private fun label(text: String, color: Int, size: Float, bold: Boolean): TextView {
-        return Mo2Components.label(this, text, color, size, bold)
+        return Mo2Components.label(this, text, color, accessibleTextSize(size), bold)
+    }
+
+    private fun accessibleTextSize(size: Float): Float {
+        if (!prefs.getBoolean("accessibility_large_text", false)) return size
+        return (size * 1.12f).coerceAtMost(size + 4f)
     }
 
     private fun pill(text: String, active: Boolean, width: Int, height: Int): TextView {

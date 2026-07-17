@@ -141,3 +141,28 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Importacao valida o arquivo e mostra a quantidade de series, treinos e corridas antes da confirmacao.
 - Cria uma copia automatica antes de restaurar e oferece `Desfazer ultima importacao` no Perfil.
 - Mantem compatibilidade com backups `personal_backup_v1` e formatos legados.
+
+## v11.2.0 a v11.4.0
+
+- Central de Evolucao compara semana atual e anterior, exibe volume muscular e progressao sugerida.
+- Corrida adaptativa usa pace valido, RPE, prontidao e previsao de 5 km.
+- Corridas podem ser reagendadas, restauradas para a data original ou recuperadas hoje.
+
+## v11.5.0 a v11.7.0
+
+- Catalogo mostra tamanho do cache e prepara antecipadamente as midias do treino atual.
+- Perfil verifica integridade das colecoes, idade do backup e quantidade de registros.
+- Relatorio pessoal compara musculacao e corrida e pode ser copiado localmente.
+
+## v11.8.0 e v11.9.0
+
+- Texto ampliado e movimento reduzido ficam disponiveis no Perfil.
+- Catalogo usa carregamento progressivo de resultados para abrir com menos trabalho na interface.
+- `Mo2ProgressEngine` adiciona logica testavel para tendencia, consistencia, integridade e equilibrio muscular.
+- Suite JUnit passa a validar o motor de evolucao no build Android.
+
+## v12.0.0
+
+- Consolida Home, Treino, Corrida, Historico, Estatisticas, Coach, Catalogo e Perfil na experiencia V12.
+- Mantem dados, plano em andamento, backup e funcionamento pessoal local-first.
+- Android usa versionCode 1200 e versionName 12.0.0.
