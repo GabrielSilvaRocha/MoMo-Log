@@ -4,14 +4,13 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v12.0.1.
+- Android nativo pessoal: v12.1.0.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v12.1.0 - Ampliacao dos testes de interface e diagnostico de desempenho em aparelhos reais.
 - v12.2.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
 - v12.3.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
 - v12.4.0 - Comparacoes mensais e metas pessoais de longo prazo.
@@ -546,3 +545,14 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Dashboard Semanal passa a exibir volume acumulado e progresso ate a meta semanal configurada.
 - Indicadores de musculacao e corrida sao organizados em duas linhas para manter a leitura confortavel no celular.
 - O app Android passa para versionCode 1201 / versionName 12.0.1.
+
+## v12.1.0 - Treino fluido e cargas reais
+
+- Pop-up de troca de exercicio recebe rolagem vertical, filtros em grade e botoes sem quebra de texto.
+- Fim do descanso usa a mesma voz da corrida e solicita reducao temporaria da midia externa durante o aviso.
+- Reordenacao de exercicios inicia apos um segundo; Ajuste Inteligente fica logo abaixo do Exercicio Atual.
+- Carga igual a zero aparece como campo vazio durante a edicao.
+- Cada exercicio pode manter sua propria lista de pesos disponiveis, incluindo valores decimais como 17,5 kg.
+- Sugestoes de carga respeitam a lista configurada e escolhem a menor opcao quando duas estiverem igualmente proximas.
+- Exercicios compostos por `ou` sao separados, com migracao dos planos personalizados e das series planejadas.
+- O app Android passa para versionCode 1210 / versionName 12.1.0.

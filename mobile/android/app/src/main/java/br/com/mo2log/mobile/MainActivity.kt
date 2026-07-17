@@ -12,6 +12,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
@@ -19,6 +20,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -264,7 +266,7 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 class MainActivity : Activity() {
     private val versionName = BuildConfig.VERSION_NAME
     // Change only when the bundled plan changes so visual releases never reset an active workout.
-    private val trainingPlanVersion = "10.1.0"
+    private val trainingPlanVersion = "12.1.0"
     private val backupSource = "mo2log_native_android"
     private val backupSchema = "personal_backup_v2"
     private val supportedBackupSchemas = setOf("personal_backup_v1", backupSchema)
@@ -311,7 +313,11 @@ class MainActivity : Activity() {
     private var voiceCoachReady = false
     private val restTimerHandler = Handler(Looper.getMainLooper())
     private val runningSessionHandler = Handler(Looper.getMainLooper())
+    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private val restAudioFocusListener = AudioManager.OnAudioFocusChangeListener { }
     private var restToneGenerator: ToneGenerator? = null
+    private var restAudioFocusRequest: AudioFocusRequest? = null
+    private var activeRestUtteranceId: String? = null
     private var restTimerText: TextView? = null
     private var runningCountdownText: TextView? = null
     private var runningCountdownCueText: TextView? = null
@@ -371,9 +377,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         restTimerHandler.removeCallbacksAndMessages(null)
         runningSessionHandler.removeCallbacks(runningSessionRunnable)
-        restToneGenerator?.stopTone()
-        restToneGenerator?.release()
-        restToneGenerator = null
+        stopRestCompletionAlert()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         voiceCoach?.stop()
         voiceCoach?.shutdown()
@@ -395,6 +399,7 @@ class MainActivity : Activity() {
 
     private fun syncTrainingPlanVersion() {
         if (prefs.getString("training_plan_version", "") == trainingPlanVersion) return
+        migrateCombinedWorkoutExercises()
         val editor = prefs.edit()
             .putString("training_plan_version", trainingPlanVersion)
             .putInt("selected_plan", todayPlanIndex())
@@ -404,6 +409,101 @@ class MainActivity : Activity() {
         if (!prefs.contains("run_speed")) editor.putString("run_speed", "8.0")
         if (!prefs.contains("running_plan_start_day")) editor.putString("running_plan_start_day", dayKey())
         editor.apply()
+    }
+
+    private fun migrateCombinedWorkoutExercises() {
+        val customPlans = customWorkoutPlans()
+        val legacyNamesByPlan = if (customPlans != null) {
+            customPlans.associate { plan -> plan.id to plan.exercises.map { exercise -> exercise.name } }
+        } else {
+            mapOf(
+                "a" to listOf(
+                    "Supino reto ou maquina peitoral",
+                    "Supino inclinado com halteres",
+                    "Desenvolvimento de ombros",
+                    "Elevacao lateral",
+                    "Triceps corda",
+                    "Prancha",
+                ),
+                "b" to listOf(
+                    "Leg press",
+                    "Agachamento livre ou guiado",
+                    "Cadeira extensora",
+                    "Mesa flexora",
+                    "Stiff",
+                    "Panturrilha",
+                    "Abdominal ou prancha",
+                ),
+                "c" to listOf(
+                    "Puxada frente",
+                    "Remada baixa",
+                    "Remada unilateral",
+                    "Face pull",
+                    "Rosca direta",
+                    "Rosca martelo",
+                ),
+            )
+        }
+        val hasCombinedExercise = legacyNamesByPlan.values.flatten().any { name -> splitCombinedExerciseNames(name).size > 1 }
+        if (!hasCombinedExercise) return
+
+        val editor = prefs.edit()
+        legacyNamesByPlan.forEach { (planId, names) -> migratePlannedSetIndexesForSplit(planId, names, editor) }
+        if (customPlans != null) {
+            val migrated = customPlans.map { plan ->
+                plan.copy(exercises = plan.exercises.flatMap { exercise -> splitCombinedExercise(exercise) })
+            }
+            editor.putString("custom_workout_plans", workoutPlansToJson(migrated).toString())
+        }
+        editor.apply()
+    }
+
+    private fun migratePlannedSetIndexesForSplit(planId: String, exerciseNames: List<String>, editor: SharedPreferences.Editor) {
+        val newIndexByOldIndex = mutableMapOf<Int, Int>()
+        var nextIndex = 0
+        exerciseNames.forEachIndexed { oldIndex, name ->
+            newIndexByOldIndex[oldIndex] = nextIndex
+            nextIndex += splitCombinedExerciseNames(name).size
+        }
+        if (nextIndex == exerciseNames.size) return
+
+        val groups = prefs.all.keys
+            .filter { key ->
+                key.startsWith("planned_sets_") &&
+                    key.substringAfterLast('_').toIntOrNull() != null &&
+                    key.substringBeforeLast('_').endsWith("_" + planId)
+            }
+            .groupBy { key -> key.substringBeforeLast('_') }
+        groups.forEach { (baseKey, keys) ->
+            val valuesByOldIndex = keys.associate { key ->
+                Pair(key.substringAfterLast('_').toInt(), prefs.getString(key, "[]") ?: "[]")
+            }
+            keys.forEach { key -> editor.remove(key) }
+            valuesByOldIndex.forEach { (oldIndex, raw) ->
+                newIndexByOldIndex[oldIndex]?.let { newIndex -> editor.putString(baseKey + "_" + newIndex, raw) }
+            }
+        }
+    }
+
+    private fun splitCombinedExercise(exercise: ExercisePlan): List<ExercisePlan> {
+        return splitCombinedExerciseNames(exercise.name).map { name -> exercise.copy(name = name) }
+    }
+
+    private fun splitCombinedExerciseNames(name: String): List<String> {
+        return when (normalized(name)) {
+            normalized("Supino reto ou maquina peitoral") -> listOf("Supino reto", "Maquina peitoral")
+            normalized("Agachamento livre ou guiado") -> listOf("Agachamento livre", "Agachamento guiado")
+            normalized("Abdominal ou prancha") -> listOf("Abdominal", "Prancha")
+            else -> {
+                val parts = Regex("\\s+ou\\s+", RegexOption.IGNORE_CASE)
+                    .split(name)
+                    .map { part -> part.trim() }
+                    .filter { part -> part.isNotBlank() }
+                if (parts.size <= 1) listOf(name) else parts.map { part ->
+                    part.replaceFirstChar { first -> if (first.isLowerCase()) first.titlecase(Locale("pt", "BR")) else first.toString() }
+                }
+            }
+        }
     }
 
     private fun restorePersistedState(preferredTab: String? = null) {
@@ -1296,6 +1396,7 @@ class MainActivity : Activity() {
         val register = registerPanel()
         if (requestedSection == "workout_current") pageScrollTarget = register
         root.addView(register)
+        root.addView(smartStrengthCoachPanel())
         val deferredSection = requestedSection
         val deferred = LinearLayout(this)
         deferred.orientation = LinearLayout.VERTICAL
@@ -1308,7 +1409,6 @@ class MainActivity : Activity() {
             deferred.addView(sectionTitle("Apoio da sessao"))
             val support = gymModePanel()
             deferred.addView(support)
-            deferred.addView(smartStrengthCoachPanel())
 
             val target = when (deferredSection) {
                 "workout_media" -> register
@@ -1527,6 +1627,9 @@ class MainActivity : Activity() {
         box.addView(label(adjustment.loadReason, muted, 14f, false))
         box.addView(label("Volume sugerido: " + adjustment.suggestedSetCount + " series", white, 18f, true))
         box.addView(label(doneCount.toString() + "/" + sets.length() + " series feitas agora. " + adjustment.volumeReason, muted, 14f, false))
+        val availableWeights = availableWeightsFor(exercise, adjustment.nextLoad)
+        val weightMode = if (customAvailableWeightsFor(exercise) == null) "Sugestoes padrao" else "Pesos personalizados"
+        box.addView(label(weightMode + ": " + availableWeightSummary(availableWeights), muted, 13f, false))
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
@@ -1538,7 +1641,99 @@ class MainActivity : Activity() {
         applyVolume.setOnClickListener { applySmartVolumeToCurrentExercise() }
         row.addView(applyVolume, LinearLayout.LayoutParams(0, dp(50), 1f))
         box.addView(spacedRow(row))
+
+        val available = actionButton("Pesos disponiveis", surface2, white)
+        available.setOnClickListener { showAvailableWeightsDialog(exercise) }
+        box.addView(buttonParams(available))
         return box
+    }
+
+    private fun showAvailableWeightsDialog(exercise: ExercisePlan) {
+        val adjustment = strengthAdjustmentFor(exercise)
+        val weights = availableWeightsFor(exercise, adjustment.nextLoad)
+        val customized = customAvailableWeightsFor(exercise) != null
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(18), dp(18), dp(18), dp(12))
+        content.background = rounded(surface, dp(Mo2Radius.Modal), border)
+        content.addView(label("PESOS DISPONIVEIS", green, 13f, true))
+        content.addView(label(exercise.name, white, 22f, true))
+        content.addView(label(if (customized) "LISTA PERSONALIZADA" else "SUGESTOES PADRAO", if (customized) amber else muted, 12f, true))
+
+        lateinit var dialog: AlertDialog
+        var reopening = false
+        weights.forEach { weight ->
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs))
+            row.background = rounded(surface2, dp(Mo2Radius.Md), border)
+            row.addView(label(formatLoad(weight), white, 16f, true), LinearLayout.LayoutParams(0, dp(48), 1f))
+            val remove = actionButton("x", surface2, danger)
+            remove.textSize = accessibleTextSize(22f)
+            remove.contentDescription = "Remover " + formatLoad(weight)
+            remove.setOnClickListener {
+                saveAvailableWeights(exercise, weights.filterNot { value -> kotlin.math.abs(value - weight) < 0.001 })
+                reopening = true
+                dialog.dismiss()
+                showAvailableWeightsDialog(exercise)
+            }
+            row.addView(remove, LinearLayout.LayoutParams(dp(52), dp(48)))
+            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            params.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+            content.addView(row, params)
+        }
+        if (weights.isEmpty()) {
+            content.addView(label("Nenhum peso configurado", muted, 14f, false))
+        }
+
+        val newWeight = input("Peso em kg (ex.: 17,5)", "")
+        newWeight.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        content.addView(newWeight)
+        val add = actionButton("Adicionar peso", green, bg)
+        add.setOnClickListener {
+            val value = newWeight.textValue().replace(',', '.').toDoubleOrNull()
+            if (value == null || value <= 0.0) {
+                Toast.makeText(this, "Informe um peso maior que zero.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            saveAvailableWeights(exercise, weights + value)
+            reopening = true
+            dialog.dismiss()
+            showAvailableWeightsDialog(exercise)
+        }
+        content.addView(buttonParams(add))
+
+        val restore = actionButton("Restaurar sugestoes padrao", surface2, green)
+        restore.setOnClickListener {
+            clearAvailableWeights(exercise)
+            reopening = true
+            dialog.dismiss()
+            showAvailableWeightsDialog(exercise)
+        }
+        content.addView(buttonParams(restore))
+        val close = actionButton("Fechar", surface2, white)
+        close.setOnClickListener { dialog.dismiss() }
+        content.addView(buttonParams(close))
+
+        val scroll = ScrollView(this)
+        scroll.isFillViewport = true
+        scroll.isVerticalScrollBarEnabled = true
+        scroll.addView(content)
+        dialog = AlertDialog.Builder(this)
+            .setView(scroll)
+            .create()
+        dialog.setOnShowListener {
+            content.startAnimation(smoothPopupAnimation())
+            dialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.94f).roundToInt(),
+                (resources.displayMetrics.heightPixels * 0.82f).roundToInt(),
+            )
+        }
+        dialog.setOnDismissListener {
+            if (!reopening && currentTab == "workout") renderWorkoutInPlace()
+        }
+        dialog.show()
     }
 
     private fun restTimerPanel(): View {
@@ -2452,7 +2647,7 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v10.1.0.", muted, 14f, false))
+        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v12.1.0.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
             prefs.edit()
@@ -4968,6 +5163,7 @@ class MainActivity : Activity() {
             "unavailable_equipment",
             "preferred_catalog_alternatives",
             "running_schedule_overrides",
+            "exercise_available_weights",
         )
         var invalid = 0
         prefs.all.forEach { entry ->
@@ -5178,7 +5374,7 @@ class MainActivity : Activity() {
                     dragStarted = false
                     downX = event.rawX
                     downY = event.rawY
-                    handler.postDelayed(beginDrag, 3000L)
+                    handler.postDelayed(beginDrag, 1000L)
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (!dragStarted && (kotlin.math.abs(event.rawX - downX) > touchSlop || kotlin.math.abs(event.rawY - downY) > touchSlop)) {
@@ -5357,7 +5553,8 @@ class MainActivity : Activity() {
         numberParams.setMargins(0, 0, dp(Mo2Spacing.Sm), 0)
         content.addView(number, numberParams)
 
-        val load = input("kg", item.optString("load", lastLoadFor(currentExercise().name)))
+        val storedLoad = item.optString("load", lastLoadFor(currentExercise().name))
+        val load = input("kg", editableLoadText(storedLoad))
         load.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         load.gravity = Gravity.CENTER
         val loadParams = LinearLayout.LayoutParams(0, dp(52), 1f)
@@ -5868,12 +6065,12 @@ class MainActivity : Activity() {
         val completedSets = countDonePlannedSets(plannedSets)
         if (recent.isEmpty()) {
             val baseLoad = lastLoadFor(exercise.name).replace(',', '.').toDoubleOrNull() ?: 0.0
-            return StrengthAdjustment(
+            return constrainAdjustmentToAvailableWeights(exercise, StrengthAdjustment(
                 nextLoad = baseLoad,
                 suggestedSetCount = targetSets.coerceAtLeast(completedSets),
                 loadReason = if (baseLoad <= 0.0) "Sem historico para este exercicio. Use a primeira serie para registrar uma carga real." else "Use a ultima carga conhecida como ponto de partida.",
                 volumeReason = "Comece pelo volume planejado e deixe o app ajustar depois dos registros.",
-            )
+            ))
         }
 
         val recentUsed = recent.take(3)
@@ -5918,16 +6115,26 @@ class MainActivity : Activity() {
             else -> "Volume do exercicio esta dentro do planejado."
         }
 
-        return StrengthAdjustment(
+        return constrainAdjustmentToAvailableWeights(exercise, StrengthAdjustment(
             nextLoad = nextLoad,
             suggestedSetCount = suggestedSets,
             loadReason = loadReason,
             volumeReason = volumeReason,
-        )
+        ))
     }
 
     private fun applySmartLoadToPendingSets() {
-        val adjustment = strengthAdjustmentFor(currentExercise())
+        val exercise = currentExercise()
+        val customWeights = customAvailableWeightsFor(exercise)
+        if (customWeights != null && customWeights.isEmpty()) {
+            Toast.makeText(this, "Adicione ao menos um peso disponivel para este exercicio.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val adjustment = strengthAdjustmentFor(exercise)
+        if (adjustment.nextLoad <= 0.0) {
+            Toast.makeText(this, "Preencha uma carga real antes de aplicar a sugestao.", Toast.LENGTH_SHORT).show()
+            return
+        }
         val sets = plannedSetsForCurrentExercise()
         var changed = 0
         for (i in 0 until sets.length()) {
@@ -6017,6 +6224,77 @@ class MainActivity : Activity() {
 
     private fun loadInputText(value: Double): String {
         return if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.US, "%.1f", value)
+    }
+
+    private fun editableLoadText(value: String): String {
+        val parsed = value.trim().replace(',', '.').toDoubleOrNull()
+        return if (parsed == 0.0) "" else value
+    }
+
+    private fun exerciseWeightKey(exercise: ExercisePlan): String = normalized(exercise.name)
+
+    private fun customAvailableWeightsFor(exercise: ExercisePlan): List<Double>? {
+        val map = safeObject("exercise_available_weights")
+        val key = exerciseWeightKey(exercise)
+        if (key.isBlank() || !map.has(key)) return null
+        val values = map.optJSONArray(key) ?: return emptyList()
+        val result = mutableListOf<Double>()
+        for (index in 0 until values.length()) {
+            values.optDouble(index, Double.NaN).takeIf { value -> value.isFinite() }?.let { value -> result.add(value) }
+        }
+        return Mo2ProgressEngine.normalizeAvailableWeights(result)
+    }
+
+    private fun defaultAvailableWeightsFor(exercise: ExercisePlan, suggestedLoad: Double): List<Double> {
+        val lastLoad = lastLoadFor(exercise.name).replace(',', '.').toDoubleOrNull() ?: 0.0
+        val anchor = suggestedLoad.takeIf { value -> value > 0.0 } ?: lastLoad
+        if (anchor <= 0.0) {
+            return listOf(1.0, 2.0, 3.0, 4.0, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0)
+        }
+        val step = smartLoadStep(anchor).takeIf { value -> value > 0.0 } ?: 2.5
+        val values = (-5..6).map { offset -> roundLoad(anchor + step * offset) }
+        return Mo2ProgressEngine.normalizeAvailableWeights(values + anchor + suggestedLoad)
+    }
+
+    private fun availableWeightsFor(exercise: ExercisePlan, suggestedLoad: Double): List<Double> {
+        return customAvailableWeightsFor(exercise) ?: defaultAvailableWeightsFor(exercise, suggestedLoad)
+    }
+
+    private fun constrainAdjustmentToAvailableWeights(exercise: ExercisePlan, adjustment: StrengthAdjustment): StrengthAdjustment {
+        val custom = customAvailableWeightsFor(exercise) ?: return adjustment
+        if (custom.isEmpty() || adjustment.nextLoad <= 0.0) {
+            val reason = if (custom.isEmpty()) adjustment.loadReason + " Adicione pelo menos um peso disponivel." else adjustment.loadReason
+            return adjustment.copy(loadReason = reason)
+        }
+        val constrained = Mo2ProgressEngine.nearestAvailableWeight(adjustment.nextLoad, custom)
+        if (kotlin.math.abs(constrained - adjustment.nextLoad) < 0.001) return adjustment
+        return adjustment.copy(
+            nextLoad = constrained,
+            loadReason = adjustment.loadReason + " Ajustada para " + formatLoad(constrained) + ", disponivel neste exercicio.",
+        )
+    }
+
+    private fun saveAvailableWeights(exercise: ExercisePlan, values: List<Double>) {
+        val normalizedWeights = Mo2ProgressEngine.normalizeAvailableWeights(values)
+        val array = JSONArray()
+        normalizedWeights.forEach { value -> array.put(value) }
+        val map = safeObject("exercise_available_weights")
+        map.put(exerciseWeightKey(exercise), array)
+        prefs.edit().putString("exercise_available_weights", map.toString()).apply()
+    }
+
+    private fun clearAvailableWeights(exercise: ExercisePlan) {
+        val map = safeObject("exercise_available_weights")
+        map.remove(exerciseWeightKey(exercise))
+        val editor = prefs.edit()
+        if (map.length() == 0) editor.remove("exercise_available_weights") else editor.putString("exercise_available_weights", map.toString())
+        editor.apply()
+    }
+
+    private fun availableWeightSummary(weights: List<Double>): String {
+        if (weights.isEmpty()) return "nenhum"
+        val visible = weights.take(6).joinToString(", ") { value -> formatLoad(value) }
+        return visible + if (weights.size > 6) " +" + (weights.size - 6) else ""
     }
 
     private fun swapCurrentExerciseForRecommended() {
@@ -6154,24 +6432,31 @@ class MainActivity : Activity() {
             Pair("same_muscle", "Mesmo musculo"),
             Pair("same_level", "Nivel similar"),
         )
-        val reasonRow = LinearLayout(this)
-        reasonRow.orientation = LinearLayout.HORIZONTAL
-        reasons.forEach { item ->
-            val active = item.first == reason
-            val button = actionButton(item.second, if (active) green else surface2, if (active) bg else white)
-            button.setOnClickListener {
-                prefs.edit().putString("swap_reason_filter", item.first).apply()
-                val refreshed = recommendedSwapOptions(current, item.first)
-                    .let { listOfNotNull(preferredAlternativeFor(current)).filter { pref -> equipmentAvailableForSuggestion(pref) } + it }
-                    .distinctBy { option -> option.id }
-                    .take(8)
-                dialog.dismiss()
-                if (refreshed.isEmpty()) Toast.makeText(this, "Nenhuma alternativa livre para esse filtro.", Toast.LENGTH_SHORT).show()
-                else showRecommendedExerciseDialog(current, refreshed, preferredAlternativeFor(current)?.id, item.first)
+        val reasonGrid = LinearLayout(this)
+        reasonGrid.orientation = LinearLayout.VERTICAL
+        reasons.chunked(2).forEach { rowItems ->
+            val reasonRow = LinearLayout(this)
+            reasonRow.orientation = LinearLayout.HORIZONTAL
+            rowItems.forEach { item ->
+                val active = item.first == reason
+                val button = actionButton(item.second, if (active) green else surface2, if (active) bg else white)
+                button.textSize = accessibleTextSize(13f)
+                button.maxLines = 1
+                button.setOnClickListener {
+                    prefs.edit().putString("swap_reason_filter", item.first).apply()
+                    val refreshed = recommendedSwapOptions(current, item.first)
+                        .let { listOfNotNull(preferredAlternativeFor(current)).filter { pref -> equipmentAvailableForSuggestion(pref) } + it }
+                        .distinctBy { option -> option.id }
+                        .take(8)
+                    dialog.dismiss()
+                    if (refreshed.isEmpty()) Toast.makeText(this, "Nenhuma alternativa livre para esse filtro.", Toast.LENGTH_SHORT).show()
+                    else showRecommendedExerciseDialog(current, refreshed, preferredAlternativeFor(current)?.id, item.first)
+                }
+                reasonRow.addView(button, LinearLayout.LayoutParams(0, dp(50), 1f))
             }
-            reasonRow.addView(button, LinearLayout.LayoutParams(0, dp(46), 1f))
+            reasonGrid.addView(spacedRow(reasonRow))
         }
-        content.addView(spacedRow(reasonRow))
+        content.addView(reasonGrid)
 
         options.forEach { option ->
             val item = card(if (option.id == preferredId) surface3 else surface2)
@@ -6202,11 +6487,20 @@ class MainActivity : Activity() {
         cancel.setOnClickListener { dialog.dismiss() }
         content.addView(buttonParams(cancel))
 
+        val scroll = ScrollView(this)
+        scroll.isFillViewport = true
+        scroll.isVerticalScrollBarEnabled = true
+        scroll.addView(content)
+
         dialog = AlertDialog.Builder(this)
-            .setView(content)
+            .setView(scroll)
             .create()
         dialog.setOnShowListener {
             content.startAnimation(smoothPopupAnimation())
+            dialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.94f).roundToInt(),
+                (resources.displayMetrics.heightPixels * 0.86f).roundToInt(),
+            )
         }
         dialog.show()
     }
@@ -6979,6 +7273,28 @@ class MainActivity : Activity() {
                 }
             }
         }
+        voiceCoach?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+
+            override fun onDone(utteranceId: String?) {
+                if (utteranceId != null && utteranceId == activeRestUtteranceId) {
+                    runOnUiThread {
+                        activeRestUtteranceId = null
+                        releaseRestAudioFocus()
+                    }
+                }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                if (utteranceId != null && utteranceId == activeRestUtteranceId) {
+                    runOnUiThread {
+                        activeRestUtteranceId = null
+                        releaseRestAudioFocus()
+                    }
+                }
+            }
+        })
     }
 
     private fun isRunningVoiceEnabled(): Boolean = prefs.getBoolean("running_voice_enabled", true)
@@ -8092,7 +8408,8 @@ class MainActivity : Activity() {
 
     private fun defaultWorkoutPlans(): List<WorkoutPlan> = listOf(
         WorkoutPlan("a", "Treino A", "Terca - Peito/Ombro/Triceps + corrida leve", listOf(
-            ExercisePlan("Supino reto ou maquina peitoral", "4 x 8-10", "90s", "Controle e amplitude. Depois faca 15-25 min de corrida leve."),
+            ExercisePlan("Supino reto", "4 x 8-10", "90s", "Controle a descida e mantenha amplitude segura."),
+            ExercisePlan("Maquina peitoral", "3 x 10-12", "75s", "Mantenha as escapulas apoiadas e controle a volta."),
             ExercisePlan("Supino inclinado com halteres", "3 x 10", "90s", "Suba carga quando fechar reps com tecnica limpa."),
             ExercisePlan("Desenvolvimento de ombros", "3 x 8-10", "90s", "Evite compensar com lombar."),
             ExercisePlan("Elevacao lateral", "3 x 12-15", "60s", "Cadencia limpa, sem embalo."),
@@ -8101,12 +8418,14 @@ class MainActivity : Activity() {
         )),
         WorkoutPlan("b", "Treino B", "Quinta - Pernas/Core + corrida curta", listOf(
             ExercisePlan("Leg press", "4 x 10", "120s", "Amplitude segura e constante. Depois faca so 10-15 min leve."),
-            ExercisePlan("Agachamento livre ou guiado", "3 x 8", "120s", "Priorize tecnica antes de carga."),
+            ExercisePlan("Agachamento livre", "3 x 8", "120s", "Priorize tecnica e estabilidade antes de carga."),
+            ExercisePlan("Agachamento guiado", "3 x 8-10", "90s", "Ajuste os pes e mantenha o tronco firme no trilho."),
             ExercisePlan("Cadeira extensora", "3 x 12", "75s", "Segure um segundo no topo."),
             ExercisePlan("Mesa flexora", "3 x 10-12", "75s", "Controle total na volta."),
             ExercisePlan("Stiff", "3 x 10", "90s", "Quadril para tras, coluna neutra."),
             ExercisePlan("Panturrilha", "4 x 12-15", "45s", "Pausa no alongamento."),
-            ExercisePlan("Abdominal ou prancha", "3 series", "45s", "Escolha a variacao do dia."),
+            ExercisePlan("Abdominal", "3 x 12-15", "45s", "Expire durante a contracao e evite puxar o pescoco."),
+            ExercisePlan("Prancha", "3 x 45s", "45s", "Mantenha quadril, tronco e ombros alinhados."),
         )),
         WorkoutPlan("c", "Treino C", "Sabado - Costas/Biceps + corrida ritmo", listOf(
             ExercisePlan("Puxada frente", "4 x 8-10", "90s", "Puxe com cotovelos, nao com as maos."),
@@ -8173,9 +8492,7 @@ class MainActivity : Activity() {
 
     private fun startRestTimer(seconds: Int, exercise: String) {
         if (seconds <= 0) return
-        restToneGenerator?.stopTone()
-        restToneGenerator?.release()
-        restToneGenerator = null
+        stopRestCompletionAlert()
         prefs.edit()
             .putLong("rest_timer_end_at", System.currentTimeMillis() + seconds * 1000L)
             .putInt("rest_timer_duration_secs", seconds)
@@ -8219,9 +8536,7 @@ class MainActivity : Activity() {
             .remove("rest_timer_exercise")
             .remove("rest_timer_notified")
             .apply()
-        restToneGenerator?.stopTone()
-        restToneGenerator?.release()
-        restToneGenerator = null
+        stopRestCompletionAlert()
         Toast.makeText(this, "Descanso parado.", Toast.LENGTH_SHORT).show()
         if (currentTab == "workout") renderWorkoutInPlace() else render()
     }
@@ -8231,6 +8546,65 @@ class MainActivity : Activity() {
         if (endAt <= 0L || System.currentTimeMillis() < endAt) return
         if (prefs.getBoolean("rest_timer_notified", false)) return
         prefs.edit().putBoolean("rest_timer_notified", true).apply()
+        playRestCompletionAlert()
+    }
+
+    private fun playRestCompletionAlert() {
+        stopRestCompletionAlert()
+        requestRestAudioFocus()
+        if (voiceCoachReady) {
+            val utteranceId = "mo2log_rest_" + System.currentTimeMillis()
+            activeRestUtteranceId = utteranceId
+            val result = voiceCoach?.speak(
+                "Descanso finalizado. Inicie a proxima serie.",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                utteranceId,
+            )
+            if (result == TextToSpeech.SUCCESS) {
+                restTimerHandler.postDelayed({
+                    if (activeRestUtteranceId == utteranceId) {
+                        activeRestUtteranceId = null
+                        releaseRestAudioFocus()
+                    }
+                }, 7000L)
+                return
+            }
+            activeRestUtteranceId = null
+        }
+        playRestFallbackTone()
+    }
+
+    private fun requestRestAudioFocus() {
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(attributes)
+            .setAcceptsDelayedFocusGain(false)
+            .setWillPauseWhenDucked(false)
+            .setOnAudioFocusChangeListener(restAudioFocusListener, restTimerHandler)
+            .build()
+        restAudioFocusRequest = request
+        audioManager.requestAudioFocus(request)
+    }
+
+    private fun releaseRestAudioFocus() {
+        restAudioFocusRequest?.let { request -> audioManager.abandonAudioFocusRequest(request) }
+        restAudioFocusRequest = null
+    }
+
+    private fun stopRestCompletionAlert() {
+        if (activeRestUtteranceId != null) voiceCoach?.stop()
+        activeRestUtteranceId = null
+        restToneGenerator?.stopTone()
+        restToneGenerator?.release()
+        restToneGenerator = null
+        releaseRestAudioFocus()
+    }
+
+    private fun playRestFallbackTone() {
         try {
             restToneGenerator?.release()
             val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
@@ -8242,10 +8616,12 @@ class MainActivity : Activity() {
                     if (restToneGenerator === tone) {
                         tone.release()
                         restToneGenerator = null
+                        releaseRestAudioFocus()
                     }
                 }, 560L)
             }, 300L)
         } catch (_: Exception) {
+            releaseRestAudioFocus()
             Toast.makeText(this, "Descanso finalizado.", Toast.LENGTH_SHORT).show()
         }
     }

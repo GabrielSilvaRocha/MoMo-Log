@@ -7,6 +7,18 @@ import org.junit.Test
 
 class Mo2ProgressEngineTest {
     @Test
+    fun availableWeightsAreNormalizedAndSorted() {
+        val result = Mo2ProgressEngine.normalizeAvailableWeights(listOf(17.5, 0.0, 20.0, 17.50, -2.0, 10.0))
+        assertEquals(listOf(10.0, 17.5, 20.0), result)
+    }
+
+    @Test
+    fun nearestAvailableWeightUsesLowerOptionOnTie() {
+        assertEquals(40.0, Mo2ProgressEngine.nearestAvailableWeight(45.0, listOf(40.0, 50.0)), 0.001)
+        assertEquals(17.5, Mo2ProgressEngine.nearestAvailableWeight(18.0, listOf(15.0, 17.5, 20.0)), 0.001)
+    }
+
+    @Test
     fun trendCalculatesIncrease() {
         val result = Mo2ProgressEngine.trend(current = 120.0, previous = 100.0)
         assertEquals(20, result.percent)

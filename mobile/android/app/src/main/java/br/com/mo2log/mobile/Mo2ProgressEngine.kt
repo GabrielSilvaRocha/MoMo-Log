@@ -1,5 +1,6 @@
 package br.com.mo2log.mobile
 
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class Mo2Trend(
@@ -13,6 +14,21 @@ data class Mo2DataHealth(
 )
 
 object Mo2ProgressEngine {
+    fun normalizeAvailableWeights(values: List<Double>): List<Double> {
+        return values
+            .filter { value -> value.isFinite() && value > 0.0 }
+            .map { value -> (value * 100.0).roundToInt().toDouble() / 100.0 }
+            .distinct()
+            .sorted()
+    }
+
+    fun nearestAvailableWeight(target: Double, available: List<Double>): Double {
+        if (!target.isFinite() || target <= 0.0) return target.coerceAtLeast(0.0)
+        return normalizeAvailableWeights(available).minWithOrNull(
+            compareBy<Double> { value -> abs(value - target) }.thenBy { value -> value },
+        ) ?: target
+    }
+
     fun trend(current: Double, previous: Double): Mo2Trend {
         if (previous <= 0.0) {
             return Mo2Trend(

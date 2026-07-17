@@ -173,3 +173,13 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Dashboard Semanal mostra volume acumulado, meta de volume e progresso semanal.
 - Indicadores ficam distribuidos em duas linhas para evitar textos comprimidos.
 - Android usa versionCode 1201 e versionName 12.0.1.
+
+## v12.1.0
+
+- Modal de alternativas passa a ter rolagem funcional, filtros 2x2 e botoes estaveis.
+- Alerta de descanso usa voz e foco de audio temporario para priorizar a notificacao sobre musica externa.
+- Exercicios podem ser reordenados apos um segundo e o Ajuste Inteligente fica abaixo do Exercicio Atual.
+- Carga zero fica vazia na edicao e pesos disponiveis podem ser personalizados por exercicio.
+- Recomendacoes respeitam pesos inteiros ou decimais configurados localmente.
+- Exercicios unidos por `ou` sao separados com migracao compativel dos planos e checklists existentes.
+- Android usa versionCode 1210 e versionName 12.1.0.
