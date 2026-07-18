@@ -556,3 +556,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Sugestoes de carga respeitam a lista configurada e escolhem a menor opcao quando duas estiverem igualmente proximas.
 - Exercicios compostos por `ou` sao separados, com migracao dos planos personalizados e das series planejadas.
 - O app Android passa para versionCode 1210 / versionName 12.1.0.
+
+## v12.2.0 - Home visual, entrega parcial 1
+
+- Inicio passa a usar o titulo `Essa Semana` em Be Vietnam Pro Regular 400, sem subtitulo redundante.
+- Dashboard semanal ganha dois aneis de progresso para os 3 treinos de musculacao e os 5 treinos de corrida.
+- Series, volume, distancia e tempo total de atividade ocupam uma grade visual sem rotulos ou divisorias.
+- Indicadores usam icones semanticos e mantem a paleta verde, azul, amarelo e turquesa aprovada na revisao visual.
+- Tempo de atividade soma corridas e musculacao; novas sessoes de musculacao passam a salvar a duracao localmente.
+- Calculo semanal deixa de incluir registros antigos do mesmo ano fora da semana atual.
+- O app Android passa para versionCode 1220 / versionName 12.2.0.

@@ -24,6 +24,7 @@ import android.speech.tts.UtteranceProgressListener
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.util.TypedValue
 import android.view.DragEvent
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -54,6 +55,8 @@ import br.com.mo2log.mobile.ui.Mo2HistoryPoint
 import br.com.mo2log.mobile.ui.Mo2NavIcon
 import br.com.mo2log.mobile.ui.Mo2Radius
 import br.com.mo2log.mobile.ui.Mo2Spacing
+import br.com.mo2log.mobile.ui.Mo2WeeklyDashboardData
+import br.com.mo2log.mobile.ui.Mo2WeeklyDashboardView
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -693,11 +696,23 @@ class MainActivity : Activity() {
     private fun pageIntro(): View {
         val wrap = LinearLayout(this)
         wrap.orientation = LinearLayout.VERTICAL
-        wrap.setPadding(0, dp(18), 0, dp(6))
+        wrap.setPadding(0, dp(18), 0, if (currentTab == "home") dp(10) else dp(6))
 
-        val title = label(currentSectionTitle(), white, 26f, true)
+        val title = label(
+            currentSectionTitle(),
+            white,
+            if (currentTab == "home") 40f else 26f,
+            currentTab != "home",
+        )
+        if (currentTab == "home") {
+            title.typeface = resources.getFont(R.font.be_vietnam_pro_regular)
+            title.includeFontPadding = false
+            title.setLineSpacing(0f, 1f)
+            title.setAutoSizeTextTypeUniformWithConfiguration(30, 40, 1, TypedValue.COMPLEX_UNIT_SP)
+        }
         wrap.addView(title)
-        wrap.addView(label(currentSectionSubtitle(), muted, 14f, false))
+        val subtitle = currentSectionSubtitle()
+        if (subtitle.isNotBlank()) wrap.addView(label(subtitle, muted, 14f, false))
         return wrap
     }
 
@@ -927,49 +942,29 @@ class MainActivity : Activity() {
     private fun weeklyDashboardPanel(): View {
         val stats = computeStats(allLogs())
         val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
-        val volumeTarget = prefs.getString("goal_week_volume", "12000")?.toIntOrNull() ?: 12000
-        val weekSets = stats.optInt("week_sets")
-        val weekVolume = stats.optInt("week_volume")
-        val strengthPercent = progressPercent(weekSets, weekTarget)
-        val volumePercent = progressPercent(weekVolume, volumeTarget)
         val weekRuns = currentRunningWeekWorkouts()
         val runningDone = weekRuns.count { isRunWorkoutCompleted(it) }
-        val runningPercent = progressPercent(runningDone, weekRuns.size)
-        val distance = currentWeekRunDistance()
-
-        val box = card(surface3)
-        box.orientation = LinearLayout.VERTICAL
-        box.addView(label("DASHBOARD SEMANAL", green, 13f, true))
-        box.addView(label("Semana " + currentRunningPlanWeek() + " de 6", white, 30f, true))
-        box.addView(label("Musculacao, corrida e prontidao em uma visao rapida para treinar hoje.", muted, 15f, false))
-
-        val strengthMetrics = LinearLayout(this)
-        strengthMetrics.orientation = LinearLayout.HORIZONTAL
-        strengthMetrics.addView(compactMetric("Series", weekSets.toString() + "/" + weekTarget), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        strengthMetrics.addView(compactMetric("Volume", weekVolume.toString() + " kg"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        box.addView(spacedRow(strengthMetrics))
-
-        val runningMetrics = LinearLayout(this)
-        runningMetrics.orientation = LinearLayout.HORIZONTAL
-        runningMetrics.addView(compactMetric("Corridas", runningDone.toString() + "/" + weekRuns.size), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        runningMetrics.addView(compactMetric("Distancia", formatKm(distance)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        box.addView(spacedRow(runningMetrics))
-
-        box.addView(dashboardProgressLine("Musculacao", weekSets.toString() + " series de " + weekTarget, strengthPercent, green))
-        box.addView(dashboardProgressLine("Volume", weekVolume.toString() + " kg de " + volumeTarget + " kg", volumePercent, green))
-        box.addView(dashboardProgressLine("Corrida 5 km", runningDone.toString() + " de " + weekRuns.size + " treinos concluidos", runningPercent, Mo2Colors.Running))
-        box.addView(label(readinessLine(stats), muted, 14f, false))
-
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        val primary = actionButton(missionButtonLabel(), green, bg)
-        primary.setOnClickListener { switchTab(missionButtonTab()) }
-        row.addView(primary, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val backup = actionButton("Backup", surface2, green)
-        backup.setOnClickListener { exportToClipboard() }
-        row.addView(backup, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(row))
-        return box
+        return Mo2WeeklyDashboardView(
+            this,
+            Mo2WeeklyDashboardData(
+                strengthWorkouts = currentWeekStrengthWorkoutCount(),
+                strengthWorkoutTarget = 3,
+                runningWorkouts = runningDone,
+                runningWorkoutTarget = weekRuns.size.coerceAtLeast(1),
+                completedSets = stats.optInt("week_sets"),
+                setTarget = weekTarget.coerceAtLeast(1),
+                volumeKg = stats.optInt("week_volume"),
+                distanceKm = currentWeekRunDistance(),
+                activitySeconds = currentWeekActivitySeconds(),
+            ),
+        ).apply {
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(252),
+            )
+            params.setMargins(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm))
+            layoutParams = params
+        }
     }
 
     private fun todayDashboardPanel(): View {
@@ -1059,6 +1054,58 @@ class MainActivity : Activity() {
             if (item.optString("week") == weekKey()) total += item.optDouble("distance")
         }
         return roundKm(total)
+    }
+
+    private fun currentWeekStrengthWorkoutCount(): Int {
+        val completed = linkedSetOf<String>()
+        val sessions = strengthSessionLogs()
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            val day = item.optString("day")
+            if (isValidDayKey(day) && item.optString("status", "completed") == "completed" && weekKeyForDay(day) == weekKey()) {
+                completed.add(day + "::" + item.optString("plan_id", item.optString("plan_title", "Treino")))
+            }
+        }
+        return completed.size
+    }
+
+    private fun currentWeekActivitySeconds(): Long {
+        var total = 0L
+        val runs = runLogs()
+        for (index in 0 until runs.length()) {
+            val item = runs.getJSONObject(index)
+            if (!isValidDayKey(item.optString("day")) || weekKeyForDay(item.optString("day")) != weekKey()) continue
+            total += item.optLong("duration_seconds", parseHistoryDurationSeconds(item.optString("duration"))).coerceAtLeast(0L)
+        }
+
+        val sessions = strengthSessionLogs()
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            if (!isValidDayKey(item.optString("day")) || item.optString("status", "completed") != "completed" || weekKeyForDay(item.optString("day")) != weekKey()) continue
+            total += item.optLong("duration_seconds", 0L)
+                .takeIf { it > 0L }
+                ?: estimateStrengthSessionSeconds(item.optString("day"), item.optString("plan_title", "Treino"))
+        }
+        return total
+    }
+
+    private fun estimateStrengthSessionSeconds(day: String, planTitle: String): Long {
+        val times = mutableListOf<Int>()
+        var setCount = 0
+        val logs = allLogs()
+        for (index in 0 until logs.length()) {
+            val item = logs.getJSONObject(index)
+            if (item.optString("day") != day || item.optString("plan", "Treino") != planTitle) continue
+            setCount += 1
+            val parts = item.optString("time").split(":")
+            val hour = parts.getOrNull(0)?.toIntOrNull()
+            val minute = parts.getOrNull(1)?.toIntOrNull()
+            if (hour != null && minute != null && hour in 0..23 && minute in 0..59) times.add(hour * 60 + minute)
+        }
+        if (setCount <= 0) return 0L
+        val measured = if (times.size >= 2) ((times.maxOrNull()!! - times.minOrNull()!!).coerceAtLeast(0) * 60L) else 0L
+        val estimated = setCount * 120L
+        return max(measured + 60L, estimated).coerceAtMost(4L * 3600L)
     }
 
     private fun stableNextActionLine(): String {
@@ -1392,6 +1439,7 @@ class MainActivity : Activity() {
             root.addView(completedList)
             return
         }
+        ensureStrengthSessionStarted()
         root.addView(workoutProgressPanel())
         val register = registerPanel()
         if (requestedSection == "workout_current") pageScrollTarget = register
@@ -5856,6 +5904,8 @@ class MainActivity : Activity() {
         val completion = saveStrengthSessionCompletion()
         prefs.edit()
             .putString("last_finished_day", dayKey())
+            .remove("strength_session_started_at_ms")
+            .remove("strength_session_identity")
             .remove("rest_timer_end_at")
             .remove("rest_timer_duration_secs")
             .remove("rest_timer_exercise")
@@ -5899,6 +5949,12 @@ class MainActivity : Activity() {
         val sessions = strengthSessionLogs()
         val existingIndex = findStrengthSessionIndex(sessions, day, plan.id, plan.title)
         val existing = if (existingIndex >= 0) sessions.getJSONObject(existingIndex) else null
+        val startedAt = prefs.getLong("strength_session_started_at_ms", 0L)
+        val recordedDuration = if (startedAt > 0L) {
+            ((System.currentTimeMillis() - startedAt) / 1000L).coerceIn(60L, 4L * 3600L)
+        } else {
+            estimateStrengthSessionSeconds(day, plan.title)
+        }
         val session = JSONObject()
             .put("id", existing?.optString("id")?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString())
             .put("day", day)
@@ -5914,10 +5970,21 @@ class MainActivity : Activity() {
             .put("partial_exercises", jsonStringArray(partial))
             .put("skipped_exercises", jsonStringArray(skipped))
             .put("finished_with_skips", partial.isNotEmpty() || skipped.isNotEmpty())
+            .put("duration_seconds", recordedDuration)
             .put("updated_at", timestamp())
         if (existingIndex >= 0) sessions.put(existingIndex, session) else sessions.put(session)
         prefs.edit().putString("strength_session_logs", sessions.toString()).apply()
         return session
+    }
+
+    private fun ensureStrengthSessionStarted() {
+        val plan = currentPlan()
+        val identity = dayKey() + "::" + plan.id
+        if (prefs.getString("strength_session_identity", "") == identity && prefs.getLong("strength_session_started_at_ms", 0L) > 0L) return
+        prefs.edit()
+            .putString("strength_session_identity", identity)
+            .putLong("strength_session_started_at_ms", System.currentTimeMillis())
+            .apply()
     }
 
     private fun currentStrengthSessionCompletion(): JSONObject? {
@@ -7727,7 +7794,7 @@ class MainActivity : Activity() {
             val volume = item.optDouble("load") * item.optInt("reps")
             totalVolume += volume
             if (item.optString("day") == today) todayVolume += volume
-            if (item.optString("week") == week || item.optString("day").startsWith(week.take(4))) {
+            if (item.optString("week") == week || weekKeyForDay(item.optString("day")) == week) {
                 weekVolume += volume
                 weekSets += 1
             }
@@ -8464,13 +8531,13 @@ class MainActivity : Activity() {
     }
 
     private fun currentSectionTitle(): String {
-        if (currentTab == "home") return "Dashboard Semanal"
+        if (currentTab == "home") return "Essa Semana"
         return navItems.firstOrNull { it.id == currentTab }?.title ?: "Inicio"
     }
 
     private fun currentSectionSubtitle(): String {
         return when (currentTab) {
-            "home" -> "Visao da semana, missao de hoje e atalhos para registrar sem perder tempo."
+            "home" -> ""
             "workout" -> "Registro guiado com timer, midia de execucao, edicao e desfazer serie."
             "running" -> "Semana de corrida, planejamento 5 km e treino guiado por fases."
             "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
