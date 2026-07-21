@@ -198,3 +198,11 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Dashboard recebe titulo interno e preserva os indicadores semanais abaixo do carrossel.
 - Estado do slide e preferencias de movimento reduzido sao respeitados localmente.
 - Android usa versionCode 1230 e versionName 12.3.0.
+
+## v12.3.1
+
+- Remove os cards antigos `MO2 LOG V12` e `HOJE` da Home.
+- Agenda semanal recebe seletor de dias, datas reais, progresso e detalhes animados.
+- Musculacao e corrida possuem indicadores proprios e dias hibridos exibem estado parcial.
+- Acoes da agenda abrem diretamente o plano de musculacao, corrida ou coach correspondente.
+- Android usa versionCode 1231 e versionName 12.3.1.

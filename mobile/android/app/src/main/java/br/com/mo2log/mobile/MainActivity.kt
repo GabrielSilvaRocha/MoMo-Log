@@ -57,6 +57,9 @@ import br.com.mo2log.mobile.ui.Mo2Radius
 import br.com.mo2log.mobile.ui.Mo2Spacing
 import br.com.mo2log.mobile.ui.Mo2WeeklyDashboardData
 import br.com.mo2log.mobile.ui.Mo2WeeklyDashboardView
+import br.com.mo2log.mobile.ui.Mo2WeeklyAgendaDay
+import br.com.mo2log.mobile.ui.Mo2WeeklyAgendaState
+import br.com.mo2log.mobile.ui.Mo2WeeklyAgendaView
 import br.com.mo2log.mobile.ui.Mo2WeeklyCarouselState
 import br.com.mo2log.mobile.ui.Mo2WeeklyWorkoutCarouselView
 import br.com.mo2log.mobile.ui.Mo2WeeklyWorkoutSlide
@@ -844,8 +847,6 @@ class MainActivity : Activity() {
 
         root.addView(weeklyWorkoutCarouselPanel())
         root.addView(weeklyDashboardPanel())
-        root.addView(stablePersonalDashboardPanel())
-        root.addView(todayDashboardPanel())
         root.addView(quickActionsPanel())
         root.addView(weeklyAgendaDashboardPanel())
         root.addView(dailyCommandPanel())
@@ -884,38 +885,6 @@ class MainActivity : Activity() {
         insightBox.addView(label("INSIGHTS", green, 13f, true))
         localInsights().forEach { insight -> insightBox.addView(label("- " + insight, white, 15f, false)) }
         root.addView(insightBox)
-    }
-
-    private fun stablePersonalDashboardPanel(): View {
-        val stats = computeStats(allLogs())
-        val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
-        val weekSets = stats.optInt("week_sets")
-        val weekRuns = currentRunningWeekWorkouts()
-        val runningDone = weekRuns.count { isRunWorkoutCompleted(it) }
-        val strengthToday = todayLogs().length() > 0 || hasCompletedStrengthSession(dayKey())
-        val runToday = todayRunCount() > 0
-        val checkInDone = readinessStatus().isNotBlank()
-        val backupDone = prefs.getString("last_backup_day", "") == dayKey()
-        val doneCount = listOf(strengthToday, runToday, checkInDone, backupDone).count { it }
-        val weeklyScore = ((progressPercent(weekSets, weekTarget).coerceAtMost(100) + progressPercent(runningDone, weekRuns.size).coerceAtMost(100)) / 2)
-
-        val box = card(surface3)
-        box.orientation = LinearLayout.VERTICAL
-        box.addView(label("MO2 LOG V12", green, 13f, true))
-        box.addView(label("Central pessoal integrada", white, 26f, true))
-        box.addView(label("Offline, local e pronto para academia: treino, corrida, historico e backup no mesmo fluxo.", muted, 14f, false))
-
-        val metrics = LinearLayout(this)
-        metrics.orientation = LinearLayout.HORIZONTAL
-        metrics.addView(compactMetric("Semana", weeklyScore.toString() + "%"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        metrics.addView(compactMetric("Hoje", doneCount.toString() + "/4"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        metrics.addView(compactMetric("Dados", localDataHealthLabel()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        box.addView(spacedRow(metrics))
-
-        box.addView(label("Proximo passo: " + stableNextActionLine(), white, 15f, true))
-        box.addView(label("Ultima atividade: " + latestActivitySummary(), muted, 13f, false))
-        box.addView(label(dataSafetyLine(), if (backupDone) green else amber, 13f, true))
-        return box
     }
 
     private fun quickActionsPanel(): View {
@@ -980,26 +949,36 @@ class MainActivity : Activity() {
 
     private fun openWeeklyWorkoutSlide(slide: Mo2WeeklyWorkoutSlide) {
         when (slide.destination) {
-            "workout" -> {
-                selectedPlanIndex = (slide.planIndex ?: todayPlanIndex()).coerceIn(plans.indices)
-                selectedExerciseIndex = 0
-                prefs.edit()
-                    .putInt("selected_plan", selectedPlanIndex)
-                    .putInt("selected_exercise", selectedExerciseIndex)
-                    .apply()
-                switchTab("workout")
-            }
-            "running" -> {
-                currentRunningWeekWorkouts()
-                    .firstOrNull { workout -> workout.dayIndex == slide.dayIndex }
-                    ?.let { workout ->
-                        selectedRunId = workout.id
-                        prefs.edit().putString("selected_run_id", workout.id).apply()
-                    }
-                switchTab("running")
-            }
+            "workout" -> openWeeklyStrengthDay(slide.dayIndex, slide.planIndex)
+            "running" -> openWeeklyRunningDay(slide.dayIndex)
             else -> Toast.makeText(this, slide.day + ": " + slide.title, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun openWeeklyStrengthDay(dayIndex: Int, preferredPlanIndex: Int? = null) {
+        val planIndex = preferredPlanIndex ?: when (dayIndex) {
+            2 -> 0
+            4 -> 1
+            6 -> 2
+            else -> todayPlanIndex()
+        }
+        selectedPlanIndex = planIndex.coerceIn(plans.indices)
+        selectedExerciseIndex = 0
+        prefs.edit()
+            .putInt("selected_plan", selectedPlanIndex)
+            .putInt("selected_exercise", selectedExerciseIndex)
+            .apply()
+        switchTab("workout")
+    }
+
+    private fun openWeeklyRunningDay(dayIndex: Int) {
+        currentRunningWeekWorkouts()
+            .firstOrNull { workout -> workout.dayIndex == dayIndex }
+            ?.let { workout ->
+                selectedRunId = workout.id
+                prefs.edit().putString("selected_run_id", workout.id).apply()
+            }
+        switchTab("running")
     }
 
     private fun weeklyDashboardPanel(): View {
@@ -1030,63 +1009,120 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun todayDashboardPanel(): View {
-        val stats = computeStats(allLogs())
-        val mission = todayMission()
-        val plan = currentPlan()
-        val run = todayRunningWorkout()
-        val strengthText = if (hasCompletedStrengthSession(dayKey())) {
-            plan.title + " concluido. Exercicios nao realizados foram registrados como pulados."
-        } else if (isStrengthDayToday()) {
-            plan.title + " - " + plan.focus + " | " + plan.exercises.size + " exercicios"
-        } else {
-            "Sem musculacao principal hoje. Preserve energia para a corrida ou recuperacao."
-        }
-        val runText = if (run != null) {
-            run.dayName + " - " + run.title + " | " + formatKm(totalRunDistance(run)) + " | " + formatDuration(estimatedWorkoutSeconds(run))
-        } else {
-            "Sem corrida planejada para hoje."
-        }
+    private fun weeklyAgendaDashboardPanel(): View {
+        val runningByDay = currentRunningWeekWorkouts().associateBy { it.dayIndex }
+        val todayIndex = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull()?.coerceIn(1, 7) ?: 1
+        val dayNames = listOf("Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo")
+        val shortNames = listOf("SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM")
+        val strengthPlanByDay = mapOf(2 to 0, 4 to 1, 6 to 2)
 
-        val box = card(surface2)
-        box.orientation = LinearLayout.VERTICAL
-        box.addView(label("HOJE", green, 13f, true))
-        box.addView(label(mission.first, white, 24f, true))
-        box.addView(label(mission.second, muted, 14f, false))
-        box.addView(label("Musculacao: " + strengthText, white, 15f, true))
-        box.addView(label("Corrida: " + runText, muted, 14f, false))
-        box.addView(label(todayLogs().length().toString() + " series hoje | volume " + stats.optInt("today_volume") + " kg | corridas " + todayRunCount(), muted, 13f, false))
+        val days = (1..7).map { dayIndex ->
+            val strengthPlanIndex = strengthPlanByDay[dayIndex]
+            val strengthPlan = strengthPlanIndex?.let { plans.getOrNull(it) }
+            val running = runningByDay[dayIndex]
+            val hasStrength = strengthPlan != null
+            val strengthCompleted = hasStrength && isStrengthWeekDayCompleted(dayIndex)
+            val hasRunning = running != null
+            val runningCompleted = running?.let { isRunWorkoutCompleted(it) } ?: false
+            val title = when (dayIndex) {
+                1 -> running?.title ?: "Corrida principal"
+                2 -> "Peito, ombro e triceps"
+                3 -> "Mobilidade e descanso"
+                4 -> "Pernas e core"
+                5 -> "Descanso"
+                6 -> "Costas e biceps"
+                7 -> running?.title ?: "Corrida longa"
+                else -> "Treino pessoal"
+            }
+            val description = when (dayIndex) {
+                1 -> "Treino principal de corrida, sem musculacao."
+                2 -> "Musculacao primeiro e corrida leve depois."
+                3 -> "Mobilidade, caminhada leve ou descanso completo."
+                4 -> "Pernas e core primeiro; corrida curta para soltar."
+                5 -> "Recupere energia para o treino de sabado."
+                6 -> "Costas e biceps seguidos do bloco de ritmo."
+                7 -> "Corrida leve para construir base aerobica."
+                else -> "Siga o planejamento da semana."
+            }
+            val meta = when {
+                strengthPlan != null && running != null -> {
+                    strengthPlan.exercises.size.toString() + " exercicios | " + formatKm(totalRunDistance(running))
+                }
+                strengthPlan != null -> strengthPlan.exercises.size.toString() + " exercicios"
+                running != null -> formatKm(totalRunDistance(running)) + " | " + formatDuration(estimatedWorkoutSeconds(running))
+                dayIndex == 3 -> "Mobilidade leve | caminhada opcional"
+                else -> "Sono | alimentacao | recuperacao"
+            }
+            Mo2WeeklyAgendaDay(
+                dayIndex = dayIndex,
+                dayName = dayNames[dayIndex - 1],
+                shortName = shortNames[dayIndex - 1],
+                dateLabel = currentWeekDayNumber(dayIndex),
+                title = title,
+                description = description,
+                meta = meta,
+                hasStrength = hasStrength,
+                strengthCompleted = strengthCompleted,
+                hasRunning = hasRunning,
+                runningCompleted = runningCompleted,
+                status = Mo2WeeklyAgendaState.status(
+                    hasStrength,
+                    strengthCompleted,
+                    hasRunning,
+                    runningCompleted,
+                ),
+                isToday = dayIndex == todayIndex,
+            )
+        }
+        val completedActivities = days.sumOf { day ->
+            listOf(
+                day.hasStrength && day.strengthCompleted,
+                day.hasRunning && day.runningCompleted,
+            ).count { it }
+        }
+        val totalActivities = days.sumOf { day -> listOf(day.hasStrength, day.hasRunning).count { it } }
+        val initialIndex = prefs.getInt("home_week_agenda_day", todayIndex - 1)
 
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        val workout = actionButton("Treino", if (isStrengthDayToday()) green else surface2, if (isStrengthDayToday()) bg else white)
-        workout.setOnClickListener { switchTab("workout") }
-        row.addView(workout, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val running = actionButton("Corrida", if (missionButtonTab() == "running") green else surface2, if (missionButtonTab() == "running") bg else white)
-        running.setOnClickListener { switchTab("running") }
-        row.addView(running, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(row))
-        return box
+        return Mo2WeeklyAgendaView(
+            context = this,
+            days = days,
+            initialIndex = initialIndex,
+            weekLabel = currentWeekRangeLabel(),
+            completedActivities = completedActivities,
+            totalActivities = totalActivities,
+            reduceMotion = prefs.getBoolean("accessibility_reduce_motion", false),
+            onDayChanged = { index -> prefs.edit().putInt("home_week_agenda_day", index).apply() },
+            onOpenStrength = { day -> openWeeklyStrengthDay(day.dayIndex) },
+            onOpenRunning = { day -> openWeeklyRunningDay(day.dayIndex) },
+            onOpenRecovery = { switchTab("coach") },
+            onOpenFullPlan = { switchTab("running") },
+        )
     }
 
-    private fun weeklyAgendaDashboardPanel(): View {
-        val workoutsByDay = currentRunningWeekWorkouts().associateBy { it.dayIndex }
-        val box = card(surface)
-        box.orientation = LinearLayout.VERTICAL
-        box.addView(label("AGENDA DA SEMANA", green, 13f, true))
-        box.addView(label("Treinos planejados ate a prova de 5 km", white, 22f, true))
-        hybridWeekLines().forEachIndexed { index, line ->
-            val dayIndex = index + 1
-            val runDone = workoutsByDay[dayIndex]?.let { isRunWorkoutCompleted(it) } ?: false
-            val strengthDone = isStrengthWeekDayCompleted(dayIndex)
-            val marker = if (runDone || strengthDone) "[x] " else "[ ] "
-            val color = if (runDone || strengthDone) green else white
-            box.addView(label(marker + line, color, 14f, false))
+    private fun currentWeekDay(dayIndex: Int): Calendar {
+        val calendar = Calendar.getInstance()
+        val currentIndex = SimpleDateFormat("u", Locale.US).format(calendar.time).toIntOrNull() ?: 1
+        calendar.add(Calendar.DAY_OF_YEAR, dayIndex.coerceIn(1, 7) - currentIndex)
+        return calendar
+    }
+
+    private fun currentWeekDayNumber(dayIndex: Int): String {
+        return SimpleDateFormat("dd", Locale("pt", "BR")).format(currentWeekDay(dayIndex).time)
+    }
+
+    private fun currentWeekRangeLabel(): String {
+        val locale = Locale("pt", "BR")
+        val first = currentWeekDay(1).time
+        val last = currentWeekDay(7).time
+        val firstMonth = SimpleDateFormat("MMM", locale).format(first).replace(".", "")
+        val lastMonth = SimpleDateFormat("MMM", locale).format(last).replace(".", "")
+        val firstDay = SimpleDateFormat("dd", locale).format(first)
+        val lastDay = SimpleDateFormat("dd", locale).format(last)
+        return if (firstMonth == lastMonth) {
+            "$firstDay - $lastDay ${lastMonth.uppercase(locale)}"
+        } else {
+            "$firstDay ${firstMonth.uppercase(locale)} - $lastDay ${lastMonth.uppercase(locale)}"
         }
-        val open = actionButton("Planejamento completo", surface2, green)
-        open.setOnClickListener { switchTab("running") }
-        box.addView(buttonParams(open))
-        return box
     }
 
     private fun dashboardProgressLine(title: String, detail: String, percent: Int, color: Int): View {
@@ -1169,86 +1205,6 @@ class MainActivity : Activity() {
         val measured = if (times.size >= 2) ((times.maxOrNull()!! - times.minOrNull()!!).coerceAtLeast(0) * 60L) else 0L
         val estimated = setCount * 120L
         return max(measured + 60L, estimated).coerceAtMost(4L * 3600L)
-    }
-
-    private fun stableNextActionLine(): String {
-        val mission = todayMission()
-        val strengthDone = todayLogs().length() > 0 || hasCompletedStrengthSession(dayKey())
-        val runDone = todayRunCount() > 0
-        val checkInDone = readinessStatus().isNotBlank()
-        val backupDone = prefs.getString("last_backup_day", "") == dayKey()
-        val run = todayRunningWorkout()
-        return when {
-            !checkInDone -> "fazer check-in rapido antes de decidir intensidade."
-            isStrengthDayToday() && !strengthDone -> "abrir " + currentPlan().title + " e registrar as series."
-            run != null && !runDone -> "abrir corrida: " + run.title + "."
-            !backupDone -> "copiar backup local depois do treino."
-            else -> mission.first.lowercase(Locale("pt", "BR")) + " concluido ou em dia; revisar historico se quiser ajustar."
-        }
-    }
-
-    private fun localDataHealthLabel(): String {
-        val total = allLogs().length() + runLogs().length() + strengthSessionLogs().length()
-        if (total <= 0) return "novo"
-        val backupDay = prefs.getString("last_backup_day", "").orEmpty()
-        val age = if (isValidDayKey(backupDay)) daysBetween(backupDay, dayKey()) else null
-        return when (Mo2ProgressEngine.dataHealth(invalidLocalCollectionCount(), age, total).status) {
-            "Integro" -> "ok"
-            "Revisar" -> "revisar"
-            else -> "backup"
-        }
-    }
-
-    private fun dataSafetyLine(): String {
-        val backupDay = prefs.getString("last_backup_day", "").orEmpty()
-        return if (backupDay == dayKey()) {
-            "Backup de hoje ja foi copiado."
-        } else if (backupDay.isBlank()) {
-            "Backup ainda nao feito neste aparelho. Use Acoes Rapidas > Backup."
-        } else {
-            "Ultimo backup: " + backupDay + ". Copie novamente depois de registrar novos treinos."
-        }
-    }
-
-    private fun latestActivitySummary(): String {
-        var latestKey = ""
-        var latestText = "nenhum registro local ainda."
-        val sets = allLogs()
-        for (index in 0 until sets.length()) {
-            val item = sets.getJSONObject(index)
-            val key = item.optString("day") + item.optString("time")
-            if (key >= latestKey) {
-                latestKey = key
-                latestText = item.optString("day") + " " + item.optString("time") + " | " +
-                    item.optString("exercise", "Serie") + " " + item.optInt("reps") + " reps"
-            }
-        }
-        val runs = runLogs()
-        for (index in 0 until runs.length()) {
-            val item = runs.getJSONObject(index)
-            val key = item.optString("day") + item.optString("time")
-            if (key >= latestKey) {
-                latestKey = key
-                latestText = item.optString("day") + " " + item.optString("time") + " | " +
-                    item.optString("workout_title", "Corrida") + " " + formatKm(item.optDouble("distance"))
-            }
-        }
-        val sessions = strengthSessionLogs()
-        for (index in 0 until sessions.length()) {
-            val item = sessions.getJSONObject(index)
-            val key = item.optString("day") + item.optString("time")
-            if (key >= latestKey) {
-                latestKey = key
-                latestText = item.optString("day") + " " + item.optString("time") + " | " +
-                    item.optString("plan_title", "Treino") + " concluido"
-            }
-        }
-        return latestText
-    }
-
-    private fun isStrengthDayToday(): Boolean {
-        val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
-        return day == 2 || day == 4 || day == 6
     }
 
     private fun isStrengthWeekDayCompleted(dayIndex: Int): Boolean {

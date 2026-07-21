@@ -4,16 +4,16 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v12.1.0.
+- Android nativo pessoal: v12.3.1.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v12.2.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
-- v12.3.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
-- v12.4.0 - Comparacoes mensais e metas pessoais de longo prazo.
+- v12.4.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
+- v12.5.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
+- v12.6.0 - Comparacoes mensais e metas pessoais de longo prazo.
 - v13.0.0 - Nova consolidacao da experiencia pessoal offline.
 
 ## v8.1.2 - Android Offline Auto Login
@@ -575,3 +575,12 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Dashboard passa a exibir o titulo interno aprovado sem comprometer os aneis e indicadores semanais.
 - As sete imagens ficam embarcadas no APK para a agenda funcionar sem conexao.
 - O app Android passa para versionCode 1230 / versionName 12.3.0.
+
+## v12.3.1 - Agenda semanal interativa
+
+- Home remove os cards redundantes `MO2 LOG V12` e `HOJE`.
+- Agenda antiga em lista passa a usar sete dias selecionaveis com datas da semana atual.
+- Indicadores independentes mostram musculacao e corrida pendentes ou concluidas em cada dia.
+- Dia selecionado exibe status, resumo e botoes contextuais para abrir treino, corrida ou recuperacao.
+- Dias hibridos distinguem progresso parcial de dia totalmente concluido.
+- Android usa versionCode 1231 e versionName 12.3.1.
