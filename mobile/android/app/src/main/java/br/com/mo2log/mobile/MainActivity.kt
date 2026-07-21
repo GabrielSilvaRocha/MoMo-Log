@@ -57,6 +57,9 @@ import br.com.mo2log.mobile.ui.Mo2Radius
 import br.com.mo2log.mobile.ui.Mo2Spacing
 import br.com.mo2log.mobile.ui.Mo2WeeklyDashboardData
 import br.com.mo2log.mobile.ui.Mo2WeeklyDashboardView
+import br.com.mo2log.mobile.ui.Mo2WeeklyCarouselState
+import br.com.mo2log.mobile.ui.Mo2WeeklyWorkoutCarouselView
+import br.com.mo2log.mobile.ui.Mo2WeeklyWorkoutSlide
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -267,7 +270,10 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 }
 
 class MainActivity : Activity() {
-    private val versionName = BuildConfig.VERSION_NAME
+    @Suppress("DEPRECATION")
+    private val versionName: String by lazy {
+        packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
+    }
     // Change only when the bundled plan changes so visual releases never reset an active workout.
     private val trainingPlanVersion = "12.1.0"
     private val backupSource = "mo2log_native_android"
@@ -836,6 +842,7 @@ class MainActivity : Activity() {
     private fun renderHome(root: LinearLayout) {
         val stats = computeStats(allLogs())
 
+        root.addView(weeklyWorkoutCarouselPanel())
         root.addView(weeklyDashboardPanel())
         root.addView(stablePersonalDashboardPanel())
         root.addView(todayDashboardPanel())
@@ -939,6 +946,62 @@ class MainActivity : Activity() {
         return box
     }
 
+    private fun weeklyWorkoutCarouselPanel(): View {
+        val slides = listOf(
+            Mo2WeeklyWorkoutSlide("Segunda", "Corrida", R.drawable.home_monday_running, "running", 1),
+            Mo2WeeklyWorkoutSlide("Terca", "Peito Ombro Triceps", R.drawable.home_tuesday_push, "workout", 2, 0),
+            Mo2WeeklyWorkoutSlide("Quarta", "Mobilidade", R.drawable.home_wednesday_mobility, "recovery", 3),
+            Mo2WeeklyWorkoutSlide("Quinta", "Pernas e Core", R.drawable.home_thursday_legs, "workout", 4, 1),
+            Mo2WeeklyWorkoutSlide("Sexta", "Descanso", R.drawable.home_friday_recovery, "recovery", 5),
+            Mo2WeeklyWorkoutSlide("Sabado", "Costas e Biceps", R.drawable.home_saturday_pull, "workout", 6, 2),
+            Mo2WeeklyWorkoutSlide("Domingo", "Corrida Longa", R.drawable.home_sunday_long_run, "running", 7),
+        )
+        val todayIso = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
+        val initialIndex = prefs.getInt(
+            "home_week_slide",
+            Mo2WeeklyCarouselState.fromIsoDay(todayIso, slides.size),
+        )
+        return Mo2WeeklyWorkoutCarouselView(
+            context = this,
+            slides = slides,
+            initialIndex = initialIndex,
+            reduceMotion = prefs.getBoolean("accessibility_reduce_motion", false),
+            onSlideChanged = { index -> prefs.edit().putInt("home_week_slide", index).apply() },
+            onSlideClick = ::openWeeklyWorkoutSlide,
+        ).apply {
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            params.setMargins(0, 0, 0, dp(Mo2Spacing.Sm))
+            layoutParams = params
+        }
+    }
+
+    private fun openWeeklyWorkoutSlide(slide: Mo2WeeklyWorkoutSlide) {
+        when (slide.destination) {
+            "workout" -> {
+                selectedPlanIndex = (slide.planIndex ?: todayPlanIndex()).coerceIn(plans.indices)
+                selectedExerciseIndex = 0
+                prefs.edit()
+                    .putInt("selected_plan", selectedPlanIndex)
+                    .putInt("selected_exercise", selectedExerciseIndex)
+                    .apply()
+                switchTab("workout")
+            }
+            "running" -> {
+                currentRunningWeekWorkouts()
+                    .firstOrNull { workout -> workout.dayIndex == slide.dayIndex }
+                    ?.let { workout ->
+                        selectedRunId = workout.id
+                        prefs.edit().putString("selected_run_id", workout.id).apply()
+                    }
+                switchTab("running")
+            }
+            else -> Toast.makeText(this, slide.day + ": " + slide.title, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun weeklyDashboardPanel(): View {
         val stats = computeStats(allLogs())
         val weekTarget = prefs.getString("goal_week_sets", "60")?.toIntOrNull() ?: 60
@@ -960,7 +1023,7 @@ class MainActivity : Activity() {
         ).apply {
             val params = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(252),
+                dp(278),
             )
             params.setMargins(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm))
             layoutParams = params

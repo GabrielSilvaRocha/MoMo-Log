@@ -183,3 +183,18 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Recomendacoes respeitam pesos inteiros ou decimais configurados localmente.
 - Exercicios unidos por `ou` sao separados com migracao compativel dos planos e checklists existentes.
 - Android usa versionCode 1210 e versionName 12.1.0.
+
+## v12.2.0
+
+- Home remove o header antigo e destaca `Essa Semana` com Be Vietnam Pro Regular.
+- Dashboard semanal adota dois aneis de progresso para musculacao e corrida.
+- Metricas de series, volume, distancia e tempo ativo ganham leitura visual compacta.
+- Android usa versionCode 1220 e versionName 12.2.0.
+
+## v12.3.0
+
+- Home recebe carrossel quadrado com os sete treinos da semana e fotos locais.
+- Carrossel abre o fluxo correspondente, inicia no dia atual e permite gesto lateral, seta e indicadores.
+- Dashboard recebe titulo interno e preserva os indicadores semanais abaixo do carrossel.
+- Estado do slide e preferencias de movimento reduzido sao respeitados localmente.
+- Android usa versionCode 1230 e versionName 12.3.0.

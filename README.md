@@ -566,3 +566,12 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Tempo de atividade soma corridas e musculacao; novas sessoes de musculacao passam a salvar a duracao localmente.
 - Calculo semanal deixa de incluir registros antigos do mesmo ano fora da semana atual.
 - O app Android passa para versionCode 1220 / versionName 12.2.0.
+
+## v12.3.0 - Agenda visual da semana
+
+- Inicio recebe um carrossel quadrado com os sete dias, imagens proprias e o treino planejado em cada slide.
+- O carrossel abre diretamente a musculacao ou a corrida correspondente e preserva o ultimo dia visualizado.
+- Navegacao aceita gesto horizontal, seta, indicadores de pagina e movimento reduzido configurado no Perfil.
+- Dashboard passa a exibir o titulo interno aprovado sem comprometer os aneis e indicadores semanais.
+- As sete imagens ficam embarcadas no APK para a agenda funcionar sem conexao.
+- O app Android passa para versionCode 1230 / versionName 12.3.0.

@@ -58,6 +58,10 @@ class Mo2WeeklyDashboardView(
         color = Mo2Colors.TextPrimary
         textAlign = Paint.Align.CENTER
     }
+    private val dashboardTypeface = Typeface.create(
+        resources.getFont(R.font.be_vietnam_pro_regular),
+        Typeface.BOLD,
+    )
     private val runner = BitmapFactory.decodeResource(resources, R.drawable.ic_running_sprint)
     private val runnerPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         colorFilter = PorterDuffColorFilter(Mo2Colors.Running, PorterDuff.Mode.SRC_IN)
@@ -80,7 +84,7 @@ class Mo2WeeklyDashboardView(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(
             resolveSize(suggestedMinimumWidth, widthMeasureSpec),
-            resolveSize(context.mo2Dp(252), heightMeasureSpec),
+            resolveSize(context.mo2Dp(278), heightMeasureSpec),
         )
     }
 
@@ -96,12 +100,16 @@ class Mo2WeeklyDashboardView(
         strokePaint.strokeWidth = context.mo2Dp(1).toFloat()
         canvas.drawRoundRect(card, context.mo2Dp(16).toFloat(), context.mo2Dp(16).toFloat(), strokePaint)
 
+        drawDashboardTitle(canvas)
+
+        val contentTop = context.mo2Dp(34).toFloat()
+        val contentHeight = height - contentTop
         val leftWidth = min(width * 0.38f, context.mo2Dp(132).toFloat())
         val verticalGap = context.mo2Dp(12).toFloat()
-        val outerDiameter = min(leftWidth - context.mo2Dp(14), (height - verticalGap * 3f) / 2f)
+        val outerDiameter = min(leftWidth - context.mo2Dp(14), (contentHeight - verticalGap * 3f) / 2f)
         val ringCenterX = leftWidth / 2f
-        val topCenterY = verticalGap + outerDiameter / 2f
-        val bottomCenterY = verticalGap * 2f + outerDiameter * 1.5f
+        val topCenterY = contentTop + verticalGap + outerDiameter / 2f
+        val bottomCenterY = contentTop + verticalGap * 2f + outerDiameter * 1.5f
 
         drawProgressRing(
             canvas,
@@ -128,15 +136,29 @@ class Mo2WeeklyDashboardView(
         val columnWidth = metricWidth / 2f
         val firstX = leftWidth + columnWidth / 2f
         val secondX = leftWidth + columnWidth * 1.5f
-        val topIconY = height * 0.205f
-        val topValueY = height * 0.392f
-        val bottomIconY = height * 0.66f
-        val bottomValueY = height * 0.875f
+        val topIconY = contentTop + contentHeight * 0.205f
+        val topValueY = contentTop + contentHeight * 0.392f
+        val bottomIconY = contentTop + contentHeight * 0.66f
+        val bottomValueY = contentTop + contentHeight * 0.875f
 
         drawMetric(canvas, firstX, topIconY, topValueY, data.completedSets.toString() + " / " + data.setTarget, MetricIcon.Sets, Mo2Colors.Primary, Color.rgb(20, 83, 45), columnWidth)
         drawMetric(canvas, secondX, topIconY, topValueY, data.volumeKg.toString() + " kg", MetricIcon.Volume, Mo2Colors.Warning, Color.rgb(112, 80, 0), columnWidth)
         drawMetric(canvas, firstX, bottomIconY, bottomValueY, Mo2WeeklyDashboardFormatter.distance(data.distanceKm), MetricIcon.Distance, Mo2Colors.Running, Color.rgb(7, 89, 133), columnWidth)
         drawMetric(canvas, secondX, bottomIconY, bottomValueY, Mo2WeeklyDashboardFormatter.activityTime(data.activitySeconds), MetricIcon.Time, Color.rgb(45, 212, 191), Color.rgb(17, 94, 89), columnWidth)
+    }
+
+    private fun drawDashboardTitle(canvas: Canvas) {
+        textPaint.color = Mo2Colors.Primary
+        textPaint.textAlign = Paint.Align.LEFT
+        textPaint.typeface = dashboardTypeface
+        textPaint.textSize = sp(13f)
+        canvas.drawText(
+            "DASHBOARD",
+            context.mo2Dp(Mo2Spacing.Lg).toFloat(),
+            context.mo2Dp(23).toFloat(),
+            textPaint,
+        )
+        textPaint.textAlign = Paint.Align.CENTER
     }
 
     private fun drawProgressRing(
