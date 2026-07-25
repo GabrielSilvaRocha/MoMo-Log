@@ -100,6 +100,18 @@
 - Manter troca preferida, equipamento indisponivel, pesos por exercicio e resumo de itens pulados.
 - Android usa versionCode 1247 e versionName 12.4.7.
 
+## v12.4.8 - Ciclo pessoal para a prova de 5 km
+
+- Plano hibrido datado de 27/07/2026 a 16/08/2026.
+- Treinos de musculacao na terca, quarta e sexta, com pernas sem corrida na quarta.
+- Treze sessoes de corrida com dias uteis, prova exclusiva no domingo e nenhuma corrida no sabado.
+- Pace central derivado de km/h, etapas completas e ajuste ativo de 0,1 km/h.
+- Deload temporario na semana da prova e recuperacao de pernas para check-in vermelho.
+- Preset aplicavel com confirmacao, IDs exclusivos e preservacao integral do historico e backup.
+- Compatibilidade validada com backup v1, tolerancia a registros incompletos e desfazer com restauracao integral.
+- Home e Running Coach passam a reconhecer inicio, semana real, prova e ciclo concluido.
+- Android usa versionCode 1248 e versionName 12.4.8.
+
 ## v12.5.0 - Soundcore Sport X20, descoberta BLE ampliada
 
 - Adicionar diagnostico debug com `BLUETOOTH_SCAN` somente apos autorizacao explicita.

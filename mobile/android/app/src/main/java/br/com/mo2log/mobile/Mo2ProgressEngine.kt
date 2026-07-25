@@ -14,6 +14,12 @@ data class Mo2DataHealth(
 )
 
 object Mo2ProgressEngine {
+    fun finiteOrZero(value: Double): Double = if (value.isFinite()) value else 0.0
+
+    fun strengthSetVolume(load: Double, reps: Int): Double {
+        return finiteOrZero(load).coerceAtLeast(0.0) * reps.coerceAtLeast(0)
+    }
+
     fun normalizeAvailableWeights(values: List<Double>): List<Double> {
         return values
             .filter { value -> value.isFinite() && value > 0.0 }

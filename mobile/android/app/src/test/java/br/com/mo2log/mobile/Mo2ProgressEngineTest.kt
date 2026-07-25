@@ -7,6 +7,13 @@ import org.junit.Test
 
 class Mo2ProgressEngineTest {
     @Test
+    fun incompleteLegacySetValuesDoNotProduceNanVolume() {
+        assertEquals(0.0, Mo2ProgressEngine.strengthSetVolume(Double.NaN, 0), 0.001)
+        assertEquals(0.0, Mo2ProgressEngine.strengthSetVolume(40.0, -1), 0.001)
+        assertEquals(400.0, Mo2ProgressEngine.strengthSetVolume(40.0, 10), 0.001)
+    }
+
+    @Test
     fun availableWeightsAreNormalizedAndSorted() {
         val result = Mo2ProgressEngine.normalizeAvailableWeights(listOf(17.5, 0.0, 20.0, 17.50, -2.0, 10.0))
         assertEquals(listOf(10.0, 17.5, 20.0), result)

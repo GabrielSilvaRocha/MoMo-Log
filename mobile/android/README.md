@@ -303,3 +303,14 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Troca de exercicio integra motivo, equipamento, alternativa preferida e selecao em um painel inferior.
 - Pesos disponiveis usam uma grade selecionavel, campo personalizado e botao Salvar persistente.
 - Android usa versionCode 1247 e versionName 12.4.7.
+
+## v12.4.8
+
+- Adiciona o preset pessoal `5k-2026-08-16-v1`, com inicio em 27/07 e prova em 16/08.
+- O ciclo possui 13 corridas datadas, IDs exclusivos, pace derivado da velocidade e prova de 5,00 km.
+- Musculacao usa Treino A na terca, Treino B de pernas na quarta e Treino C na sexta.
+- Deload da semana da prova e check-in vermelho geram variacoes temporarias sem sobrescrever o plano-base.
+- Home e Corrida usam a data real para semana, proxima sessao, contagem ate a prova e encerramento do ciclo.
+- Aplicar o preset exige confirmacao quando ha plano personalizado e nao remove registros pessoais.
+- A importacao aceita backups v1, v2 e legados, tolera registros incompletos e permite desfazer com restauracao integral.
+- Android usa versionCode 1248 e versionName 12.4.8.

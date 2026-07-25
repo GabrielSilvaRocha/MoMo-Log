@@ -145,6 +145,9 @@ data class RunningWorkout(
     val focus: String,
     val description: String,
     val stages: List<RunningStage>,
+    val scheduledDate: String = "",
+    val cycleId: String = "",
+    val isRace: Boolean = false,
 )
 
 data class NavItem(
@@ -411,7 +414,7 @@ class MainActivity : Activity() {
         packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
     }
     // Change only when the bundled plan changes so visual releases never reset an active workout.
-    private val trainingPlanVersion = "12.4.4"
+    private val trainingPlanVersion = "12.4.8"
     private val backupSource = "mo2log_native_android"
     private val backupSchema = "personal_backup_v2"
     private val supportedBackupSchemas = setOf("personal_backup_v1", backupSchema)
@@ -490,6 +493,7 @@ class MainActivity : Activity() {
     private var runningRemainingText: TextView? = null
     private var runningDistanceText: TextView? = null
     private var runningPaceText: TextView? = null
+    private var runningTargetText: TextView? = null
     private var runningElapsedText: TextView? = null
     private var runningSpeedText: TextView? = null
     private var runningStageProgressText: TextView? = null
@@ -622,6 +626,8 @@ class MainActivity : Activity() {
 
     private fun syncTrainingPlanVersion() {
         if (prefs.getString("training_plan_version", "") == trainingPlanVersion) return
+        val hasCustomStrengthPlan = prefs.contains("custom_workout_plans")
+        val hasCustomRunningPlan = prefs.contains("custom_running_plan")
         migrateCombinedWorkoutExercises()
         migrateRenamedWorkoutExercises()
         resetSmithSquatCatalogOverrideForBundledMedia()
@@ -629,10 +635,25 @@ class MainActivity : Activity() {
             .putString("training_plan_version", trainingPlanVersion)
             .putInt("selected_plan", todayPlanIndex())
             .putInt("selected_exercise", 0)
-            .putString("selected_run_id", todayRunningWorkout()?.id ?: "w1-mon")
+            .putString("selected_run_id", todayRunningWorkout()?.id ?: Mo2FiveKmPlan.runningWorkouts().first().id)
         if (!prefs.contains("run_distance")) editor.putString("run_distance", "5.0")
         if (!prefs.contains("run_speed")) editor.putString("run_speed", "8.0")
-        if (!prefs.contains("running_plan_start_day")) editor.putString("running_plan_start_day", dayKey())
+        if (!hasCustomRunningPlan) {
+            editor
+                .putString("running_plan_start_day", Mo2FiveKmPlan.StartDay)
+                .putString("running_plan_race_day", Mo2FiveKmPlan.RaceDay)
+                .putString("running_plan_cycle_id", Mo2FiveKmPlan.CycleId)
+                .putString("running_plan_cycle_name", Mo2FiveKmPlan.CycleName)
+                .putString("running_plan_target_distance_km", Mo2FiveKmPlan.TargetDistanceKm.toString())
+                .putLong("running_goal_5k_seconds", Mo2FiveKmPlan.TargetSeconds)
+                .putString("running_speed_offset", "0.0")
+                .putString("running_distance_scale", "1.0")
+        } else if (!prefs.contains("running_plan_start_day")) {
+            editor.putString("running_plan_start_day", dayKey())
+        }
+        if (!hasCustomStrengthPlan && !hasCustomRunningPlan) {
+            editor.putString("active_plan_preset", Mo2FiveKmPlan.PresetId)
+        }
         editor.apply()
     }
 
@@ -836,6 +857,7 @@ class MainActivity : Activity() {
         runningRemainingText = null
         runningDistanceText = null
         runningPaceText = null
+        runningTargetText = null
         runningElapsedText = null
         runningSpeedText = null
         runningNextText = null
@@ -1156,8 +1178,41 @@ class MainActivity : Activity() {
 
     private fun renderHome(root: LinearLayout) {
         root.addView(weeklyWorkoutCarouselPanel())
+        if (hasFiveKmCycle()) root.addView(fiveKmRaceStatusPanel())
         root.addView(weeklyDashboardPanel())
         root.addView(weeklyAgendaDashboardPanel())
+    }
+
+    private fun fiveKmRaceStatusPanel(): View {
+        val days = Mo2FiveKmPlan.daysUntilRace(dayKey())
+        val completed = days != null && days < 0L
+        val next = todayRunningWorkout()
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label(if (completed) "CICLO CONCLUIDO" else "PROXIMA PROVA", Mo2Colors.Running, 13f, true))
+        box.addView(label("5 km | 16 AGO", white, 24f, true))
+        val timing = when {
+            days == null -> "Data-alvo: 16/08/2026"
+            days < 0L -> "Planejamento encerrado em 16/08/2026"
+            days == 0L -> "Hoje e o dia da prova"
+            days == 1L -> "Falta 1 dia"
+            else -> "Faltam $days dias"
+        }
+        box.addView(label("$timing | meta 24:25-24:35", if (completed) muted else green, 14f, true))
+        box.addView(label(
+            when {
+                completed -> "Consulte o historico para revisar o ciclo e o resultado da prova."
+                next != null -> "Proximo: " + formatDayForDisplay(scheduledDayFor(next)) + " | " + next.title
+                else -> "Nenhuma corrida pendente antes da prova."
+            },
+            muted,
+            13f,
+            false,
+        ))
+        val open = actionButton(if (completed) "Ver ciclo" else "Abrir corrida", surface2, Mo2Colors.Running)
+        open.setOnClickListener { switchTab("running") }
+        box.addView(buttonParams(open))
+        return box
     }
 
     private fun quickActionsPanel(): View {
@@ -1321,7 +1376,7 @@ class MainActivity : Activity() {
                 strengthWorkouts = currentWeekStrengthWorkoutCount(),
                 strengthWorkoutTarget = plans.size.coerceAtLeast(1),
                 runningWorkouts = runningDone,
-                runningWorkoutTarget = weekRuns.size.coerceAtLeast(1),
+                runningWorkoutTarget = weekRuns.size,
                 completedSets = stats.optInt("week_sets"),
                 setTarget = weekTarget.coerceAtLeast(1),
                 volumeKg = stats.optInt("week_volume"),
@@ -1359,18 +1414,20 @@ class MainActivity : Activity() {
             }
             val hasRunning = runningEntries.isNotEmpty()
             val runningCompleted = hasRunning && runningEntries.all(::isRunWorkoutCompleted)
+            val calendarDay = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(currentWeekDay(dayIndex).time)
+            val isRaceEve = calendarDay == "2026-08-15"
             val title = when {
                 strengthPlan != null && running != null -> strengthPlan.title + " + " + running.title
                 strengthPlan != null -> strengthCarouselTitle(strengthPlan)
                 running != null -> running.title
-                dayIndex == 3 -> "Mobilidade e descanso"
+                isRaceEve -> "Descanso total"
                 else -> "Descanso"
             }
             val description = when {
                 strengthPlan != null && running != null -> "Musculacao primeiro; depois, " + running.description.lowercase(Locale("pt", "BR"))
                 strengthPlan != null -> strengthPlan.focus
                 running != null -> running.description
-                dayIndex == 3 -> "Mobilidade, caminhada leve ou descanso completo."
+                isRaceEve -> "Hidrate-se, prepare o material da prova e nao compense treino perdido."
                 else -> "Dia livre para sono, alimentacao e recuperacao."
             }
             val meta = when {
@@ -1381,7 +1438,7 @@ class MainActivity : Activity() {
                 hasStrength -> strengthEntries.sumOf { it.second.exercises.size }.toString() + " exercicios"
                 hasRunning -> formatKm(runningEntries.sumOf(::totalRunDistance)) + " | " +
                     formatDuration(runningEntries.sumOf(::estimatedWorkoutSeconds))
-                dayIndex == 3 -> "Mobilidade leve | caminhada opcional"
+                isRaceEve -> "Hidratacao | material | sono"
                 else -> "Sono | alimentacao | recuperacao"
             }
             Mo2WeeklyAgendaDay(
@@ -1432,6 +1489,13 @@ class MainActivity : Activity() {
 
     private fun currentWeekDay(dayIndex: Int): Calendar {
         val calendar = Calendar.getInstance()
+        if (hasFiveKmCycle() && Mo2FiveKmPlan.cyclePosition(dayKey()).phase == Mo2FiveKmCyclePhase.BEFORE_START) {
+            try {
+                calendar.time = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(Mo2FiveKmPlan.StartDay) ?: calendar.time
+            } catch (_: Exception) {
+                // Keep the current calendar when the bundled date cannot be parsed.
+            }
+        }
         val currentIndex = SimpleDateFormat("u", Locale.US).format(calendar.time).toIntOrNull() ?: 1
         calendar.add(Calendar.DAY_OF_YEAR, dayIndex.coerceIn(1, 7) - currentIndex)
         return calendar
@@ -2354,6 +2418,14 @@ class MainActivity : Activity() {
             return
         }
 
+        root.addView(runningCycleHeaderPanel())
+        if (isFiveKmCycleCompleted()) {
+            root.addView(runningCycleCompletedPanel())
+            root.addView(runningFullPlanButton())
+            if (prefs.getBoolean("running_full_plan_open", false)) root.addView(runningFullPlanPanel())
+            root.addView(runningHistoryPanel())
+            return
+        }
         root.addView(runningThisWeekPanel())
         root.addView(runningFullPlanButton())
         if (prefs.getBoolean("running_full_plan_open", false)) root.addView(runningFullPlanPanel())
@@ -2367,6 +2439,42 @@ class MainActivity : Activity() {
         root.addView(voicePanel)
         if (requestedSection == "voice") pageScrollTarget = voicePanel
         root.addView(runningHistoryPanel())
+    }
+
+    private fun runningCycleHeaderPanel(): View {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Md))
+        box.addView(label("5 km - Prova 16/08/2026", white, 26f, true))
+        val days = Mo2FiveKmPlan.daysUntilRace(dayKey())
+        val timing = when {
+            days == null -> "Ciclo pessoal de tres semanas"
+            days < 0L -> "Ciclo concluido"
+            days == 0L -> "Hoje e o dia da prova"
+            days == 1L -> "Falta 1 dia"
+            else -> "Faltam $days dias"
+        }
+        box.addView(label("$timing | meta 24:25-24:35 | 5,00 km", muted, 14f, false))
+        return box
+    }
+
+    private fun runningCycleCompletedPanel(): View {
+        val completed = runningPlan.count(::isRunWorkoutCompleted)
+        val raceCompleted = runningPlan.firstOrNull { it.isRace }?.let(::isRunWorkoutCompleted) == true
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("CICLO CONCLUIDO", green, 13f, true))
+        box.addView(label(if (raceCompleted) "Prova registrada" else "Planejamento encerrado", white, 24f, true))
+        box.addView(label(
+            "$completed/${runningPlan.size} sessoes registradas. O app nao reiniciara a semana 3.",
+            muted,
+            14f,
+            false,
+        ))
+        val history = actionButton("Abrir historico", surface2, green)
+        history.setOnClickListener { switchTab("history") }
+        box.addView(buttonParams(history))
+        return box
     }
 
     private fun runningSmartCoachPanel(): View {
@@ -2527,15 +2635,22 @@ class MainActivity : Activity() {
         val workout = activeRunningWorkout()
             ?: workouts.firstOrNull { it.id == selectedRunId }
             ?: todayRunningWorkout()
+            ?: workouts.firstOrNull { !isRunWorkoutCompleted(it) }
             ?: workouts.first()
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("PRONTO PARA A ESTEIRA", Mo2Colors.Running, 13f, true))
+        box.addView(label(if (workout.isRace) "PRONTO PARA A PROVA" else "PRONTO PARA A ESTEIRA", Mo2Colors.Running, 13f, true))
         box.addView(label(workout.dayName + " | " + workout.title, white, 22f, true))
         box.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), muted, 14f, false))
         box.addView(label("Plano de velocidade", muted, 12f, true))
         box.addView(label(treadmillSpeedPlan(workout), white, 15f, true))
-        box.addView(label("Use inclinacao de 1% se estiver confortavel. A tela fica ligada durante toda a sessao.", muted, 13f, false))
+        box.addView(label(
+            if (workout.isRace) "Na rua, use o pace como referencia principal. A tela fica ligada durante toda a prova." else
+                "Use inclinacao de 1% se estiver confortavel. A tela fica ligada durante toda a sessao.",
+            muted,
+            13f,
+            false,
+        ))
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
@@ -2548,9 +2663,17 @@ class MainActivity : Activity() {
         row.addView(select, LinearLayout.LayoutParams(0, dp(50), 1f))
 
         val runningNow = activeRunningWorkout()?.id == workout.id
-        val start = actionButton(if (runningNow) "Em andamento" else "Iniciar corrida", green, bg)
+        val completed = isRunWorkoutCompleted(workout)
+        val start = actionButton(
+            if (completed) "Concluido" else if (runningNow) "Em andamento" else "Iniciar corrida",
+            green,
+            bg,
+        )
+        start.isEnabled = !completed
+        start.alpha = if (completed) 0.55f else 1f
         start.setOnClickListener {
-            if (runningNow) Toast.makeText(this, "Corrida ja esta em andamento.", Toast.LENGTH_SHORT).show()
+            if (completed) Toast.makeText(this, "Corrida ja concluida.", Toast.LENGTH_SHORT).show()
+            else if (runningNow) Toast.makeText(this, "Corrida ja esta em andamento.", Toast.LENGTH_SHORT).show()
             else startRunningWorkout(workout)
         }
         row.addView(start, LinearLayout.LayoutParams(0, dp(50), 1f))
@@ -2573,7 +2696,13 @@ class MainActivity : Activity() {
         overview.orientation = LinearLayout.VERTICAL
         overview.addView(label("ESSA SEMANA", green, 13f, true))
         overview.addView(label("Semana " + week + " de " + runningPlanWeekCount(), white, 28f, true))
-        overview.addView(label("Meta: completar os 5 treinos e evoluir com controle ate os 5 km.", muted, 14f, false))
+        overview.addView(label(
+            "Meta: completar " + workouts.size + " treino" + (if (workouts.size == 1) "" else "s") +
+                " com controle ate os 5 km.",
+            muted,
+            14f,
+            false,
+        ))
 
         val metrics = LinearLayout(this)
         metrics.orientation = LinearLayout.HORIZONTAL
@@ -2627,7 +2756,11 @@ class MainActivity : Activity() {
         titleBox.addView(label(formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)) + " | " + runningStageSummary(workout), muted, 13f, false))
         titleBox.addView(label("Agendado: " + formatDayForDisplay(scheduledDay) + if (overdue) " | atrasado" else "", if (overdue) amber else muted, 12f, overdue))
         top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(Mo2Components.badge(this, if (completed) "Feito" else if (active) "Rodando" else if (expanded) "Aberto" else "Pendente", completed || active))
+        top.addView(Mo2Components.badge(
+            this,
+            if (workout.isRace) "PROVA" else if (completed) "Feito" else if (active) "Rodando" else if (expanded) "Aberto" else "Pendente",
+            workout.isRace || completed || active,
+        ))
         item.addView(top)
 
         if (expanded) {
@@ -2639,7 +2772,19 @@ class MainActivity : Activity() {
                 stageRow.setPadding(dp(12), dp(10), dp(12), dp(10))
                 stageRow.background = rounded(surface2, dp(Mo2Radius.Md), border)
                 stageRow.addView(label("ETAPA " + (index + 1) + " | " + stage.title, white, 13f, true))
-                stageRow.addView(label(formatKm(stage.distanceKm) + " a " + formatSpeed(stage.speedKmh) + " | " + stage.note, muted, 12f, false))
+                stageRow.addView(label(
+                    formatKm(stage.distanceKm) + " | " + formatSpeed(stage.speedKmh) + " | " +
+                        formatPaceForSpeed(stage.speedKmh) + " | " + stage.note,
+                    muted,
+                    12f,
+                    false,
+                ))
+                stageRow.addView(label(
+                    "Proxima: " + (workout.stages.getOrNull(index + 1)?.let(::stageCue) ?: "fim do treino"),
+                    muted,
+                    11f,
+                    false,
+                ))
                 val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 params.setMargins(0, dp(8), 0, 0)
                 item.addView(stageRow, params)
@@ -2771,12 +2916,31 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("PLANEJAMENTO COMPLETO", green, 13f, true))
-        box.addView(label(runningPlanWeekCount().toString() + " semanas para a prova de 5 km", white, 22f, true))
+        box.addView(label("3 semanas + prova de 5 km em 16/08", white, 22f, true))
         runningPlan.groupBy { it.week }.forEach { entry ->
             box.addView(label("Semana " + entry.key, amber, 16f, true))
             entry.value.forEach { workout ->
                 val marker = if (isRunWorkoutCompleted(workout)) "[x] " else "[ ] "
-                box.addView(label(marker + formatDayForDisplay(scheduledDayFor(workout)) + " | " + workout.dayName + ": " + workout.title + " | " + formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)), white, 13f, false))
+                box.addView(label(
+                    marker + formatDayForDisplay(scheduledDayFor(workout)) + " | " +
+                        workout.dayName + ": " + workout.title +
+                        (if (workout.isRace) " | PROVA" else "") + " | " +
+                        formatKm(totalRunDistance(workout)) + " | " + formatDuration(estimatedWorkoutSeconds(workout)),
+                    white,
+                    13f,
+                    workout.isRace,
+                ))
+                workout.stages.forEachIndexed { index, stage ->
+                    box.addView(label(
+                        "  " + stage.title + ": " + formatKm(stage.distanceKm) + " | " +
+                            formatSpeed(stage.speedKmh) + " | " + formatPaceForSpeed(stage.speedKmh) +
+                            " | " + stage.note + " | Proxima: " +
+                            (workout.stages.getOrNull(index + 1)?.title ?: "fim"),
+                        muted,
+                        12f,
+                        false,
+                    ))
+                }
             }
         }
         return box
@@ -2865,10 +3029,17 @@ class MainActivity : Activity() {
 
         val paceCard = card(surface2)
         paceCard.orientation = LinearLayout.VERTICAL
-        paceCard.addView(label("PACE ALVO", muted, 12f, true))
+        paceCard.addView(label("PACE ATUAL", muted, 12f, true))
         runningPaceText = label("", white, 24f, true)
         paceCard.addView(runningPaceText)
         activeContent.addView(paceCard)
+
+        val targetCard = card(surface3)
+        targetCard.orientation = LinearLayout.VERTICAL
+        targetCard.addView(label("ALVO DA ETAPA", muted, 12f, true))
+        runningTargetText = label("", Mo2Colors.Running, 18f, true)
+        targetCard.addView(runningTargetText)
+        activeContent.addView(targetCard)
 
         val speedCard = card(surface2)
         speedCard.orientation = LinearLayout.VERTICAL
@@ -2877,8 +3048,8 @@ class MainActivity : Activity() {
         speedRow.orientation = LinearLayout.HORIZONTAL
         speedRow.gravity = Gravity.CENTER_VERTICAL
         val minus = actionButton("-", Mo2Colors.Border, white)
-        minus.contentDescription = "Diminuir velocidade"
-        minus.setOnClickListener { adjustActiveRunSpeed(-0.2) }
+        minus.contentDescription = "Diminuir velocidade em 0,1 quilometro por hora"
+        minus.setOnClickListener { adjustActiveRunSpeed(-0.1) }
         speedRow.addView(minus, LinearLayout.LayoutParams(dp(58), dp(58)))
 
         val speedValue = LinearLayout(this)
@@ -2893,8 +3064,8 @@ class MainActivity : Activity() {
         speedRow.addView(speedValue, LinearLayout.LayoutParams(0, dp(70), 1f))
 
         val plus = actionButton("+", Mo2Colors.Border, white)
-        plus.contentDescription = "Aumentar velocidade"
-        plus.setOnClickListener { adjustActiveRunSpeed(0.2) }
+        plus.contentDescription = "Aumentar velocidade em 0,1 quilometro por hora"
+        plus.setOnClickListener { adjustActiveRunSpeed(0.1) }
         speedRow.addView(plus, LinearLayout.LayoutParams(dp(58), dp(58)))
         speedCard.addView(speedRow)
         activeContent.addView(speedCard)
@@ -2975,16 +3146,20 @@ class MainActivity : Activity() {
         runningCountdownPanel?.visibility = View.GONE
         runningActiveContent?.visibility = View.VISIBLE
         runningSessionTitleText?.text = workout.title
-        runningSessionSubtitleText?.text = "Etapa " + (stageIndex + 1) + " de " + workout.stages.size + " | Esteira"
+        runningSessionSubtitleText?.text = "Etapa " + (stageIndex + 1) + " de " + workout.stages.size +
+            (if (workout.isRace) " | Prova" else " | Esteira")
         runningStageText?.text = (if (paused) "PAUSADO | " else "ETAPA ATUAL | ") + stage.title
         runningStageProgressText?.text = "Avanco da etapa: " + stagePercent + "% | feito " + formatKm(completedKm) + " de " + formatKm(stage.distanceKm)
         runningRemainingText?.text = formatDuration(remainingSeconds)
         runningDistanceText?.text = formatKm(remainingKm)
         runningPaceText?.text = formatPaceForSpeed(speed)
+        runningTargetText?.text = formatSpeed(stage.speedKmh) + " | " + formatPaceForSpeed(stage.speedKmh)
         runningElapsedText?.text = "Tempo de treino: " + formatDuration(activeRunElapsedSeconds())
         runningSpeedText?.text = String.format(Locale("pt", "BR"), "%.1f", speed)
         runningTreadmillText?.text = if (paused) {
             "Sessao pausada. A distancia nao esta avancando."
+        } else if (workout.isRace) {
+            "Referencia de rua: " + formatPaceForSpeed(speed) + " | tela mantida ativa"
         } else {
             "Esteira agora: " + formatSpeed(speed) + " | tela mantida ativa"
         }
@@ -3008,6 +3183,7 @@ class MainActivity : Activity() {
     private fun renderPlanEditor(root: LinearLayout) {
         root.addView(heroCard("Editor local", "Plano pessoal", "Ajuste musculacao e corrida direto no celular. Tudo fica salvo localmente."))
         root.addView(planEditorSummary())
+        root.addView(fiveKmPresetPanel())
         root.addView(planEditorSelector())
         root.addView(planDetailsEditor())
         root.addView(exerciseDetailsEditor())
@@ -3019,11 +3195,105 @@ class MainActivity : Activity() {
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
         val custom = prefs.contains("custom_workout_plans") || prefs.contains("custom_running_plan")
+        val presetActive = prefs.getString("active_plan_preset", "") == Mo2FiveKmPlan.PresetId
         box.addView(label("STATUS DO PLANO", green, 13f, true))
-        box.addView(label(if (custom) "Plano personalizado ativo" else "Plano padrao ativo", white, 23f, true))
+        box.addView(label(
+            if (presetActive) Mo2FiveKmPlan.CycleName else if (custom) "Plano personalizado ativo" else "Plano padrao ativo",
+            white,
+            23f,
+            true,
+        ))
         box.addView(label(plans.size.toString() + " treinos de musculacao | " + runningPlan.size + " corridas planejadas", muted, 15f, false))
         box.addView(label("Edicoes feitas aqui aparecem imediatamente na aba Treino e nos atalhos da Home.", muted, 14f, false))
         return box
+    }
+
+    private fun fiveKmPresetPanel(): View {
+        val active = prefs.getString("active_plan_preset", "") == Mo2FiveKmPlan.PresetId
+        val box = card()
+        box.orientation = LinearLayout.VERTICAL
+        box.addView(label("PLANO PARA A PROVA", Mo2Colors.Running, 13f, true))
+        box.addView(label("5 km - 16/08/2026", white, 22f, true))
+        box.addView(label(
+            "Inicio em 27/07 | musculacao ter/qua/sex | corrida seg/ter/qui/sex | prova no domingo.",
+            muted,
+            14f,
+            false,
+        ))
+        box.addView(label(
+            if (active) "Preset ativo. Reaplicar restaura o desenho oficial do ciclo." else
+                "Seu plano atual so sera substituido depois da confirmacao.",
+            if (active) green else amber,
+            13f,
+            active,
+        ))
+        val apply = actionButton("Aplicar plano 5 km - 16/08/2026", if (active) surface2 else green, if (active) green else bg)
+        apply.setOnClickListener { showApplyFiveKmPlanConfirmation() }
+        box.addView(buttonParams(apply))
+        return box
+    }
+
+    private fun showApplyFiveKmPlanConfirmation() {
+        val hasCustomPlan = prefs.contains("custom_workout_plans") || prefs.contains("custom_running_plan")
+        val message = buildString {
+            append("O plano de musculacao e o planejamento de corrida serao substituidos pelo ciclo de 27/07 a 16/08/2026.")
+            if (hasCustomPlan) append("\n\nAs personalizacoes atuais do plano serao trocadas.")
+            append("\n\nHistorico, series, corridas, favoritos, equipamentos, metas e backups nao serao apagados.")
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Aplicar plano de 5 km?")
+            .setMessage(message)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Aplicar") { _, _ -> applyFiveKmPlanPreset() }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun applyFiveKmPlanPreset() {
+        val strengthPlans = Mo2FiveKmPlan.strengthPlans()
+        val runningWorkouts = Mo2FiveKmPlan.runningWorkouts()
+        val editor = prefs.edit()
+            .putString("custom_workout_plans", workoutPlansToJson(strengthPlans).toString())
+            .putString("custom_running_plan", runningPlanToJson(runningWorkouts, 0.0, 1.0).toString())
+            .putString("active_plan_preset", Mo2FiveKmPlan.PresetId)
+            .putString("running_plan_start_day", Mo2FiveKmPlan.StartDay)
+            .putString("running_plan_race_day", Mo2FiveKmPlan.RaceDay)
+            .putString("running_plan_cycle_id", Mo2FiveKmPlan.CycleId)
+            .putString("running_plan_cycle_name", Mo2FiveKmPlan.CycleName)
+            .putString("running_plan_target_distance_km", Mo2FiveKmPlan.TargetDistanceKm.toString())
+            .putLong("running_goal_5k_seconds", Mo2FiveKmPlan.TargetSeconds)
+            .putString("running_speed_offset", "0.0")
+            .putString("running_distance_scale", "1.0")
+            .putInt("selected_plan", 0)
+            .putInt("selected_exercise", 0)
+            .putInt("editor_plan", 0)
+            .putInt("editor_exercise", 0)
+            .putInt("editor_running_week", 1)
+            .putString("selected_run_id", runningWorkouts.first().id)
+            .putString("editor_running_workout_id", runningWorkouts.first().id)
+            .putInt("editor_running_stage", 0)
+            .remove("running_schedule_overrides")
+            .remove("strength_session_started_at_ms")
+            .remove("strength_session_identity")
+            .remove("rest_timer_end_at")
+            .remove("rest_timer_duration_secs")
+            .remove("rest_timer_exercise")
+            .remove("rest_timer_notified")
+        clearActiveRunState(editor)
+        if (!editor.commit()) {
+            Toast.makeText(this, "Nao foi possivel aplicar o plano neste aparelho.", Toast.LENGTH_LONG).show()
+            return
+        }
+        selectedPlanIndex = 0
+        selectedExerciseIndex = 0
+        selectedRunId = runningWorkouts.first().id
+        Toast.makeText(this, "Plano de 5 km aplicado sem apagar o historico.", Toast.LENGTH_LONG).show()
+        render()
     }
 
     private fun planEditorSelector(): View {
@@ -3308,8 +3578,20 @@ class MainActivity : Activity() {
             row.orientation = LinearLayout.VERTICAL
             row.setPadding(dp(14), dp(12), dp(14), dp(12))
             row.background = rounded(if (active) surface3 else surface, dp(Mo2Radius.Md), if (active) Mo2Colors.Running else border)
-            row.addView(label(weekdayNames()[workout.dayIndex - 1] + " | " + workout.title, white, 16f, true))
-            row.addView(label(workout.stages.size.toString() + " etapas | " + formatKm(totalRunDistance(workout)), muted, 13f, false))
+            row.addView(label(
+                weekdayNames()[workout.dayIndex - 1] + " | " + workout.title +
+                    (if (workout.isRace) " | PROVA" else ""),
+                if (workout.isRace) green else white,
+                16f,
+                true,
+            ))
+            row.addView(label(
+                formatDayForDisplay(scheduledDayFor(workout)) + " | " + workout.stages.size + " etapas | " +
+                    formatKm(totalRunDistance(workout)),
+                muted,
+                13f,
+                false,
+            ))
             row.setOnClickListener {
                 prefs.edit()
                     .putString("editor_running_workout_id", workout.id)
@@ -3373,7 +3655,8 @@ class MainActivity : Activity() {
         selectedWorkout.stages.forEachIndexed { index, stage ->
             val active = index == selectedStageIndex
             val stageButton = actionButton(
-                (index + 1).toString() + ". " + stage.title + " | " + formatKm(stage.distanceKm) + " | " + formatSpeed(stage.speedKmh),
+                (index + 1).toString() + ". " + stage.title + " | " + formatKm(stage.distanceKm) +
+                    " | " + formatSpeed(stage.speedKmh) + " | " + formatPaceForSpeed(stage.speedKmh),
                 if (active) surface3 else surface,
                 if (active) Mo2Colors.Running else white,
             )
@@ -3443,6 +3726,8 @@ class MainActivity : Activity() {
             focus = "Objetivo da sessao",
             description = "Edite o dia e as etapas antes de iniciar.",
             stages = listOf(RunningStage("Etapa 1", 1.0, 7.0, "Ritmo confortavel.")),
+            scheduledDate = scheduledDateForWeekAndDay(week, 1),
+            cycleId = prefs.getString("running_plan_cycle_id", "").orEmpty(),
         )
         saveRunningPlan(runningPlan + workout)
         prefs.edit()
@@ -3474,6 +3759,7 @@ class MainActivity : Activity() {
             title = titleRaw.trim(),
             focus = focusRaw.trim().ifBlank { "Treino de corrida" },
             description = descriptionRaw.trim(),
+            scheduledDate = scheduledDateForWeekAndDay(week, dayIndex),
         )
         replaceRunningPlanWorkout(updatedWorkout)
         clearRunningScheduleOverrideSilently(workout.id)
@@ -3583,25 +3869,32 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Volta ao plano A/B/C e ao ciclo original de corrida. O historico nao e apagado.", muted, 14f, false))
+        box.addView(label("Volta ao preset da prova de 5 km. O historico nao e apagado.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
-            prefs.edit()
+            val editor = prefs.edit()
                 .remove("custom_workout_plans")
                 .remove("custom_running_plan")
-                .remove("running_speed_offset")
-                .remove("running_distance_scale")
                 .remove("running_schedule_overrides")
                 .remove("editor_running_workout_id")
                 .remove("editor_running_week")
                 .remove("editor_running_stage")
-                .putString("running_plan_start_day", dayKey())
-                .putInt("editor_plan", todayPlanIndex())
+                .putString("active_plan_preset", Mo2FiveKmPlan.PresetId)
+                .putString("running_plan_start_day", Mo2FiveKmPlan.StartDay)
+                .putString("running_plan_race_day", Mo2FiveKmPlan.RaceDay)
+                .putString("running_plan_cycle_id", Mo2FiveKmPlan.CycleId)
+                .putString("running_plan_cycle_name", Mo2FiveKmPlan.CycleName)
+                .putString("running_plan_target_distance_km", Mo2FiveKmPlan.TargetDistanceKm.toString())
+                .putLong("running_goal_5k_seconds", Mo2FiveKmPlan.TargetSeconds)
+                .putString("running_speed_offset", "0.0")
+                .putString("running_distance_scale", "1.0")
+                .putInt("editor_plan", 0)
                 .putInt("editor_exercise", 0)
-                .putInt("selected_plan", todayPlanIndex())
+                .putInt("selected_plan", 0)
                 .putInt("selected_exercise", 0)
-                .apply()
-            clearActiveRun()
+                .putString("selected_run_id", Mo2FiveKmPlan.runningWorkouts().first().id)
+            clearActiveRunState(editor)
+            editor.apply()
             Toast.makeText(this, "Plano padrao restaurado.", Toast.LENGTH_SHORT).show()
             render()
         }
@@ -4564,10 +4857,19 @@ class MainActivity : Activity() {
         top.gravity = Gravity.CENTER_VERTICAL
         val titleBox = LinearLayout(this)
         titleBox.orientation = LinearLayout.VERTICAL
-        titleBox.addView(label(item.optString("workout_title", "Corrida"), white, 19f, true))
-        titleBox.addView(label(item.optString("day") + " | " + item.optString("time"), muted, 12f, false))
+        val isRace = item.optBoolean("is_race", false)
+        titleBox.addView(label(item.optString("workout_title", "Corrida"), if (isRace) green else white, 19f, true))
+        val source = item.optString("source").ifBlank { if (item.optBoolean("manual", false)) "manual" else "app" }
+        val planWeek = item.optInt("plan_week", 0)
+        titleBox.addView(label(
+            item.optString("day") + " | " + item.optString("time") +
+                (if (planWeek > 0) " | semana $planWeek" else "") + " | " + source,
+            muted,
+            12f,
+            false,
+        ))
         top.addView(titleBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        top.addView(historyTypeBadge("CORRIDA", Mo2Colors.Running))
+        top.addView(historyTypeBadge(if (isRace) "PROVA" else "CORRIDA", if (isRace) green else Mo2Colors.Running))
         box.addView(top)
 
         val paceSeconds = historyRunPaceSeconds(item)
@@ -4631,7 +4933,8 @@ class MainActivity : Activity() {
         val speed = stage.optDouble("speed")
         val durationSeconds = if (distance > 0.0 && speed > 0.0) ((distance / speed) * 3600.0).roundToInt().toLong() else 0L
         row.addView(label(
-            formatKm(distance) + " | " + formatSpeed(speed) + if (durationSeconds > 0L) " | " + formatDuration(durationSeconds) else "",
+            formatKm(distance) + " | " + formatSpeed(speed) + " | " + formatPaceForSpeed(speed) +
+                if (durationSeconds > 0L) " | " + formatDuration(durationSeconds) else "",
             Mo2Colors.Running,
             14f,
             true,
@@ -4640,7 +4943,12 @@ class MainActivity : Activity() {
         if (note.isNotBlank()) row.addView(label(note, muted, 12f, false))
         val plannedSpeed = stage.optDouble("planned_speed", speed)
         if (plannedSpeed > 0.0 && kotlin.math.abs(plannedSpeed - speed) >= 0.05) {
-            row.addView(label("Planejado: " + formatSpeed(plannedSpeed), muted, 12f, false))
+            row.addView(label(
+                "Planejado: " + formatSpeed(plannedSpeed) + " | " + formatPaceForSpeed(plannedSpeed),
+                muted,
+                12f,
+                false,
+            ))
         }
         val edit = actionButton("Editar etapa", surface, Mo2Colors.Running)
         edit.setOnClickListener { showEditRunStageDialog(run, index) }
@@ -6911,6 +7219,7 @@ class MainActivity : Activity() {
         val key = normalized(name)
         val manual = mapOf(
             normalized("Supino reto ou maquina peitoral") to listOf("Supino reto na maquina", "Supino reto com barra", "Supino reto com halteres", "Chest press horizontal"),
+            normalized("Supino reto") to listOf("Supino reto com barra", "Supino reto com halteres", "Supino reto na maquina", "Chest press horizontal"),
             normalized("Supino maquina") to listOf("Supino reto na maquina", "Chest press horizontal", "Supino reto com barra"),
             normalized("Supino inclinado com halteres") to listOf("Supino inclinado com halteres", "Supino inclinado com barra", "Supino inclinado na maquina"),
             normalized("Desenvolvimento de ombros") to listOf("Desenvolvimento na maquina", "Desenvolvimento com halteres", "Desenvolvimento militar com barra"),
@@ -6927,12 +7236,14 @@ class MainActivity : Activity() {
             normalized("Leg press") to listOf("Leg press 45", "Leg press horizontal", "Leg press vertical"),
             normalized("Leg press leve") to listOf("Leg press 45", "Leg press horizontal", "Leg press vertical"),
             normalized("Agachamento livre ou guiado") to listOf("Agachamento livre com barra", "Agachamento no Smith", "Agachamento hack"),
+            normalized("Agachamento livre") to listOf("Agachamento livre com barra", "Agachamento frontal", "Agachamento goblet"),
             normalized("Agachamento guiado") to listOf("Agachamento no Smith"),
             normalized("Agachamento no Smith") to listOf("Agachamento no Smith"),
             normalized("Cadeira extensora") to listOf("Cadeira extensora bilateral", "Cadeira extensora com pausa", "Cadeira extensora unilateral"),
             normalized("Mesa flexora") to listOf("Mesa flexora", "Cadeira flexora", "Flexora unilateral"),
             normalized("Stiff") to listOf("Stiff com barra", "Stiff com halteres", "Levantamento terra romeno"),
             normalized("Panturrilha") to listOf("Panturrilha em pe na maquina", "Panturrilha no leg press", "Panturrilha sentada na maquina"),
+            normalized("Abdominal na polia") to listOf("Abdominal crunch na polia", "Abdominal crunch na maquina", "Abdominal crunch no solo"),
             normalized("Abdominal ou prancha") to listOf("Abdominal crunch no solo", "Prancha frontal", "Abdominal remador"),
             normalized("Mobilidade final") to listOf("Bird dog", "Dead bug", "Pallof press"),
         )
@@ -7091,7 +7402,9 @@ class MainActivity : Activity() {
         planning.addView(label("PLANEJAMENTO", green, 13f, true))
         planning.addView(label("Preferencias de treino", white, 22f, true))
         planning.addView(label(
-            "Plano base " + trainingPlanVersion + " | corrida semana " + currentRunningPlanWeek() + " de " + runningPlanWeekCount(),
+            "Plano base " + trainingPlanVersion + " | " +
+                (if (isFiveKmCycleCompleted()) "corrida: ciclo concluido" else
+                    "corrida semana " + currentRunningPlanWeek() + " de " + runningPlanWeekCount()),
             muted,
             14f,
             false,
@@ -7339,6 +7652,7 @@ class MainActivity : Activity() {
     private fun exerciseList(): View {
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
+        val canReorder = !isCurrentStrengthVariantActive()
         currentPlan().exercises.forEachIndexed { index, exercise ->
             val active = selectedExerciseIndex == index
             val sets = plannedSetsForExercise(index)
@@ -7399,37 +7713,41 @@ class MainActivity : Activity() {
             statusLabel.ellipsize = TextUtils.TruncateAt.END
             title.addView(statusLabel)
             item.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            item.addView(Mo2DragHandleView(this), LinearLayout.LayoutParams(dp(34), dp(42)))
 
-            attachExerciseDragGesture(item, index)
-            item.setOnDragListener { view, event ->
-                when (event.action) {
-                    DragEvent.ACTION_DRAG_STARTED -> event.localState is Int
-                    DragEvent.ACTION_DRAG_ENTERED -> {
-                        view.scaleX = 1.02f
-                        view.scaleY = 1.02f
-                        view.background = rounded(itemColor, dp(Mo2Radius.Md), green)
-                        true
+            if (canReorder) {
+                item.addView(Mo2DragHandleView(this), LinearLayout.LayoutParams(dp(34), dp(42)))
+                attachExerciseDragGesture(item, index)
+                item.setOnDragListener { view, event ->
+                    when (event.action) {
+                        DragEvent.ACTION_DRAG_STARTED -> event.localState is Int
+                        DragEvent.ACTION_DRAG_ENTERED -> {
+                            view.scaleX = 1.02f
+                            view.scaleY = 1.02f
+                            view.background = rounded(itemColor, dp(Mo2Radius.Md), green)
+                            true
+                        }
+                        DragEvent.ACTION_DRAG_EXITED -> {
+                            view.scaleX = 1f
+                            view.scaleY = 1f
+                            view.background = rounded(itemColor, dp(Mo2Radius.Md), itemBorder)
+                            true
+                        }
+                        DragEvent.ACTION_DROP -> {
+                            val fromIndex = event.localState as? Int ?: return@setOnDragListener false
+                            if (fromIndex != index) reorderCurrentPlanExercise(fromIndex, index)
+                            true
+                        }
+                        DragEvent.ACTION_DRAG_ENDED -> {
+                            view.scaleX = 1f
+                            view.scaleY = 1f
+                            view.background = rounded(itemColor, dp(Mo2Radius.Md), itemBorder)
+                            true
+                        }
+                        else -> true
                     }
-                    DragEvent.ACTION_DRAG_EXITED -> {
-                        view.scaleX = 1f
-                        view.scaleY = 1f
-                        view.background = rounded(itemColor, dp(Mo2Radius.Md), itemBorder)
-                        true
-                    }
-                    DragEvent.ACTION_DROP -> {
-                        val fromIndex = event.localState as? Int ?: return@setOnDragListener false
-                        if (fromIndex != index) reorderCurrentPlanExercise(fromIndex, index)
-                        true
-                    }
-                    DragEvent.ACTION_DRAG_ENDED -> {
-                        view.scaleX = 1f
-                        view.scaleY = 1f
-                        view.background = rounded(itemColor, dp(Mo2Radius.Md), itemBorder)
-                        true
-                    }
-                    else -> true
                 }
+            } else {
+                item.addView(View(this), LinearLayout.LayoutParams(dp(34), dp(42)))
             }
             box.addView(item)
         }
@@ -7843,7 +8161,11 @@ class MainActivity : Activity() {
     }
 
     private fun plannedSetKey(): String {
-        return plannedSetKey(dayKey(), currentPlan().id, selectedExerciseIndex)
+        return plannedSetKey(
+            dayKey(),
+            currentPlan().id,
+            persistedExerciseIndex(currentPlan(), selectedExerciseIndex),
+        )
     }
 
     private fun plannedSetKey(day: String, planId: String, exerciseIndex: Int): String {
@@ -7858,7 +8180,7 @@ class MainActivity : Activity() {
         val plan = currentPlan()
         val safeIndex = exerciseIndex.coerceIn(plan.exercises.indices)
         val exercise = plan.exercises[safeIndex]
-        val key = plannedSetKey(dayKey(), plan.id, safeIndex)
+        val key = plannedSetKey(dayKey(), plan.id, persistedExerciseIndex(plan, safeIndex))
         val stored = safeArray(key)
         if (stored.length() > 0) return stored
 
@@ -7882,7 +8204,11 @@ class MainActivity : Activity() {
     }
 
     private fun savePlannedSetsForExercise(exerciseIndex: Int, sets: JSONArray) {
-        prefs.edit().putString(plannedSetKey(dayKey(), currentPlan().id, exerciseIndex), sets.toString()).apply()
+        val plan = currentPlan()
+        prefs.edit().putString(
+            plannedSetKey(dayKey(), plan.id, persistedExerciseIndex(plan, exerciseIndex)),
+            sets.toString(),
+        ).apply()
     }
 
     private fun completePlannedSet(index: Int, loadRaw: String, repsRaw: String) {
@@ -8026,6 +8352,7 @@ class MainActivity : Activity() {
     }
 
     private fun reorderCurrentPlanExercise(fromIndex: Int, toIndex: Int) {
+        if (isCurrentStrengthVariantActive()) return
         val plan = currentPlan()
         if (fromIndex !in plan.exercises.indices || toIndex !in plan.exercises.indices || fromIndex == toIndex) return
 
@@ -8094,7 +8421,7 @@ class MainActivity : Activity() {
         val skipped = mutableListOf<String>()
         var totalPlannedSets = 0
         plan.exercises.forEachIndexed { exerciseIndex, exercise ->
-            val stored = safeArray(plannedSetKey(day, plan.id, exerciseIndex))
+            val stored = safeArray(plannedSetKey(day, plan.id, persistedExerciseIndex(plan, exerciseIndex)))
             val plannedCount = if (stored.length() > 0) stored.length() else defaultSetCountFor(exercise.target)
             val checkedCount = countDonePlannedSets(stored)
             val loggedCount = planSetCounts[exercise.name] ?: 0
@@ -9095,7 +9422,8 @@ class MainActivity : Activity() {
         val plan = plans[planIndex]
         val exercises = plan.exercises.toMutableList()
         val current = currentExercise()
-        exercises[selectedExerciseIndex] = current.copy(
+        val persistedIndex = persistedExerciseIndex(currentPlan(), selectedExerciseIndex)
+        exercises[persistedIndex] = current.copy(
             name = recommended.name,
             notes = "Substituido por recomendado para " + recommended.muscle + ". " + current.notes,
         )
@@ -9625,7 +9953,7 @@ class MainActivity : Activity() {
         completedStagesOverride: Int? = null,
     ): JSONObject? {
         if (isRunWorkoutCompleted(workout)) {
-            Toast.makeText(this, "Este treino ja esta concluido nesta semana.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Este treino ja esta concluido neste ciclo.", Toast.LENGTH_SHORT).show()
             return null
         }
         val distance = (distanceOverride ?: totalRunDistance(workout)).coerceAtLeast(0.0)
@@ -9639,8 +9967,13 @@ class MainActivity : Activity() {
             .put("week", weekKey())
             .put("time", timeKey())
             .put("run_workout_id", workout.id)
+            .put("cycle_id", workout.cycleId)
             .put("plan_week", workout.week)
+            .put("scheduled_day", scheduledDayFor(workout))
             .put("workout_title", workout.dayName + " - " + workout.title)
+            .put("is_race", workout.isRace)
+            .put("race_day", if (workout.isRace) scheduledDayFor(workout) else "")
+            .put("target_distance_km", totalRunDistance(workout))
             .put("distance", roundKm(distance))
             .put("speed", roundSpeed(avgSpeed))
             .put("duration", formatDuration(seconds))
@@ -9650,10 +9983,24 @@ class MainActivity : Activity() {
             .put("total_stages", workout.stages.size)
             .put("stages", runStageSnapshot(workout, !manual))
             .put("manual", manual)
+            .put("source", if (manual) "manual" else "guided")
             .put("notes", if (manual) "Marcado como concluido sem iniciar pelo app." else "Treino guiado pelo app.")
         val logs = runLogs()
         logs.put(log)
-        prefs.edit().putString("run_logs", logs.toString()).apply()
+        val nextRunId = if (hasFiveKmCycle()) {
+            Mo2FiveKmPlan.nextWorkout(
+                runningPlan,
+                dayKey(),
+                completedRunWorkoutIds() + workout.id,
+            )?.id ?: workout.id
+        } else {
+            workout.id
+        }
+        selectedRunId = nextRunId
+        prefs.edit()
+            .putString("run_logs", logs.toString())
+            .putString("selected_run_id", nextRunId)
+            .apply()
         Toast.makeText(this, if (manual) "Treino marcado como concluido." else "Corrida salva localmente.", Toast.LENGTH_SHORT).show()
         if (rerender) render()
         return log
@@ -9939,7 +10286,11 @@ class MainActivity : Activity() {
             .put("distance", distance)
             .put("speed", speed)
             .put("duration", durationMinutes.toString() + " min")
+            .put("duration_seconds", durationMinutes * 60L)
+            .put("pace_seconds_per_km", if (distance <= 0.0) 0L else ((durationMinutes * 60.0) / distance).roundToInt().toLong())
             .put("stages", stages)
+            .put("manual", true)
+            .put("source", "manual")
             .put("notes", notes.trim())
         val logs = runLogs()
         logs.put(log)
@@ -10105,6 +10456,7 @@ class MainActivity : Activity() {
     private fun applyBackupPayload(payload: JSONObject, createSafetySnapshot: Boolean) {
         val safetySnapshot = if (createSafetySnapshot) backupPayload().toString() else null
         val editor = prefs.edit()
+        if (!createSafetySnapshot) editor.clear()
         val preferences = payload.optJSONObject("preferences")
         val preferenceTypes = payload.optJSONObject("preference_types")
         if (preferences != null) restorePreferences(editor, preferences, preferenceTypes)
@@ -10349,19 +10701,19 @@ class MainActivity : Activity() {
         val week = weekKey()
         for (i in 0 until logs.length()) {
             val item = logs.getJSONObject(i)
-            val volume = item.optDouble("load") * item.optInt("reps")
+            val load = Mo2ProgressEngine.finiteOrZero(item.optDouble("load", 0.0))
+            val volume = Mo2ProgressEngine.strengthSetVolume(load, item.optInt("reps", 0))
             totalVolume += volume
             if (item.optString("day") == today) todayVolume += volume
             if (item.optString("week") == week || weekKeyForDay(item.optString("day")) == week) {
                 weekVolume += volume
                 weekSets += 1
             }
-            val rpe = item.optDouble("rpe", -1.0)
+            val rpe = item.optDouble("rpe", -1.0).takeIf { it.isFinite() } ?: -1.0
             if (rpe >= 0) {
                 rpeSum += rpe
                 rpeCount += 1
             }
-            val load = item.optDouble("load")
             if (load > bestLoad) {
                 bestLoad = load
                 bestExercise = item.optString("exercise")
@@ -10654,89 +11006,7 @@ class MainActivity : Activity() {
     }
 
     private fun buildDefaultRunningPlan(): List<RunningWorkout> {
-        val plan = mutableListOf<RunningWorkout>()
-        for (week in 1..6) plan.addAll(buildRunningWeek(week))
-        return plan
-    }
-
-    private fun buildRunningWeek(week: Int): List<RunningWorkout> {
-        val longDistance = when (week) {
-            1 -> 4.0
-            2 -> 4.5
-            3 -> 5.0
-            4 -> 5.5
-            5 -> 5.8
-            else -> 4.2
-        }
-        val tempoDistance = when (week) {
-            1, 2 -> 1.8
-            3, 4 -> 2.2
-            5 -> 2.6
-            else -> 1.5
-        }
-        val raw = listOf(
-            RunningWorkout(
-                "w" + week + "-mon",
-                week,
-                "Segunda",
-                1,
-                if (week <= 2) "Tiros 400 m" else if (week <= 4) "Tiros 600 m" else "Tiros longos",
-                "Velocidade e tolerancia a ritmo forte",
-                "Sem musculacao neste dia. A corrida e o treino principal da noite.",
-                intervalStages(week),
-            ),
-            RunningWorkout(
-                "w" + week + "-tue",
-                week,
-                "Terca",
-                2,
-                "Leve pos Treino A",
-                "Soltar depois de peito, ombro e triceps",
-                "Faca depois da musculacao, mantendo conversa facil e sem buscar recorde.",
-                listOf(
-                    RunningStage("Leve continuo", if (week <= 2) 2.4 else if (week <= 4) 2.8 else 3.0, 7.2, "Respiracao controlada."),
-                ),
-            ),
-            RunningWorkout(
-                "w" + week + "-thu",
-                week,
-                "Quinta",
-                4,
-                "Regenerativo pos pernas",
-                "Baixo impacto depois do Treino B",
-                "Use como circulacao e tecnica. Se a perna pesar, reduza velocidade.",
-                listOf(
-                    RunningStage("Regenerativo", if (week <= 3) 1.8 else 2.2, 6.8, "Sem forcar apos pernas."),
-                ),
-            ),
-            RunningWorkout(
-                "w" + week + "-sat",
-                week,
-                "Sabado",
-                6,
-                "Ritmo controlado",
-                "Aproximar do ritmo de prova",
-                "Depois do Treino C, faca aquecimento curto e um bloco firme sem sprintar.",
-                listOf(
-                    RunningStage("Aquecimento", 0.8, 7.0, "Leve e progressivo."),
-                    RunningStage("Ritmo", tempoDistance, if (week <= 2) 8.6 else if (week <= 4) 9.0 else 9.3, "RPE 7, firme e sustentavel."),
-                    RunningStage("Soltar", 0.6, 6.8, "Baixe a frequencia cardiaca."),
-                ),
-            ),
-            RunningWorkout(
-                "w" + week + "-sun",
-                week,
-                "Domingo",
-                7,
-                "Longo leve",
-                "Construir base aerobica",
-                "Corrida facil. O objetivo e acumular tempo sem transformar em prova.",
-                listOf(
-                    RunningStage("Longo leve", longDistance, 7.0, "Confortavel do inicio ao fim."),
-                ),
-            ),
-        )
-        return raw
+        return Mo2FiveKmPlan.runningWorkouts()
     }
 
     private fun personalizedRunningStage(stage: RunningStage): RunningStage {
@@ -10780,6 +11050,9 @@ class MainActivity : Activity() {
                     focus = item.optString("focus").ifBlank { "Treino de corrida" },
                     description = item.optString("description"),
                     stages = stages.ifEmpty { listOf(RunningStage("Etapa", 1.0, 7.0, "")) },
+                    scheduledDate = item.optString("scheduledDate"),
+                    cycleId = item.optString("cycleId"),
+                    isRace = item.optBoolean("isRace", false),
                 ))
             }
             workouts.ifEmpty { null }
@@ -10793,6 +11066,17 @@ class MainActivity : Activity() {
         val speedOffset = prefs.getString("running_speed_offset", "0.0")?.toDoubleOrNull() ?: 0.0
         val distanceScale = (prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0)
             .coerceIn(0.60, 1.40)
+        prefs.edit().putString(
+            "custom_running_plan",
+            runningPlanToJson(effectivePlan, speedOffset, distanceScale).toString(),
+        ).apply()
+    }
+
+    private fun runningPlanToJson(
+        effectivePlan: List<RunningWorkout>,
+        speedOffset: Double,
+        distanceScale: Double,
+    ): JSONArray {
         val array = JSONArray()
         effectivePlan.sortedWith(compareBy<RunningWorkout> { it.week }.thenBy { it.dayIndex }).forEach { workout ->
             val stages = JSONArray()
@@ -10810,46 +11094,12 @@ class MainActivity : Activity() {
                 .put("title", workout.title)
                 .put("focus", workout.focus)
                 .put("description", workout.description)
+                .put("scheduledDate", workout.scheduledDate)
+                .put("cycleId", workout.cycleId)
+                .put("isRace", workout.isRace)
                 .put("stages", stages))
         }
-        prefs.edit().putString("custom_running_plan", array.toString()).apply()
-    }
-
-    private fun intervalStages(week: Int): List<RunningStage> {
-        val stages = mutableListOf<RunningStage>()
-        stages.add(RunningStage("Aquecimento", 1.0, 7.0, "Comece facil."))
-        val repeats = when (week) {
-            1 -> 6
-            2 -> 7
-            3, 4 -> 5
-            5 -> 4
-            else -> 3
-        }
-        val hardDistance = when (week) {
-            1, 2 -> 0.4
-            3, 4 -> 0.6
-            5 -> 0.8
-            else -> 1.0
-        }
-        val recoveryDistance = when (week) {
-            1, 2 -> 0.2
-            3, 4 -> 0.3
-            else -> 0.35
-        }
-        val hardSpeed = when (week) {
-            1 -> 9.6
-            2 -> 9.8
-            3 -> 10.0
-            4 -> 10.2
-            5 -> 10.3
-            else -> 9.8
-        }
-        for (index in 1..repeats) {
-            stages.add(RunningStage("Tiro " + index, hardDistance, hardSpeed, "Forte, sem perder tecnica."))
-            if (index < repeats) stages.add(RunningStage("Recuperacao " + index, recoveryDistance, 6.6, "Caminhe ou trote leve."))
-        }
-        stages.add(RunningStage("Soltar", 0.8, 6.8, "Finalize leve."))
-        return stages
+        return array
     }
 
     private fun runningFiveKmForecast(): RunningForecast {
@@ -11062,17 +11312,23 @@ class MainActivity : Activity() {
         val parts = workout.stages
             .distinctBy { stage -> stage.title + stage.speedKmh.toString() }
             .take(5)
-            .map { stage -> stage.title + " " + formatSpeed(stage.speedKmh) }
+            .map { stage ->
+                stage.title + " " + formatSpeed(stage.speedKmh) + " (" + formatPaceForSpeed(stage.speedKmh) + ")"
+            }
         val suffix = if (workout.stages.size > 5) "..." else ""
         return (parts + suffix).filter { it.isNotBlank() }.joinToString(" | ")
     }
 
     private fun currentRunningWeekWorkouts(): List<RunningWorkout> {
+        if (isFiveKmCycleCompleted()) return emptyList()
         val week = currentRunningPlanWeek()
         return runningPlan.filter { it.week == week }.ifEmpty { runningPlan.take(5) }
     }
 
     private fun currentRunningPlanWeek(): Int {
+        if (hasFiveKmCycle()) {
+            return Mo2FiveKmPlan.cyclePosition(dayKey()).week ?: runningPlanWeekCount()
+        }
         val startKey = prefs.getString("running_plan_start_day", dayKey()) ?: dayKey()
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val start = try { parser.parse(startKey)?.time ?: System.currentTimeMillis() } catch (_: Exception) { System.currentTimeMillis() }
@@ -11084,9 +11340,13 @@ class MainActivity : Activity() {
     private fun runningPlanWeekCount(): Int = runningPlan.maxOfOrNull { it.week }?.coerceAtLeast(1) ?: 1
 
     private fun todayRunningWorkout(): RunningWorkout? {
+        if (isFiveKmCycleCompleted()) return null
         runningPlan.firstOrNull { workout ->
             !isRunWorkoutCompleted(workout) && scheduledDayFor(workout) == dayKey()
         }?.let { return it }
+        if (hasFiveKmCycle()) {
+            return Mo2FiveKmPlan.nextWorkout(runningPlan, dayKey(), completedRunWorkoutIds())
+        }
         val workouts = currentRunningWeekWorkouts()
         return workouts
             .filterNot { isRunWorkoutCompleted(it) }
@@ -11099,6 +11359,7 @@ class MainActivity : Activity() {
     private fun scheduledDayFor(workout: RunningWorkout): String {
         val override = safeObject("running_schedule_overrides").optString(workout.id)
         if (isValidDayKey(override)) return override
+        if (isValidDayKey(workout.scheduledDate)) return workout.scheduledDate
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         parser.isLenient = false
         val start = try {
@@ -11114,6 +11375,44 @@ class MainActivity : Activity() {
         calendar.add(Calendar.WEEK_OF_YEAR, workout.week - 1)
         calendar.add(Calendar.DAY_OF_YEAR, workout.dayIndex - 1)
         return parser.format(calendar.time)
+    }
+
+    private fun scheduledDateForWeekAndDay(week: Int, dayIndex: Int): String {
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        parser.isLenient = false
+        val start = try {
+            parser.parse(prefs.getString("running_plan_start_day", dayKey()).orEmpty()) ?: Date()
+        } catch (_: Exception) {
+            Date()
+        }
+        val calendar = Calendar.getInstance()
+        calendar.time = start
+        while (calendar.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+            calendar.add(Calendar.DAY_OF_YEAR, -1)
+        }
+        calendar.add(Calendar.WEEK_OF_YEAR, week.coerceAtLeast(1) - 1)
+        calendar.add(Calendar.DAY_OF_YEAR, dayIndex.coerceIn(1, 7) - 1)
+        return parser.format(calendar.time)
+    }
+
+    private fun hasFiveKmCycle(): Boolean {
+        return runningPlan.any { workout -> workout.cycleId == Mo2FiveKmPlan.CycleId }
+    }
+
+    private fun isFiveKmCycleCompleted(): Boolean {
+        return hasFiveKmCycle() &&
+            Mo2FiveKmPlan.cyclePosition(dayKey()).phase == Mo2FiveKmCyclePhase.COMPLETED
+    }
+
+    private fun completedRunWorkoutIds(): Set<String> {
+        val result = mutableSetOf<String>()
+        val logs = runLogs()
+        for (index in 0 until logs.length()) {
+            logs.getJSONObject(index).optString("run_workout_id")
+                .takeIf { it.isNotBlank() }
+                ?.let(result::add)
+        }
+        return result
     }
 
     private fun isValidDayKey(value: String): Boolean {
@@ -11159,7 +11458,8 @@ class MainActivity : Activity() {
 
     private fun stageCue(stage: RunningStage?): String {
         if (stage == null) return "-"
-        return stage.title + " - " + formatKm(stage.distanceKm) + " a " + formatSpeed(stage.speedKmh)
+        return stage.title + " - " + formatKm(stage.distanceKm) + " a " +
+            formatSpeed(stage.speedKmh) + " - " + formatPaceForSpeed(stage.speedKmh)
     }
 
     private fun speakableStageCue(stage: RunningStage): String {
@@ -11195,56 +11495,47 @@ class MainActivity : Activity() {
     private fun formatSpeed(value: Double): String = String.format(Locale("pt", "BR"), "%.1f km/h", value)
 
     private fun formatPaceForSpeed(speed: Double): String {
-        if (speed <= 0.0) return "- /km"
+        if (speed <= 0.0) return "-/km"
         return formatPaceSeconds((3600.0 / speed).roundToInt().toLong())
     }
 
     private fun formatPaceSeconds(secondsPerKm: Long): String {
-        if (secondsPerKm <= 0L) return "- /km"
+        if (secondsPerKm <= 0L) return "-/km"
         val minutes = secondsPerKm / 60L
         val seconds = secondsPerKm % 60L
-        return minutes.toString() + ":" + seconds.toString().padStart(2, '0') + " /km"
+        return minutes.toString() + ":" + seconds.toString().padStart(2, '0') + "/km"
     }
 
     private fun roundKm(value: Double): Double = (value * 100.0).roundToInt().toDouble() / 100.0
 
     private fun roundSpeed(value: Double): Double = (value * 10.0).roundToInt().toDouble() / 10.0
 
-    private fun currentPlan() = plans[selectedPlanIndex.coerceIn(plans.indices)]
+    private fun currentPlan(): WorkoutPlan {
+        val base = plans[selectedPlanIndex.coerceIn(plans.indices)]
+        return Mo2FiveKmPlan.effectiveStrengthPlan(base, dayKey(), readinessStatus())
+    }
+
+    private fun isCurrentStrengthVariantActive(): Boolean {
+        val effective = currentPlan()
+        val base = plans.firstOrNull { it.id == effective.id } ?: return false
+        return effective.exercises.map { normalized(it.name) } !=
+            base.exercises.map { normalized(it.name) }
+    }
+
+    private fun persistedExerciseIndex(effectivePlan: WorkoutPlan, effectiveIndex: Int): Int {
+        val safeIndex = effectiveIndex.coerceIn(effectivePlan.exercises.indices)
+        val exerciseName = effectivePlan.exercises[safeIndex].name
+        val basePlan = plans.firstOrNull { it.id == effectivePlan.id } ?: return safeIndex
+        return basePlan.exercises.indexOfFirst { exercise ->
+            normalized(exercise.name) == normalized(exerciseName)
+        }.takeIf { it >= 0 } ?: safeIndex
+    }
+
     private fun currentExercise() = currentPlan().exercises[selectedExerciseIndex.coerceIn(currentPlan().exercises.indices)]
 
     private fun buildWorkoutPlans(): List<WorkoutPlan> = customWorkoutPlans() ?: defaultWorkoutPlans()
 
-    private fun defaultWorkoutPlans(): List<WorkoutPlan> = listOf(
-        WorkoutPlan("a", "Treino A", "Terca - Peito/Ombro/Triceps + corrida leve", listOf(
-            ExercisePlan("Supino reto", "4 x 8-10", "90s", "Controle a descida e mantenha amplitude segura."),
-            ExercisePlan("Maquina peitoral", "3 x 10-12", "75s", "Mantenha as escapulas apoiadas e controle a volta."),
-            ExercisePlan("Supino inclinado com halteres", "3 x 10", "90s", "Suba carga quando fechar reps com tecnica limpa."),
-            ExercisePlan("Desenvolvimento de ombros", "3 x 8-10", "90s", "Evite compensar com lombar."),
-            ExercisePlan("Elevacao lateral", "3 x 12-15", "60s", "Cadencia limpa, sem embalo."),
-            ExercisePlan("Triceps corda", "3 x 10-12", "60s", "Trave cotovelos perto do corpo."),
-            ExercisePlan("Prancha", "3 x 45s", "45s", "Respiracao constante."),
-        ), dayIndex = 2, homeCardKey = Mo2WorkoutHomeCard.Push),
-        WorkoutPlan("b", "Treino B", "Quinta - Pernas/Core + corrida curta", listOf(
-            ExercisePlan("Leg press", "4 x 10", "120s", "Amplitude segura e constante. Depois faca so 10-15 min leve."),
-            ExercisePlan("Agachamento livre", "3 x 8", "120s", "Priorize tecnica e estabilidade antes de carga."),
-            ExercisePlan("Agachamento no Smith", "3 x 8-10", "90s", "Ajuste os pes e mantenha o tronco firme no trilho."),
-            ExercisePlan("Cadeira extensora", "3 x 12", "75s", "Segure um segundo no topo."),
-            ExercisePlan("Mesa flexora", "3 x 10-12", "75s", "Controle total na volta."),
-            ExercisePlan("Stiff", "3 x 10", "90s", "Quadril para tras, coluna neutra."),
-            ExercisePlan("Panturrilha", "4 x 12-15", "45s", "Pausa no alongamento."),
-            ExercisePlan("Abdominal", "3 x 12-15", "45s", "Expire durante a contracao e evite puxar o pescoco."),
-            ExercisePlan("Prancha", "3 x 45s", "45s", "Mantenha quadril, tronco e ombros alinhados."),
-        ), dayIndex = 4, homeCardKey = Mo2WorkoutHomeCard.Legs),
-        WorkoutPlan("c", "Treino C", "Sabado - Costas/Biceps + corrida ritmo", listOf(
-            ExercisePlan("Puxada frente", "4 x 8-10", "90s", "Puxe com cotovelos, nao com as maos."),
-            ExercisePlan("Remada baixa", "4 x 10", "90s", "Pausa curta na contracao."),
-            ExercisePlan("Remada unilateral", "3 x 10 cada", "75s", "Mantenha tronco firme."),
-            ExercisePlan("Face pull", "3 x 12-15", "60s", "Foco em deltoide posterior."),
-            ExercisePlan("Rosca direta", "3 x 8-10", "60s", "Controle na descida."),
-            ExercisePlan("Rosca martelo", "3 x 10-12", "60s", "Punho neutro."),
-        ), dayIndex = 6, homeCardKey = Mo2WorkoutHomeCard.Pull),
-    )
+    private fun defaultWorkoutPlans(): List<WorkoutPlan> = Mo2FiveKmPlan.strengthPlans()
 
     private fun todayPlanIndex(): Int {
         val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1

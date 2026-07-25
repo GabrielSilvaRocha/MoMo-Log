@@ -230,9 +230,17 @@ class Mo2WeeklyWorkoutCarouselView(
         while (textPaint.measureText(text) > maxWidth && textPaint.textSize > sp(17f)) {
             textPaint.textSize -= sp(0.5f)
         }
+        val fittedText = if (textPaint.measureText(text) <= maxWidth) {
+            text
+        } else {
+            val suffix = "..."
+            val availableWidth = (maxWidth - textPaint.measureText(suffix)).coerceAtLeast(0f)
+            val count = textPaint.breakText(text, true, availableWidth, null)
+            text.take(count).trimEnd() + suffix
+        }
         textPaint.color = Mo2Colors.TextPrimary
         textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText(text, x, baseline, textPaint)
+        canvas.drawText(fittedText, x, baseline, textPaint)
     }
 
     private fun drawText(

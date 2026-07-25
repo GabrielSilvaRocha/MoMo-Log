@@ -4,7 +4,7 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v12.4.7.
+- Android nativo pessoal: v12.4.8.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
@@ -663,3 +663,16 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Troca de exercicio e pesos disponiveis usam paineis inferiores rolaveis com acao principal fixa.
 - Resumo pos-treino adota a mesma hierarquia e continua distinguindo exercicios completos, parciais e pulados.
 - O app Android passa para versionCode 1247 / versionName 12.4.7.
+
+## v12.4.8 - Plano hibrido para a prova de 5 km
+
+- Integra o ciclo de 27/07/2026 a 16/08/2026 com tres semanas, datas explicitas e IDs exclusivos.
+- Musculacao passa para terca, quarta e sexta; quarta concentra pernas e core sem corrida.
+- Corrida usa segunda, terca, quinta e sexta, com domingo reservado somente para a prova.
+- Todas as etapas exibem distancia, velocidade, pace derivado, orientacao e proxima etapa.
+- A prova registra exatamente 5,00 km, sem incluir aquecimento no historico.
+- Semana da prova aplica deload temporario sem alterar o plano-base salvo.
+- A tela Plano oferece aplicacao confirmada do preset e preserva historico, favoritos, metas e backups.
+- Backups v1, v2 e legados continuam importaveis; dados incompletos nao quebram o resumo e o desfazer restaura a copia anterior integralmente.
+- Home mostra prova, dias restantes e proxima sessao; depois de 16/08 o ciclo fica concluido.
+- O app Android passa para versionCode 1248 / versionName 12.4.8.
