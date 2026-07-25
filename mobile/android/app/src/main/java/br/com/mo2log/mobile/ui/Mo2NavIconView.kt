@@ -21,6 +21,7 @@ class Mo2NavIconView(
     private val icon: Mo2NavIcon,
     tint: Int,
 ) : View(context) {
+    private val runningIcon = Mo2RunningIconPainter(context, tint)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = tint
         style = Paint.Style.STROKE
@@ -52,7 +53,7 @@ class Mo2NavIconView(
         when (icon) {
             Mo2NavIcon.Home -> drawHome(canvas)
             Mo2NavIcon.Strength -> drawStrength(canvas)
-            Mo2NavIcon.Running -> drawRunning(canvas)
+            Mo2NavIcon.Running -> runningIcon.draw(canvas, 0f, 0f, 24f)
             Mo2NavIcon.More -> drawMore(canvas)
         }
         canvas.restore()
@@ -85,24 +86,6 @@ class Mo2NavIconView(
         canvas.drawRoundRect(5f, 6.5f, 7.5f, 17.5f, 1f, 1f, paint)
         canvas.drawRoundRect(16.5f, 6.5f, 19f, 17.5f, 1f, 1f, paint)
         canvas.drawRoundRect(19f, 8f, 21.5f, 16f, 1f, 1f, paint)
-    }
-
-    private fun drawRunning(canvas: Canvas) {
-        canvas.drawCircle(14.5f, 4.5f, 2f, paint)
-        val body = Path().apply {
-            moveTo(13f, 7f)
-            lineTo(10f, 11.5f)
-            lineTo(13.5f, 14f)
-            lineTo(17.5f, 20.5f)
-            moveTo(10f, 11.5f)
-            lineTo(6f, 15.5f)
-            moveTo(11.5f, 9f)
-            lineTo(16f, 10.5f)
-            lineTo(19.5f, 8.5f)
-            moveTo(13.5f, 14f)
-            lineTo(9f, 20.5f)
-        }
-        canvas.drawPath(body, paint)
     }
 
     private fun drawMore(canvas: Canvas) {

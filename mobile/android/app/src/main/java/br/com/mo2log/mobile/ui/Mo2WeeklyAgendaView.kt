@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -95,7 +96,7 @@ class Mo2WeeklyAgendaView(
             context.mo2Dp(Mo2Spacing.Lg),
             context.mo2Dp(Mo2Spacing.Lg),
         )
-        background = Mo2Drawables.rounded(context, Mo2Colors.Surface, Mo2Radius.Lg, Mo2Colors.Border)
+        background = Mo2Drawables.rounded(context, Mo2Colors.Surface, Mo2Radius.Md, Mo2Colors.Border)
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
             setMargins(0, context.mo2Dp(Mo2Spacing.Sm), 0, context.mo2Dp(Mo2Spacing.Sm))
         }
@@ -103,12 +104,6 @@ class Mo2WeeklyAgendaView(
         addView(buildHeader())
         addView(buildProgressBar())
         addView(buildDaySelector())
-
-        val divider = View(context)
-        divider.setBackgroundColor(Mo2Colors.Border)
-        addView(divider, LayoutParams(LayoutParams.MATCH_PARENT, context.mo2Dp(1)).apply {
-            setMargins(0, context.mo2Dp(Mo2Spacing.Lg), 0, 0)
-        })
 
         detail.orientation = VERTICAL
         addView(detail, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
@@ -169,7 +164,7 @@ class Mo2WeeklyAgendaView(
         days.forEachIndexed { index, day ->
             val button = buildDayButton(day, index)
             dayButtons.add(button)
-            row.addView(button, LayoutParams(0, context.mo2Dp(72), 1f).apply {
+            row.addView(button, LayoutParams(0, context.mo2Dp(64), 1f).apply {
                 val gap = context.mo2Dp(2)
                 setMargins(if (index == 0) 0 else gap, 0, if (index == days.lastIndex) 0 else gap, 0)
             })
@@ -183,7 +178,7 @@ class Mo2WeeklyAgendaView(
         button.gravity = Gravity.CENTER
         button.isClickable = true
         button.isFocusable = true
-        button.minimumHeight = context.mo2Dp(72)
+        button.minimumHeight = context.mo2Dp(64)
 
         val name = Mo2Components.label(context, day.shortName, Mo2Colors.TextSecondary, 10f, true)
         name.gravity = Gravity.CENTER
@@ -270,13 +265,22 @@ class Mo2WeeklyAgendaView(
         detail.addView(Mo2Components.label(context, day.meta, Mo2Colors.TextPrimary, Mo2Type.BodySmall, true).apply {
             setPadding(0, context.mo2Dp(Mo2Spacing.Sm), 0, 0)
         })
-        detail.addView(buildActionRow(day))
-
-        val fullPlan = Mo2Components.actionButton(context, "Planejamento completo", Mo2Colors.SurfaceAlt, Mo2Colors.Primary)
+        val fullPlan = Mo2Components.actionButton(context, "Planejamento completo", Mo2Colors.Primary, Mo2Colors.Background)
+        fullPlan.maxLines = 1
+        fullPlan.setAutoSizeTextTypeUniformWithConfiguration(12, 16, 1, TypedValue.COMPLEX_UNIT_SP)
         fullPlan.setOnClickListener { onOpenFullPlan() }
-        detail.addView(fullPlan, LayoutParams(LayoutParams.MATCH_PARENT, context.mo2Dp(48)).apply {
-            setMargins(0, context.mo2Dp(Mo2Spacing.Sm), 0, 0)
-        })
+        val actions = buildActionRow(day)
+        if (!day.hasStrength && !day.hasRunning) {
+            actions.addView(fullPlan, LayoutParams(0, context.mo2Dp(48), 1f).apply {
+                setMargins(context.mo2Dp(Mo2Spacing.Sm), 0, 0, 0)
+            })
+            detail.addView(actions)
+        } else {
+            detail.addView(actions)
+            detail.addView(fullPlan, LayoutParams(LayoutParams.MATCH_PARENT, context.mo2Dp(48)).apply {
+                setMargins(0, context.mo2Dp(Mo2Spacing.Sm), 0, 0)
+            })
+        }
 
         if (animate && !reduceMotion) {
             detail.animate()
@@ -287,14 +291,14 @@ class Mo2WeeklyAgendaView(
         }
     }
 
-    private fun buildActionRow(day: Mo2WeeklyAgendaDay): View {
+    private fun buildActionRow(day: Mo2WeeklyAgendaDay): LinearLayout {
         val row = LinearLayout(context)
         row.orientation = HORIZONTAL
         row.gravity = Gravity.CENTER_VERTICAL
         row.setPadding(0, context.mo2Dp(Mo2Spacing.Lg), 0, 0)
 
         if (day.hasStrength) {
-            val strength = Mo2Components.actionButton(context, "Abrir treino", Mo2Colors.Primary, Mo2Colors.Background)
+            val strength = Mo2Components.actionButton(context, "Abrir treino", Mo2Colors.SurfaceAlt, Mo2Colors.Primary)
             strength.setOnClickListener { onOpenStrength(day) }
             row.addView(strength, LayoutParams(0, context.mo2Dp(48), 1f))
         }
@@ -302,8 +306,8 @@ class Mo2WeeklyAgendaView(
             val running = Mo2Components.actionButton(
                 context,
                 "Abrir corrida",
-                if (day.hasStrength) Mo2Colors.SurfaceAlt else Mo2Colors.Running,
-                if (day.hasStrength) Mo2Colors.Running else Mo2Colors.Background,
+                Mo2Colors.SurfaceAlt,
+                Mo2Colors.Running,
             )
             running.setOnClickListener { onOpenRunning(day) }
             row.addView(running, LayoutParams(0, context.mo2Dp(48), 1f).apply {
@@ -313,7 +317,7 @@ class Mo2WeeklyAgendaView(
         if (!day.hasStrength && !day.hasRunning) {
             val recovery = Mo2Components.actionButton(context, "Abrir coach", Mo2Colors.SurfaceAlt, Mo2Colors.Primary)
             recovery.setOnClickListener { onOpenRecovery(day) }
-            row.addView(recovery, LayoutParams(LayoutParams.MATCH_PARENT, context.mo2Dp(48)))
+            row.addView(recovery, LayoutParams(0, context.mo2Dp(48), 1f))
         }
         return row
     }
@@ -384,6 +388,7 @@ private class Mo2AgendaActivityIconView(
     private val hasStrength: Boolean,
     private val hasRunning: Boolean,
 ) : View(context) {
+    private val runningIcon = Mo2RunningIconPainter(context, Mo2Colors.Running)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -400,10 +405,10 @@ private class Mo2AgendaActivityIconView(
         when {
             hasStrength && hasRunning -> {
                 drawStrength(canvas, 4f, 16f, 22f, Mo2Colors.Primary)
-                drawRunning(canvas, 28f, 16f, 20f, Mo2Colors.Running)
+                drawRunning(canvas, 28f, 16f, 20f)
             }
             hasStrength -> drawStrength(canvas, 12f, 12f, 28f, Mo2Colors.Primary)
-            hasRunning -> drawRunning(canvas, 12f, 11f, 29f, Mo2Colors.Running)
+            hasRunning -> drawRunning(canvas, 12f, 11f, 29f)
             else -> drawRecovery(canvas)
         }
     }
@@ -426,32 +431,11 @@ private class Mo2AgendaActivityIconView(
         canvas.restore()
     }
 
-    private fun drawRunning(canvas: Canvas, leftDp: Float, topDp: Float, sizeDp: Float, color: Int) {
+    private fun drawRunning(canvas: Canvas, leftDp: Float, topDp: Float, sizeDp: Float) {
         val left = context.mo2Dp(leftDp.toInt()).toFloat()
         val top = context.mo2Dp(topDp.toInt()).toFloat()
         val size = context.mo2Dp(sizeDp.toInt()).toFloat()
-        val scale = size / 24f
-        canvas.save()
-        canvas.translate(left, top)
-        canvas.scale(scale, scale)
-        paint.color = color
-        paint.strokeWidth = 2.2f
-        canvas.drawCircle(14.5f, 4.5f, 2f, paint)
-        val body = Path().apply {
-            moveTo(13f, 7f)
-            lineTo(10f, 11.5f)
-            lineTo(13.5f, 14f)
-            lineTo(17.5f, 20.5f)
-            moveTo(10f, 11.5f)
-            lineTo(6f, 15.5f)
-            moveTo(11.5f, 9f)
-            lineTo(16f, 10.5f)
-            lineTo(19.5f, 8.5f)
-            moveTo(13.5f, 14f)
-            lineTo(9f, 20.5f)
-        }
-        canvas.drawPath(body, paint)
-        canvas.restore()
+        runningIcon.draw(canvas, left, top, size)
     }
 
     private fun drawRecovery(canvas: Canvas) {

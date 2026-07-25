@@ -51,6 +51,11 @@ app\build\outputs\apk\debug\app-debug.apk
 ```text
 app/src/main/java/br/com/mo2log/mobile/
 |-- MainActivity.kt
+|-- bluetooth/
+|   |-- AndroidBluetoothPlatform.kt
+|   |-- SportX20BatteryState.kt
+|   |-- SportX20Monitor.kt
+|   `-- fontes, permissoes, locator e persistencia
 |-- sync/HealthConnectSyncContract.kt
 `-- ui/
     |-- Mo2Components.kt
@@ -62,6 +67,20 @@ app/src/main/java/br/com/mo2log/mobile/
 ```
 
 `MainActivity.kt` preserva a arquitetura atual de Views programaticas. Os arquivos em `ui/` concentram tokens, estados, componentes e icones nativos reutilizaveis.
+
+## Soundcore Sport X20
+
+A infraestrutura Bluetooth identifica o Sport X20 entre dispositivos ja pareados, acompanha conexao e tenta uma unica leitura do Battery Service GATT padrao. Quando esse servico existe, o valor e tratado somente como bateria combinada; ele nunca e copiado para os lados ou para a caixa.
+
+No Android 12 ou superior, a consulta depende da permissao `BLUETOOTH_CONNECT`. O app nao abre o dialogo automaticamente e continua funcionando quando a permissao e recusada, o Bluetooth nao existe ou o fone nao esta pareado. Ainda nao ha card visual na Home nem protocolo proprietario.
+
+Detalhes tecnicos, privacidade, limitacoes e roteiro de teste fisico: [`docs/mobile/soundcore-sport-x20-battery.md`](../../docs/mobile/soundcore-sport-x20-battery.md).
+
+### Diagnostico em build debug
+
+No APK `debug`, abra `Mais` e toque em `Diagnostico Soundcore`. A tela separada permite atualizar uma unica leitura, limpar somente o log temporario e copiar um relatorio anonimizado. Ela enumera GATT em modo somente leitura e nao faz scan, escrita, pareamento, polling ou controle do fone.
+
+O manifesto da Activity fica em `app/src/debug`; builds `release` nao registram nem exibem essa ferramenta. O modelo para preencher os cenarios A-J esta em [`docs/mobile/soundcore-sport-x20-battery-discovery.md`](../../docs/mobile/soundcore-sport-x20-battery-discovery.md).
 
 ## Validacao
 
@@ -206,3 +225,81 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Musculacao e corrida possuem indicadores proprios e dias hibridos exibem estado parcial.
 - Acoes da agenda abrem diretamente o plano de musculacao, corrida ou coach correspondente.
 - Android usa versionCode 1231 e versionName 12.3.1.
+
+## v12.4.0
+
+- Home abre o carrossel no dia atual e alterna atividades hibridas no mesmo quadro a cada cinco segundos.
+- Borda verde identifica a atividade concluida exibida no carrossel.
+- Editor local permite criar, remover, editar e trocar os dias dos treinos de musculacao.
+- Plano de corrida permite editar sessoes, semana, dia, ordem e conteudo de cada etapa.
+- Catalogo permite personalizar titulo, descricao e links HTTPS de GIF ou frames por exercicio.
+- Voz da corrida usa foco de audio transitivo para reduzir temporariamente outras midias.
+- Android usa versionCode 1240 e versionName 12.4.0.
+
+## v12.4.1
+
+- Home mostra uma saudacao pessoal baseada no horario local, com emoji de manha, tarde ou noite.
+- A tela inicial passa a concentrar somente carrossel semanal, Dashboard e Agenda da semana.
+- Blocos redundantes deixam de ser renderizados sem apagar historico, configuracoes ou recursos das outras abas.
+- Carrossel fica mais compacto; Dashboard e Agenda ganham grid, hierarquia e acoes refinadas.
+- Navegacao inferior usa indicador verde leve e respeita os insets do sistema.
+- Android usa versionCode 1241 e versionName 12.4.1.
+
+## v12.4.2
+
+- O carrossel da Home passa a ser montado diretamente dos planos atuais de musculacao e corrida.
+- Dias vazios nao exibem descanso ou mobilidade inventados; a selecao inicial usa o proximo treino real ou o ultimo da semana.
+- Cada plano de musculacao possui um card da Home obrigatorio, editavel por um seletor visual e salvo no backup local.
+- Planos antigos recebem uma atribuicao estavel durante a migracao; novos planos ja nascem com um card.
+- Treinos de corrida usam automaticamente a identidade visual de corrida.
+- Android usa versionCode 1242 e versionName 12.4.2.
+
+## v12.4.3
+
+- A silhueta de corrida do Dashboard passa a ser o unico icone de corredor do aplicativo.
+- Navegacao inferior e cards de corrida da Agenda deixam de usar desenhos manuais alternativos.
+- O mesmo componente aplica escala e cor adequadas nos estados ativo, inativo, corrida isolada e treino hibrido.
+- Android usa versionCode 1243 e versionName 12.4.3.
+
+## v12.4.4
+
+- O ranking de substituicoes exige o mesmo grupo muscular e equivalencia automatica por movimento, regiao ou alternativa explicita.
+- Exercicios ja presentes no planejamento do dia sao excluidos antes do ranking, com preenchimento pelas proximas opcoes validas.
+- O catalogo permite definir ate 12 alternativas manuais e restaurar o ranking automatico.
+- `Agachamento guiado` e migrado para `Agachamento no Smith` sem alterar registros historicos.
+- O GIF do Agachamento no Smith fica em `assets/exercise_media` e e reproduzido localmente pelo mesmo componente de midia.
+- Android usa versionCode 1244 e versionName 12.4.4.
+
+## Roadmap futuro - Soundcore Sport X20
+
+- A fase seguinte depende de autorizacao para `BLUETOOTH_SCAN` em um diagnostico somente debug.
+- O objetivo e procurar um endpoint BLE separado do dispositivo CLASSIC observado, sem escrita ou comandos proprietarios.
+- A Home exibira somente campos de bateria confirmados; dados ausentes permanecerao como `Indisponivel`.
+
+## v12.4.5
+
+- A biblioteca de exercicios usa cabecalho, busca, filtros e acoes compactas proprias.
+- O GIF animado pode ser pausado e retomado; a origem tecnica permanece oculta quando a midia carrega corretamente.
+- Adicionar ao treino abre a escolha do plano e impede duplicatas no mesmo treino.
+- Registrar serie abre um formulario com repeticoes, carga, RIR e RPE.
+- Alternativas, favorito preferido, edicao manual, ocultacao e cache continuam disponiveis na nova hierarquia.
+- Android usa versionCode 1245 e versionName 12.4.5.
+
+## v12.4.6
+
+- A preparacao das trocas de exercicio roda em uma fila de fundo com indicador de carregamento cancelavel.
+- Cada solicitacao resolve o exercicio atual, as duplicatas do dia e o ranking apenas uma vez.
+- A mudanca de motivo no pop-up filtra as oito opcoes ja preparadas e responde sem nova consulta ao catalogo.
+- O cache de vinculos do treino reduz o custo dos renders seguintes e e limpo quando o catalogo muda.
+- A aplicacao da alternativa mantem a rolagem atual da aba Treino.
+- Android usa versionCode 1246 e versionName 12.4.6.
+
+## v12.4.7
+
+- Plano, sessao, exercicio atual e fila passam a formar uma hierarquia compacta sem progresso duplicado.
+- O componente de midia usa a proporcao intrinseca do GIF ou dos frames e nao fixa a altura do card.
+- Series deixam de repetir o estado pendente e continuam editaveis, desmarcaveis e removiveis por gesto.
+- Cronometro de descanso, orientacao tecnica expansivel e ajuste inteligente ficam no contexto do exercicio atual.
+- Troca de exercicio integra motivo, equipamento, alternativa preferida e selecao em um painel inferior.
+- Pesos disponiveis usam uma grade selecionavel, campo personalizado e botao Salvar persistente.
+- Android usa versionCode 1247 e versionName 12.4.7.

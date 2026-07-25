@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="br.com.mo2log.mobile.bluetooth.diagnostics.SportX20DiagnosticsActivity"
+            android:exported="false"
+            android:label="Diagnostico Soundcore"
+            android:theme="@style/AppTheme" />
+    </application>
+</manifest>

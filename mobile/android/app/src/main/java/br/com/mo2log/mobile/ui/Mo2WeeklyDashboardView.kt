@@ -2,18 +2,14 @@ package br.com.mo2log.mobile.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.View
-import br.com.mo2log.mobile.R
 import java.util.Locale
 import kotlin.math.min
 
@@ -58,14 +54,7 @@ class Mo2WeeklyDashboardView(
         color = Mo2Colors.TextPrimary
         textAlign = Paint.Align.CENTER
     }
-    private val dashboardTypeface = Typeface.create(
-        resources.getFont(R.font.be_vietnam_pro_regular),
-        Typeface.BOLD,
-    )
-    private val runner = BitmapFactory.decodeResource(resources, R.drawable.ic_running_sprint)
-    private val runnerPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-        colorFilter = PorterDuffColorFilter(Mo2Colors.Running, PorterDuff.Mode.SRC_IN)
-    }
+    private val runningIcon = Mo2RunningIconPainter(context, Mo2Colors.Running)
 
     init {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
@@ -94,15 +83,15 @@ class Mo2WeeklyDashboardView(
 
         val borderInset = context.mo2Dp(1).toFloat()
         val card = RectF(borderInset, borderInset, width - borderInset, height - borderInset)
-        fillPaint.color = Mo2Colors.SurfaceElevated
-        canvas.drawRoundRect(card, context.mo2Dp(16).toFloat(), context.mo2Dp(16).toFloat(), fillPaint)
+        fillPaint.color = Mo2Colors.Surface
+        canvas.drawRoundRect(card, context.mo2Dp(12).toFloat(), context.mo2Dp(12).toFloat(), fillPaint)
         strokePaint.color = Mo2Colors.Border
         strokePaint.strokeWidth = context.mo2Dp(1).toFloat()
-        canvas.drawRoundRect(card, context.mo2Dp(16).toFloat(), context.mo2Dp(16).toFloat(), strokePaint)
+        canvas.drawRoundRect(card, context.mo2Dp(12).toFloat(), context.mo2Dp(12).toFloat(), strokePaint)
 
         drawDashboardTitle(canvas)
 
-        val contentTop = context.mo2Dp(34).toFloat()
+        val contentTop = context.mo2Dp(42).toFloat()
         val contentHeight = height - contentTop
         val leftWidth = min(width * 0.38f, context.mo2Dp(132).toFloat())
         val verticalGap = context.mo2Dp(12).toFloat()
@@ -110,6 +99,17 @@ class Mo2WeeklyDashboardView(
         val ringCenterX = leftWidth / 2f
         val topCenterY = contentTop + verticalGap + outerDiameter / 2f
         val bottomCenterY = contentTop + verticalGap * 2f + outerDiameter * 1.5f
+
+        strokePaint.color = Mo2Colors.Border
+        strokePaint.strokeWidth = context.mo2Dp(1).toFloat()
+        val dividerX = leftWidth + context.mo2Dp(2)
+        canvas.drawLine(
+            dividerX,
+            contentTop + context.mo2Dp(10),
+            dividerX,
+            height - context.mo2Dp(12).toFloat(),
+            strokePaint,
+        )
 
         drawProgressRing(
             canvas,
@@ -148,14 +148,14 @@ class Mo2WeeklyDashboardView(
     }
 
     private fun drawDashboardTitle(canvas: Canvas) {
-        textPaint.color = Mo2Colors.Primary
+        textPaint.color = Mo2Colors.TextPrimary
         textPaint.textAlign = Paint.Align.LEFT
-        textPaint.typeface = dashboardTypeface
-        textPaint.textSize = sp(13f)
+        textPaint.typeface = Typeface.DEFAULT_BOLD
+        textPaint.textSize = sp(22f)
         canvas.drawText(
-            "DASHBOARD",
+            "Dashboard",
             context.mo2Dp(Mo2Spacing.Lg).toFloat(),
-            context.mo2Dp(23).toFloat(),
+            context.mo2Dp(31).toFloat(),
             textPaint,
         )
         textPaint.textAlign = Paint.Align.CENTER
@@ -214,7 +214,7 @@ class Mo2WeeklyDashboardView(
 
     private fun drawRunner(canvas: Canvas, centerX: Float, centerY: Float) {
         val size = context.mo2Dp(24).toFloat()
-        canvas.drawBitmap(runner, null, RectF(centerX - size / 2f, centerY - size / 2f, centerX + size / 2f, centerY + size / 2f), runnerPaint)
+        runningIcon.drawCentered(canvas, centerX, centerY, size)
     }
 
     private fun drawDumbbell(canvas: Canvas, centerX: Float, centerY: Float, color: Int, size: Float) {

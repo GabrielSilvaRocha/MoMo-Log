@@ -4,16 +4,17 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v12.3.1.
+- Android nativo pessoal: v12.4.7.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v12.4.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
-- v12.5.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
-- v12.6.0 - Comparacoes mensais e metas pessoais de longo prazo.
+- v12.5.0 - Descoberta BLE ampliada e integracao segura do Soundcore Sport X20.
+- v12.6.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
+- v12.7.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
+- v12.8.0 - Comparacoes mensais e metas pessoais de longo prazo.
 - v13.0.0 - Nova consolidacao da experiencia pessoal offline.
 
 ## v8.1.2 - Android Offline Auto Login
@@ -584,3 +585,81 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Dia selecionado exibe status, resumo e botoes contextuais para abrir treino, corrida ou recuperacao.
 - Dias hibridos distinguem progresso parcial de dia totalmente concluido.
 - Android usa versionCode 1231 e versionName 12.3.1.
+
+## v12.4.0 - Planejamento pessoal editavel
+
+- Home abre o carrossel no dia atual e alterna musculacao/corrida no mesmo quadro a cada cinco segundos.
+- Atividades concluidas recebem borda verde no carrossel.
+- Treinos de musculacao e planejamento de corrida passam a aceitar edicao de dias, sessoes e etapas.
+- Catalogo aceita titulo, descricao e GIFs personalizados, preservados somente no aparelho.
+- Alertas falados da corrida usam foco de audio transitivo para reduzir a midia externa durante a instrucao.
+- O app Android passa para versionCode 1240 / versionName 12.4.0.
+
+## v12.4.1 - Home essencial
+
+- Saudacao da Home muda entre `Bom dia`, `Boa tarde` e `Boa noite`, com emoji correspondente ao horario local.
+- Carrossel, Dashboard e Agenda recebem proporcoes, margens e hierarquia visual mais consistentes.
+- Acoes rapidas, Cockpit, check-in, checklist, metricas repetidas e insights redundantes saem da Home.
+- Agenda destaca `Planejamento completo` como acao principal e mantem atalhos contextuais para treino, corrida e coach.
+- Navegacao inferior usa indicador verde discreto sem fundo elevado no item selecionado.
+- O app Android passa para versionCode 1241 / versionName 12.4.1.
+
+## v12.4.2 - Agenda fiel ao plano
+
+- O primeiro bloco da Home mostra somente dias com musculacao ou corrida realmente planejadas.
+- Dias sem atividade deixam de criar cards artificiais de descanso ou mobilidade.
+- A Home abre no treino do dia, avanca para o proximo dia planejado quando hoje esta livre e permanece no ultimo treino depois do fim da agenda semanal.
+- Cada treino de musculacao recebe um card persistente e editavel no editor do plano; treinos antigos sao migrados automaticamente.
+- Corridas continuam identificadas e ilustradas automaticamente, sem configuracao adicional.
+- O app Android passa para versionCode 1242 / versionName 12.4.2.
+
+## v12.4.3 - Iconografia de corrida unificada
+
+- Dashboard, Agenda semanal e navegacao inferior passam a usar a mesma silhueta oficial de corrida.
+- O desenho manual antigo e removido da navegacao e dos cards de atividade.
+- Um componente reutilizavel centraliza escala, antialiasing e aplicacao das cores ativa, inativa e de corrida.
+- O app Android passa para versionCode 1243 / versionName 12.4.3.
+
+## v12.4.4 - Substituicoes auditadas e Smith identificado
+
+- Alternativos automaticos passam a preservar grupo muscular e uma equivalencia de movimento, regiao ou configuracao explicita.
+- Supino reto com halteres passa a ser a primeira troca do supino reto com barra.
+- Exercicios ja planejados no mesmo dia deixam de aparecer como opcoes de troca.
+- A pagina de Exercicios permite editar manualmente ate 12 alternativos por exercicio.
+- `Agachamento guiado` passa a se chamar `Agachamento no Smith` no plano, com migracao local sem alterar historico, series ou cargas.
+- O Agachamento no Smith recebe um GIF animado empacotado no APK e disponivel offline.
+- O app Android passa para versionCode 1244 / versionName 12.4.4.
+
+## Roadmap futuro - Soundcore Sport X20
+
+- Uma proxima fase debug podera solicitar `BLUETOOTH_SCAN` para procurar um endpoint BLE separado.
+- A busca depende de autorizacao explicita e continuara sem escrita GATT, APIs ocultas ou comandos proprietarios.
+- A interface final exibira somente baterias confirmadas; valores nao expostos permanecerao como `Indisponivel`.
+
+## v12.4.5 - Biblioteca de exercicios redesenhada
+
+- A aba Exercicios recebe uma navegacao propria, busca compacta e filtros rapidos sem repetir o cabecalho global.
+- GIF, favoritos, edicao, execucao, cuidados, musculos e alternativas passam a seguir uma hierarquia unica e mais legivel.
+- Acoes tecnicas de cache, preparo de midia e exercicios ocultos ficam no menu de opcoes.
+- O exercicio pode ser adicionado a qualquer treino e uma serie pode ser registrada sem sair da biblioteca.
+- Filtros de pernas agrupam os principais grupos inferiores e as descricoes tecnicas redundantes sao convertidas em passos de execucao.
+- O app Android passa para versionCode 1245 / versionName 12.4.5.
+
+## v12.4.6 - Troca de exercicio responsiva
+
+- O ranking de substituicoes sai da thread visual e mostra retorno imediato enquanto prepara as opcoes.
+- Catalogo, exercicios planejados, equipamentos indisponiveis e preferencias sao avaliados uma unica vez por solicitacao.
+- Os filtros do pop-up reutilizam o resultado calculado, sem novas varreduras do catalogo.
+- Vinculos entre os nomes do treino e o catalogo recebem cache invalidado ao editar, ocultar ou restaurar dados.
+- A troca preserva a posicao vertical da aba Treino.
+- O app Android passa para versionCode 1246 / versionName 12.4.6.
+
+## v12.4.7 - Treino focado e responsivo
+
+- A aba Treino usa uma hierarquia unica para plano, progresso da sessao, exercicio atual e fila de exercicios.
+- GIFs respeitam a proporcao real da midia e determinam sua propria altura, sem recorte vertical.
+- Series ficam compactas e preservam edicao, conclusao, desmarcacao, adicao e exclusao por gesto.
+- Descanso, orientacao tecnica e ajuste inteligente permanecem junto do exercicio em uso.
+- Troca de exercicio e pesos disponiveis usam paineis inferiores rolaveis com acao principal fixa.
+- Resumo pos-treino adota a mesma hierarquia e continua distinguindo exercicios completos, parciais e pulados.
+- O app Android passa para versionCode 1247 / versionName 12.4.7.

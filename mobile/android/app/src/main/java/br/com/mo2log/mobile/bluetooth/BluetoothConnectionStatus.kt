@@ -1,0 +1,14 @@
+package br.com.mo2log.mobile.bluetooth
+
+enum class BluetoothConnectionStatus {
+    BLUETOOTH_UNAVAILABLE,
+    BLUETOOTH_DISABLED,
+    PERMISSION_REQUIRED,
+    DEVICE_NOT_PAIRED,
+    MULTIPLE_CANDIDATES,
+    PAIRED_DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    CONNECTED_WITHOUT_BATTERY_DATA,
+    ERROR,
+}

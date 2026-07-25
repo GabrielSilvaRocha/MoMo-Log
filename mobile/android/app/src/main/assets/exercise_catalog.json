@@ -6374,13 +6374,12 @@
     "alternatives": "leg press; hack squat; agachamento goblet; cadeira extensora; afundo",
     "description": "Foco principal: quadríceps. Padrao de movimento: Agachar. Equipamento: Barra/Halter/Smith/Landmine.",
     "technicalCare": "Controle joelhos e tronco; distribua o peso nos pés e não sacrifique amplitude por carga.",
-    "source": "Free Exercise DB",
-    "sourceId": "Smith_Machine_Squat",
-    "status": "link_repo_alta_confianca",
-    "review": "não",
+    "source": "Arquivo local do usuário",
+    "sourceId": "agachamento_no_smith.gif",
+    "status": "midia_local",
+    "review": "sim",
     "links": [
-      "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Smith_Machine_Squat/0.jpg",
-      "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Smith_Machine_Squat/1.jpg"
+      "asset://exercise_media/agachamento_no_smith.gif"
     ]
   },
   {

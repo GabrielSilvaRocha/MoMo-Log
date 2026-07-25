@@ -2,14 +2,19 @@ package br.com.mo2log.mobile
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.annotation.SuppressLint
+import android.annotation.TargetApi
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -23,7 +28,9 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.text.Editable
 import android.text.InputType
+import android.text.TextUtils
 import android.text.TextWatcher
+import android.util.Log
 import android.util.TypedValue
 import android.view.DragEvent
 import android.view.Gravity
@@ -36,16 +43,29 @@ import android.view.WindowManager
 import android.view.animation.AnimationSet
 import android.view.animation.AlphaAnimation
 import android.view.animation.TranslateAnimation
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.GridLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import br.com.mo2log.mobile.bluetooth.BluetoothCallbackDispatcher
+import br.com.mo2log.mobile.bluetooth.BluetoothPermissionController
+import br.com.mo2log.mobile.bluetooth.SportX20BatteryState
+import br.com.mo2log.mobile.bluetooth.SportX20Monitor
+import br.com.mo2log.mobile.bluetooth.SportX20StateListener
+import br.com.mo2log.mobile.bluetooth.shouldShowSoundcoreDiagnostics
+import br.com.mo2log.mobile.ui.Mo2ActionIcon
+import br.com.mo2log.mobile.ui.Mo2ActionIconView
 import br.com.mo2log.mobile.ui.Mo2Colors
 import br.com.mo2log.mobile.ui.Mo2Components
 import br.com.mo2log.mobile.ui.Mo2DragHandleView
@@ -61,6 +81,7 @@ import br.com.mo2log.mobile.ui.Mo2WeeklyAgendaDay
 import br.com.mo2log.mobile.ui.Mo2WeeklyAgendaState
 import br.com.mo2log.mobile.ui.Mo2WeeklyAgendaView
 import br.com.mo2log.mobile.ui.Mo2WeeklyCarouselState
+import br.com.mo2log.mobile.ui.Mo2WeeklyWorkoutActivity
 import br.com.mo2log.mobile.ui.Mo2WeeklyWorkoutCarouselView
 import br.com.mo2log.mobile.ui.Mo2WeeklyWorkoutSlide
 import org.json.JSONArray
@@ -72,10 +93,18 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.net.URL
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
+
+private const val SPORT_X20_LOG_TAG = "Mo2SportX20"
+private const val SOUNDCORE_DIAGNOSTICS_ID = "soundcore_diagnostics"
+private const val SOUNDCORE_DIAGNOSTICS_ACTIVITY =
+    "br.com.mo2log.mobile.bluetooth.diagnostics.SportX20DiagnosticsActivity"
 
 data class ExercisePlan(
     val name: String,
@@ -89,6 +118,15 @@ data class WorkoutPlan(
     val title: String,
     val focus: String,
     val exercises: List<ExercisePlan>,
+    val dayIndex: Int = 0,
+    val homeCardKey: String = "",
+)
+
+private data class WorkoutHomeCardOption(
+    val key: String,
+    val title: String,
+    val subtitle: String,
+    val imageRes: Int,
 )
 
 data class RunningStage(
@@ -174,20 +212,30 @@ data class HistoryCalendarSummary(
     var runningDistance: Double = 0.0,
 )
 
-class RemoteExerciseMediaView(context: Context, private val links: List<String>) : LinearLayout(context) {
+@SuppressLint("ViewConstructor")
+class RemoteExerciseMediaView(
+    context: Context,
+    private val links: List<String>,
+    private val showSourceLabel: Boolean = true,
+) : LinearLayout(context) {
+    private companion object {
+        const val BundledMediaPrefix = "asset://"
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private val image = ImageView(context)
     private val status = TextView(context)
     private val frames = mutableListOf<Bitmap>()
     private var frameIndex = 0
+    private var framePlaybackPaused = false
 
     private val frameLoop = object : Runnable {
         override fun run() {
-            if (frames.isNotEmpty()) {
+            if (frames.isNotEmpty() && !framePlaybackPaused) {
                 image.setImageBitmap(frames[frameIndex % frames.size])
                 frameIndex += 1
+                handler.postDelayed(this, 700L)
             }
-            handler.postDelayed(this, 700L)
         }
     }
 
@@ -197,10 +245,11 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
         setBackgroundColor(Mo2Colors.Surface)
 
         image.scaleType = ImageView.ScaleType.FIT_CENTER
-        image.adjustViewBounds = false
-        addView(image, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
+        image.adjustViewBounds = true
+        image.minimumHeight = 0
+        addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
-        status.text = "Carregando frames de execucao..."
+        status.text = "Carregando midia de execucao..."
         status.setTextColor(Mo2Colors.TextSecondary)
         status.textSize = 12f
         status.gravity = Gravity.CENTER
@@ -208,9 +257,43 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 
         if (links.isEmpty()) {
             status.text = "Midia indisponivel para este exercicio"
+        } else if (links.size == 1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            loadSingleMedia(links.first())
         } else {
             loadFrames()
         }
+    }
+
+    @TargetApi(Build.VERSION_CODES.P)
+    private fun loadSingleMedia(link: String) {
+        Thread {
+            val cachedFile = mediaFileWithCache(link)
+            val drawable = try {
+                cachedFile?.let { (file, _) -> ImageDecoder.decodeDrawable(ImageDecoder.createSource(file)) }
+            } catch (_: Exception) {
+                null
+            }
+            if (drawable == null) {
+                loadFrames()
+                return@Thread
+            }
+            post {
+                frames.clear()
+                handler.removeCallbacks(frameLoop)
+                image.setImageDrawable(drawable)
+                image.requestLayout()
+                requestLayout()
+                if (drawable is AnimatedImageDrawable) {
+                    if (framePlaybackPaused) drawable.stop() else drawable.start()
+                }
+                status.text = when {
+                    link.startsWith(BundledMediaPrefix) -> "Fonte: arquivo do app"
+                    cachedFile?.second == true -> "Fonte: cache local"
+                    else -> "Fonte: link personalizado"
+                }
+                if (!showSourceLabel) status.visibility = GONE
+            }
+        }.start()
     }
 
     private fun loadFrames() {
@@ -223,12 +306,18 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
                 frames.addAll(loaded.map { it.first })
                 if (frames.isNotEmpty()) {
                     image.setImageBitmap(frames.first())
+                    image.requestLayout()
+                    requestLayout()
+                    handler.removeCallbacks(frameLoop)
+                    if (isAttachedToWindow && !framePlaybackPaused) handler.post(frameLoop)
                     status.text = when {
                         cachedCount == frames.size -> "Fonte: cache local"
                         cachedCount > 0 -> "Fonte: Free Exercise DB + cache"
                         else -> "Fonte: Free Exercise DB"
                     }
+                    if (!showSourceLabel) status.visibility = GONE
                 } else {
+                    status.visibility = VISIBLE
                     status.text = "Nao foi possivel carregar a midia agora"
                 }
             }
@@ -237,25 +326,33 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 
     private fun loadFrameWithCache(link: String): Pair<Bitmap, Boolean>? {
         return try {
+            val cachedFile = mediaFileWithCache(link) ?: return null
+            val decoded = BitmapFactory.decodeFile(cachedFile.first.absolutePath) ?: return null
+            Pair(decoded, cachedFile.second)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun mediaFileWithCache(link: String): Pair<File, Boolean>? {
+        return try {
             val dir = File(context.cacheDir, "exercise_media")
             dir.mkdirs()
             val file = File(dir, Integer.toHexString(link.hashCode()) + ".img")
-            if (file.exists() && file.length() > 0L) {
-                val cached = BitmapFactory.decodeFile(file.absolutePath)
-                if (cached != null) return Pair(cached, true)
+            if (file.exists() && file.length() > 0L) return Pair(file, true)
+            if (link.startsWith(BundledMediaPrefix)) {
+                val assetPath = link.removePrefix(BundledMediaPrefix)
+                if (assetPath.isBlank() || assetPath.startsWith("/") || assetPath.contains("..")) return null
+                context.assets.open(assetPath).use { input ->
+                    file.outputStream().use(input::copyTo)
+                }
+                return file.takeIf { it.length() > 0L }?.let { Pair(it, true) }
             }
-
             val connection = URL(link).openConnection()
             connection.connectTimeout = 7000
             connection.readTimeout = 9000
-            val bytes = connection.getInputStream().use { input -> input.readBytes() }
-            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            if (decoded != null) {
-                file.writeBytes(bytes)
-                Pair(decoded, false)
-            } else {
-                null
-            }
+            connection.getInputStream().use { input -> file.outputStream().use(input::copyTo) }
+            file.takeIf { it.length() > 0L }?.let { Pair(it, false) }
         } catch (_: Exception) {
             null
         }
@@ -263,12 +360,48 @@ class RemoteExerciseMediaView(context: Context, private val links: List<String>)
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        handler.post(frameLoop)
+        if (!framePlaybackPaused && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) startAnimatedMedia()
+        if (frames.isNotEmpty() && !framePlaybackPaused) handler.post(frameLoop)
     }
 
     override fun onDetachedFromWindow() {
         handler.removeCallbacks(frameLoop)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) stopAnimatedMedia()
         super.onDetachedFromWindow()
+    }
+
+    @TargetApi(Build.VERSION_CODES.P)
+    private fun startAnimatedMedia() {
+        (image.drawable as? AnimatedImageDrawable)?.start()
+    }
+
+    @TargetApi(Build.VERSION_CODES.P)
+    private fun stopAnimatedMedia() {
+        (image.drawable as? AnimatedImageDrawable)?.stop()
+    }
+
+    fun togglePlayback(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val animated = image.drawable as? AnimatedImageDrawable
+            if (animated != null) {
+                if (animated.isRunning) {
+                    animated.stop()
+                    framePlaybackPaused = true
+                } else {
+                    animated.start()
+                    framePlaybackPaused = false
+                }
+                return animated.isRunning
+            }
+        }
+        if (frames.isEmpty()) {
+            framePlaybackPaused = !framePlaybackPaused
+            return !framePlaybackPaused
+        }
+        framePlaybackPaused = !framePlaybackPaused
+        handler.removeCallbacks(frameLoop)
+        if (!framePlaybackPaused && isAttachedToWindow) handler.post(frameLoop)
+        return !framePlaybackPaused
     }
 }
 
@@ -278,7 +411,7 @@ class MainActivity : Activity() {
         packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
     }
     // Change only when the bundled plan changes so visual releases never reset an active workout.
-    private val trainingPlanVersion = "12.1.0"
+    private val trainingPlanVersion = "12.4.4"
     private val backupSource = "mo2log_native_android"
     private val backupSchema = "personal_backup_v2"
     private val supportedBackupSchemas = setOf("personal_backup_v1", backupSchema)
@@ -293,11 +426,26 @@ class MainActivity : Activity() {
     private val white = Mo2Colors.TextPrimary
     private val danger = Mo2Colors.Error
     private val amber = Mo2Colors.Warning
+    private val combiningMarksRegex = "\\p{Mn}+".toRegex()
+    private val nonAlphaNumericRegex = "[^a-z0-9]+".toRegex()
 
     private val prefs by lazy { getSharedPreferences("mo2log_native", Context.MODE_PRIVATE) }
     private val plans: List<WorkoutPlan>
         get() = buildWorkoutPlans()
-    private val catalog by lazy { loadExerciseCatalog() }
+    @Volatile
+    private var catalogCache: List<CatalogExercise>? = null
+    @Volatile
+    private var catalogLoading = false
+    private val catalogQueryTokensCache = ConcurrentHashMap<String, List<String>>()
+    private val catalogSearchIndexCache = ConcurrentHashMap<String, String>()
+    private val catalogNameIndexCache = ConcurrentHashMap<String, String>()
+    private val catalogMatchCache = ConcurrentHashMap<String, CatalogExercise>()
+    private val catalogMatchMissCache = ConcurrentHashMap.newKeySet<String>()
+    private val catalog: List<CatalogExercise>
+        get() = catalogCache ?: loadExerciseCatalog().also { loaded ->
+            catalogCache = loaded
+            resetCatalogDerivedCaches()
+        }
     private val runningPlan: List<RunningWorkout>
         get() = buildRunningPlan()
     private val primaryNavItems = listOf(
@@ -321,15 +469,18 @@ class MainActivity : Activity() {
     private var selectedPlanIndex = 0
     private var selectedExerciseIndex = 0
     private var selectedRunId = ""
+    private var exerciseRenderGeneration = 0
     private var voiceCoach: TextToSpeech? = null
     private var voiceCoachReady = false
     private val restTimerHandler = Handler(Looper.getMainLooper())
     private val runningSessionHandler = Handler(Looper.getMainLooper())
+    private val bluetoothCallbackHandler = Handler(Looper.getMainLooper())
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
-    private val restAudioFocusListener = AudioManager.OnAudioFocusChangeListener { }
+    private val cueAudioFocusListener = AudioManager.OnAudioFocusChangeListener { }
     private var restToneGenerator: ToneGenerator? = null
-    private var restAudioFocusRequest: AudioFocusRequest? = null
+    private var cueAudioFocusRequest: AudioFocusRequest? = null
     private var activeRestUtteranceId: String? = null
+    private val duckedUtteranceIds = mutableSetOf<String>()
     private var restTimerText: TextView? = null
     private var runningCountdownText: TextView? = null
     private var runningCountdownCueText: TextView? = null
@@ -351,6 +502,23 @@ class MainActivity : Activity() {
     private var requestedSection = ""
     private var pageScrollTarget: View? = null
     private var pageScrollView: ScrollView? = null
+    private val workoutSwapExecutor = Executors.newSingleThreadExecutor()
+    private var workoutSwapTask: Future<*>? = null
+    private var workoutSwapRequestGeneration = 0
+    private var workoutSwapLoadingDialog: AlertDialog? = null
+    private var sportX20Monitor: SportX20Monitor? = null
+    private var sportX20BatteryState: SportX20BatteryState? = null
+    private val sportX20StateListener = SportX20StateListener { state ->
+        sportX20BatteryState = state
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                SPORT_X20_LOG_TAG,
+                "Sport X20: ${state.connectionStatus} | combined=${state.combinedBatteryPercent} | " +
+                    "left=${state.leftBatteryPercent} | right=${state.rightBatteryPercent} | " +
+                    "case=${state.caseBatteryPercent}",
+            )
+        }
+    }
     private val restTimerRunnable = object : Runnable {
         override fun run() {
             restTimerText?.let { view ->
@@ -379,21 +547,64 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        sportX20Monitor = SportX20Monitor.create(
+            applicationContext = applicationContext,
+            preferences = prefs,
+            dispatcher = BluetoothCallbackDispatcher { action ->
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    action()
+                } else {
+                    bluetoothCallbackHandler.post(action)
+                }
+            },
+        ).also { monitor -> sportX20BatteryState = monitor.currentState() }
         syncTrainingPlanVersion()
+        ensureWorkoutHomeCards()
         restorePersistedState(intent.getStringExtra("tab"))
         requestedSection = intent.getStringExtra("section").orEmpty()
         render()
         window.decorView.post { initVoiceCoach() }
     }
 
+    override fun onStart() {
+        super.onStart()
+        sportX20Monitor?.addListener(sportX20StateListener)
+        sportX20Monitor?.start()
+    }
+
+    override fun onStop() {
+        sportX20Monitor?.removeListener(sportX20StateListener)
+        sportX20Monitor?.stop()
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        cancelWorkoutSwapRequest()
+        workoutSwapExecutor.shutdownNow()
+        sportX20Monitor?.removeListener(sportX20StateListener)
+        sportX20Monitor?.close()
+        sportX20Monitor = null
+        bluetoothCallbackHandler.removeCallbacksAndMessages(null)
         restTimerHandler.removeCallbacksAndMessages(null)
         runningSessionHandler.removeCallbacks(runningSessionRunnable)
         stopRestCompletionAlert()
+        duckedUtteranceIds.clear()
+        releaseCueAudioFocus()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         voiceCoach?.stop()
         voiceCoach?.shutdown()
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == BluetoothPermissionController.REQUEST_CODE) {
+            sportX20Monitor?.onPermissionResult()
+        }
     }
 
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
@@ -412,6 +623,8 @@ class MainActivity : Activity() {
     private fun syncTrainingPlanVersion() {
         if (prefs.getString("training_plan_version", "") == trainingPlanVersion) return
         migrateCombinedWorkoutExercises()
+        migrateRenamedWorkoutExercises()
+        resetSmithSquatCatalogOverrideForBundledMedia()
         val editor = prefs.edit()
             .putString("training_plan_version", trainingPlanVersion)
             .putInt("selected_plan", todayPlanIndex())
@@ -421,6 +634,64 @@ class MainActivity : Activity() {
         if (!prefs.contains("run_speed")) editor.putString("run_speed", "8.0")
         if (!prefs.contains("running_plan_start_day")) editor.putString("running_plan_start_day", dayKey())
         editor.apply()
+    }
+
+    private fun migrateRenamedWorkoutExercises() {
+        val raw = prefs.getString("custom_workout_plans", null) ?: return
+        try {
+            val plansArray = JSONArray(raw)
+            var changed = false
+            for (planIndex in 0 until plansArray.length()) {
+                val exercises = plansArray.getJSONObject(planIndex).optJSONArray("exercises") ?: continue
+                for (exerciseIndex in 0 until exercises.length()) {
+                    val exercise = exercises.getJSONObject(exerciseIndex)
+                    val currentName = exercise.optString("name")
+                    val canonicalName = Mo2PersonalPlanRules.canonicalWorkoutExerciseName(currentName)
+                    if (canonicalName != currentName) {
+                        exercise.put("name", canonicalName)
+                        changed = true
+                    }
+                }
+            }
+            if (changed) prefs.edit().putString("custom_workout_plans", plansArray.toString()).apply()
+        } catch (_: Exception) {
+            // Invalid custom JSON already falls back to the bundled plan.
+        }
+    }
+
+    private fun resetSmithSquatCatalogOverrideForBundledMedia() {
+        val overrides = safeObject("catalog_exercise_overrides")
+        val smithOverride = overrides.optJSONObject("EX0266") ?: return
+        smithOverride.remove("name")
+        smithOverride.remove("links")
+        if (smithOverride.length() == 0) overrides.remove("EX0266")
+        val editor = prefs.edit()
+        if (overrides.length() == 0) {
+            editor.remove("catalog_exercise_overrides")
+        } else {
+            editor.putString("catalog_exercise_overrides", overrides.toString())
+        }
+        editor.apply()
+    }
+
+    private fun ensureWorkoutHomeCards() {
+        val raw = prefs.getString("custom_workout_plans", null) ?: return
+        try {
+            val array = JSONArray(raw)
+            var changed = false
+            for (index in 0 until array.length()) {
+                val item = array.getJSONObject(index)
+                val current = item.optString("homeCard")
+                val normalized = Mo2WorkoutHomeCard.normalize(current, index)
+                if (current != normalized) {
+                    item.put("homeCard", normalized)
+                    changed = true
+                }
+            }
+            if (changed) prefs.edit().putString("custom_workout_plans", array.toString()).apply()
+        } catch (_: Exception) {
+            // Invalid custom JSON already falls back to the bundled plan.
+        }
     }
 
     private fun migrateCombinedWorkoutExercises() {
@@ -504,7 +775,7 @@ class MainActivity : Activity() {
     private fun splitCombinedExerciseNames(name: String): List<String> {
         return when (normalized(name)) {
             normalized("Supino reto ou maquina peitoral") -> listOf("Supino reto", "Maquina peitoral")
-            normalized("Agachamento livre ou guiado") -> listOf("Agachamento livre", "Agachamento guiado")
+            normalized("Agachamento livre ou guiado") -> listOf("Agachamento livre", "Agachamento no Smith")
             normalized("Abdominal ou prancha") -> listOf("Abdominal", "Prancha")
             else -> {
                 val parts = Regex("\\s+ou\\s+", RegexOption.IGNORE_CASE)
@@ -585,12 +856,14 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setPadding(dp(Mo2Spacing.Xxl), dp(Mo2Spacing.Xxl), dp(Mo2Spacing.Xxl), dp(Mo2Spacing.Xxl))
+        val pagePadding = if (currentTab == "exercises") Mo2Spacing.Lg else Mo2Spacing.Xxl
+        root.setPadding(dp(pagePadding), dp(pagePadding), dp(pagePadding), dp(Mo2Spacing.Xxl))
         scroll.addView(root)
 
         val focusedRunningSession = currentTab == "running" && activeRunningWorkout() != null
         val focusedStrengthSession = currentTab == "workout"
-        if (!focusedRunningSession && !focusedStrengthSession) {
+        val customPageChrome = currentTab == "exercises"
+        if (!focusedRunningSession && !focusedStrengthSession && !customPageChrome) {
             if (currentTab !in setOf("home", "running", "more")) {
                 root.addView(header())
             }
@@ -705,19 +978,37 @@ class MainActivity : Activity() {
     private fun pageIntro(): View {
         val wrap = LinearLayout(this)
         wrap.orientation = LinearLayout.VERTICAL
-        wrap.setPadding(0, dp(18), 0, if (currentTab == "home") dp(10) else dp(6))
+        wrap.setPadding(0, if (currentTab == "home") dp(12) else dp(18), 0, if (currentTab == "home") dp(10) else dp(6))
+
+        if (currentTab == "home") {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            val name = prefs.getString("profile_name", "Gabriel").orEmpty()
+            val greeting = Mo2HomeGreeting.forHour(hour).text(name)
+            val greetingView = label(greeting, muted, 16f, false)
+            greetingView.typeface = resources.getFont(R.font.be_vietnam_pro_regular)
+            greetingView.includeFontPadding = false
+            wrap.addView(
+                greetingView,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    setMargins(0, 0, 0, dp(Mo2Spacing.Xs))
+                },
+            )
+        }
 
         val title = label(
             currentSectionTitle(),
             white,
-            if (currentTab == "home") 40f else 26f,
+            if (currentTab == "home") 36f else 26f,
             currentTab != "home",
         )
         if (currentTab == "home") {
             title.typeface = resources.getFont(R.font.be_vietnam_pro_regular)
             title.includeFontPadding = false
             title.setLineSpacing(0f, 1f)
-            title.setAutoSizeTextTypeUniformWithConfiguration(30, 40, 1, TypedValue.COMPLEX_UNIT_SP)
+            title.setAutoSizeTextTypeUniformWithConfiguration(30, 36, 1, TypedValue.COMPLEX_UNIT_SP)
         }
         wrap.addView(title)
         val subtitle = currentSectionSubtitle()
@@ -776,10 +1067,11 @@ class MainActivity : Activity() {
             }
             val enforcedEdgeToEdge = Build.VERSION.SDK_INT >= 35
             page.setPadding(0, if (enforcedEdgeToEdge) topInset else 0, 0, 0)
+            val horizontalPadding = if (currentTab == "home") Mo2Spacing.Xl else Mo2Spacing.Xxl
             content.setPadding(
-                dp(Mo2Spacing.Xxl),
+                dp(horizontalPadding),
                 dp(Mo2Spacing.Xxl) + if (enforcedEdgeToEdge) 0 else topInset,
-                dp(Mo2Spacing.Xxl),
+                dp(horizontalPadding),
                 dp(Mo2Spacing.Xxl) + if (navigation == null) bottomInset else 0,
             )
             navigation?.setPadding(0, 0, 0, bottomInset)
@@ -804,15 +1096,24 @@ class MainActivity : Activity() {
         hub.addView(label("Plano, historico, estatisticas, catalogo, metas, coach e perfil ficam aqui para deixar o uso diario mais direto.", muted, 15f, false))
         root.addView(hub)
 
-        val shortcuts = listOf(
-            Triple("plan_editor", "Plano", "Editar treinos, exercicios e ajustes da corrida."),
-            Triple("exercises", "Exercicios", "Catalogo com midia, favoritos e alternativas."),
-            Triple("history", "Historico", "Series e corridas registradas no celular."),
-            Triple("stats", "Stats", "Volume, cargas, semana e melhores marcas."),
-            Triple("goals", "Metas", "Objetivos semanais de treino e corrida."),
-            Triple("coach", "Coach", "Insights simples para ajustar a rotina."),
-            Triple("profile", "Perfil", "Dados locais, versao e exportacao."),
-        )
+        val shortcuts = buildList {
+            add(Triple("plan_editor", "Plano", "Editar treinos, exercicios e ajustes da corrida."))
+            add(Triple("exercises", "Exercicios", "Catalogo com midia, favoritos e alternativas."))
+            add(Triple("history", "Historico", "Series e corridas registradas no celular."))
+            add(Triple("stats", "Stats", "Volume, cargas, semana e melhores marcas."))
+            add(Triple("goals", "Metas", "Objetivos semanais de treino e corrida."))
+            add(Triple("coach", "Coach", "Insights simples para ajustar a rotina."))
+            add(Triple("profile", "Perfil", "Dados locais, versao e exportacao."))
+            if (shouldShowSoundcoreDiagnostics(BuildConfig.DEBUG)) {
+                add(
+                    Triple(
+                        SOUNDCORE_DIAGNOSTICS_ID,
+                        "Diagnostico Soundcore",
+                        "Inspecao Bluetooth e GATT somente leitura.",
+                    ),
+                )
+            }
+        }
 
         shortcuts.chunked(2).forEach { rowItems ->
             val row = LinearLayout(this)
@@ -836,55 +1137,27 @@ class MainActivity : Activity() {
         val box = card(surface2)
         box.orientation = LinearLayout.VERTICAL
         box.minimumHeight = dp(116)
-        box.setOnClickListener { switchTab(id) }
+        box.setOnClickListener {
+            if (id == SOUNDCORE_DIAGNOSTICS_ID) {
+                openSoundcoreDiagnostics()
+            } else {
+                switchTab(id)
+            }
+        }
         box.addView(label(title, white, 18f, true))
         box.addView(label(subtitle, muted, 13f, false))
         return box
     }
 
-    private fun renderHome(root: LinearLayout) {
-        val stats = computeStats(allLogs())
+    private fun openSoundcoreDiagnostics() {
+        if (!shouldShowSoundcoreDiagnostics(BuildConfig.DEBUG)) return
+        startActivity(Intent().setClassName(this, SOUNDCORE_DIAGNOSTICS_ACTIVITY))
+    }
 
+    private fun renderHome(root: LinearLayout) {
         root.addView(weeklyWorkoutCarouselPanel())
         root.addView(weeklyDashboardPanel())
-        root.addView(quickActionsPanel())
         root.addView(weeklyAgendaDashboardPanel())
-        root.addView(dailyCommandPanel())
-        root.addView(readinessCheckInPanel())
-        root.addView(consistencyChecklistPanel())
-
-        val favorites = favoriteCatalogExercises()
-        if (favorites.isNotEmpty()) {
-            val favBox = card(surface)
-            favBox.orientation = LinearLayout.VERTICAL
-            favBox.addView(label("ATALHOS FAVORITOS", green, 13f, true))
-            favBox.addView(label("Abra seus exercicios mais usados com um toque.", muted, 15f, false))
-            favorites.take(3).forEach { exercise ->
-                val shortcut = actionButton(exercise.name, surface2, white)
-                shortcut.setOnClickListener {
-                    prefs.edit()
-                        .putString("catalog_muscle", "Todos")
-                        .putString("catalog_selected", exercise.id)
-                        .apply()
-                    switchTab("exercises")
-                }
-                favBox.addView(buttonParams(shortcut))
-            }
-            root.addView(favBox)
-        }
-
-        root.addView(metricGrid(listOf(
-            Pair("Semana", stats.optInt("week_sets").toString() + " series"),
-            Pair("Volume total", stats.optInt("total_volume").toString() + " kg"),
-            Pair("Melhor carga", stats.optString("best_load")),
-            Pair("Corridas", runLogs().length().toString()),
-        )))
-
-        val insightBox = card(surface)
-        insightBox.orientation = LinearLayout.VERTICAL
-        insightBox.addView(label("INSIGHTS", green, 13f, true))
-        localInsights().forEach { insight -> insightBox.addView(label("- " + insight, white, 15f, false)) }
-        root.addView(insightBox)
     }
 
     private fun quickActionsPanel(): View {
@@ -916,19 +1189,47 @@ class MainActivity : Activity() {
     }
 
     private fun weeklyWorkoutCarouselPanel(): View {
-        val slides = listOf(
-            Mo2WeeklyWorkoutSlide("Segunda", "Corrida", R.drawable.home_monday_running, "running", 1),
-            Mo2WeeklyWorkoutSlide("Terca", "Peito Ombro Triceps", R.drawable.home_tuesday_push, "workout", 2, 0),
-            Mo2WeeklyWorkoutSlide("Quarta", "Mobilidade", R.drawable.home_wednesday_mobility, "recovery", 3),
-            Mo2WeeklyWorkoutSlide("Quinta", "Pernas e Core", R.drawable.home_thursday_legs, "workout", 4, 1),
-            Mo2WeeklyWorkoutSlide("Sexta", "Descanso", R.drawable.home_friday_recovery, "recovery", 5),
-            Mo2WeeklyWorkoutSlide("Sabado", "Costas e Biceps", R.drawable.home_saturday_pull, "workout", 6, 2),
-            Mo2WeeklyWorkoutSlide("Domingo", "Corrida Longa", R.drawable.home_sunday_long_run, "running", 7),
-        )
+        val dayNames = weekdayNames()
+        val strengthByDay = plans.mapIndexed { index, plan -> Pair(index, plan) }
+            .groupBy { (index, plan) -> workoutPlanDayIndex(plan, index) }
+        val runningByDay = currentRunningWeekWorkouts().groupBy { workout ->
+            dayIndexFor(scheduledDayFor(workout)) ?: workout.dayIndex.coerceIn(1, 7)
+        }
+        val slides = (1..7).mapNotNull { dayIndex ->
+            val activities = mutableListOf<Mo2WeeklyWorkoutActivity>()
+            strengthByDay[dayIndex].orEmpty().forEach { (planIndex, plan) ->
+                activities.add(
+                    Mo2WeeklyWorkoutActivity(
+                        title = strengthCarouselTitle(plan),
+                        imageRes = homeActivityImage(dayIndex, "workout", plan.homeCardKey),
+                        destination = "workout",
+                        planIndex = planIndex,
+                        completed = isStrengthPlanCompletedThisWeek(plan, dayIndex),
+                    ),
+                )
+            }
+            runningByDay[dayIndex].orEmpty().forEach { workout ->
+                activities.add(
+                    Mo2WeeklyWorkoutActivity(
+                        title = workout.title,
+                        imageRes = homeActivityImage(dayIndex, "running", null),
+                        destination = "running",
+                        workoutId = workout.id,
+                        completed = isRunWorkoutCompleted(workout),
+                    ),
+                )
+            }
+            if (activities.isEmpty()) return@mapNotNull null
+            Mo2WeeklyWorkoutSlide(
+                day = dayNames[dayIndex - 1],
+                dayIndex = dayIndex,
+                activities = activities,
+            )
+        }
         val todayIso = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
-        val initialIndex = prefs.getInt(
-            "home_week_slide",
-            Mo2WeeklyCarouselState.fromIsoDay(todayIso, slides.size),
+        val initialIndex = Mo2WeeklyCarouselState.initialIndexForDay(
+            todayIso,
+            slides.map(Mo2WeeklyWorkoutSlide::dayIndex),
         )
         return Mo2WeeklyWorkoutCarouselView(
             context = this,
@@ -947,21 +1248,46 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun openWeeklyWorkoutSlide(slide: Mo2WeeklyWorkoutSlide) {
-        when (slide.destination) {
-            "workout" -> openWeeklyStrengthDay(slide.dayIndex, slide.planIndex)
-            "running" -> openWeeklyRunningDay(slide.dayIndex)
-            else -> Toast.makeText(this, slide.day + ": " + slide.title, Toast.LENGTH_SHORT).show()
+    private fun strengthCarouselTitle(plan: WorkoutPlan): String {
+        val focus = workoutFocusText(plan.focus).substringBefore('+').trim()
+        return if (focus.isBlank() || focus.equals("Dia e foco", true)) plan.title else plan.title + " - " + focus
+    }
+
+    private fun workoutFocusText(focus: String): String {
+        val prefix = focus.substringBefore(" - ", "")
+        val isLegacyDay = weekdayNames().any { day -> normalized(day) == normalized(prefix) }
+        return if (isLegacyDay) focus.substringAfter(" - ").trim() else focus.trim()
+    }
+
+    private fun workoutPlanSubtitle(plan: WorkoutPlan, planIndex: Int): String {
+        val focus = workoutFocusText(plan.focus).ifBlank { "Foco do treino" }
+        return weekdayNames()[workoutPlanDayIndex(plan, planIndex) - 1] + " - " + focus
+    }
+
+    private fun homeActivityImage(dayIndex: Int, destination: String, homeCardKey: String?): Int {
+        return when (destination) {
+            "running" -> if (dayIndex == 7) R.drawable.home_sunday_long_run else R.drawable.home_monday_running
+            "workout" -> when (Mo2WorkoutHomeCard.normalize(homeCardKey, 0)) {
+                Mo2WorkoutHomeCard.Legs -> R.drawable.home_thursday_legs
+                Mo2WorkoutHomeCard.Pull -> R.drawable.home_saturday_pull
+                else -> R.drawable.home_tuesday_push
+            }
+            else -> R.drawable.home_tuesday_push
+        }
+    }
+
+    private fun openWeeklyWorkoutSlide(slide: Mo2WeeklyWorkoutSlide, activity: Mo2WeeklyWorkoutActivity) {
+        when (activity.destination) {
+            "workout" -> openWeeklyStrengthDay(slide.dayIndex, activity.planIndex)
+            "running" -> openWeeklyRunningDay(slide.dayIndex, activity.workoutId)
+            else -> Toast.makeText(this, slide.day + ": " + activity.title, Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun openWeeklyStrengthDay(dayIndex: Int, preferredPlanIndex: Int? = null) {
-        val planIndex = preferredPlanIndex ?: when (dayIndex) {
-            2 -> 0
-            4 -> 1
-            6 -> 2
-            else -> todayPlanIndex()
-        }
+        val planIndex = preferredPlanIndex
+            ?: plans.indices.firstOrNull { index -> workoutPlanDayIndex(plans[index], index) == dayIndex }
+            ?: todayPlanIndex()
         selectedPlanIndex = planIndex.coerceIn(plans.indices)
         selectedExerciseIndex = 0
         prefs.edit()
@@ -971,10 +1297,13 @@ class MainActivity : Activity() {
         switchTab("workout")
     }
 
-    private fun openWeeklyRunningDay(dayIndex: Int) {
-        currentRunningWeekWorkouts()
-            .firstOrNull { workout -> workout.dayIndex == dayIndex }
-            ?.let { workout ->
+    private fun openWeeklyRunningDay(dayIndex: Int, preferredWorkoutId: String? = null) {
+        val workouts = currentRunningWeekWorkouts()
+        val selected = workouts.firstOrNull { workout -> workout.id == preferredWorkoutId }
+            ?: workouts.firstOrNull { workout ->
+                (dayIndexFor(scheduledDayFor(workout)) ?: workout.dayIndex) == dayIndex
+            }
+        selected?.let { workout ->
                 selectedRunId = workout.id
                 prefs.edit().putString("selected_run_id", workout.id).apply()
             }
@@ -990,7 +1319,7 @@ class MainActivity : Activity() {
             this,
             Mo2WeeklyDashboardData(
                 strengthWorkouts = currentWeekStrengthWorkoutCount(),
-                strengthWorkoutTarget = 3,
+                strengthWorkoutTarget = plans.size.coerceAtLeast(1),
                 runningWorkouts = runningDone,
                 runningWorkoutTarget = weekRuns.size.coerceAtLeast(1),
                 completedSets = stats.optInt("week_sets"),
@@ -1010,46 +1339,48 @@ class MainActivity : Activity() {
     }
 
     private fun weeklyAgendaDashboardPanel(): View {
-        val runningByDay = currentRunningWeekWorkouts().associateBy { it.dayIndex }
+        val runningByDay = currentRunningWeekWorkouts().groupBy { workout ->
+            dayIndexFor(scheduledDayFor(workout)) ?: workout.dayIndex.coerceIn(1, 7)
+        }
+        val strengthByDay = plans.mapIndexed { index, plan -> Pair(index, plan) }
+            .groupBy { (index, plan) -> workoutPlanDayIndex(plan, index) }
         val todayIndex = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull()?.coerceIn(1, 7) ?: 1
-        val dayNames = listOf("Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo")
-        val shortNames = listOf("SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM")
-        val strengthPlanByDay = mapOf(2 to 0, 4 to 1, 6 to 2)
+        val dayNames = weekdayNames()
+        val shortNames = weekdayShortNames()
 
         val days = (1..7).map { dayIndex ->
-            val strengthPlanIndex = strengthPlanByDay[dayIndex]
-            val strengthPlan = strengthPlanIndex?.let { plans.getOrNull(it) }
-            val running = runningByDay[dayIndex]
-            val hasStrength = strengthPlan != null
-            val strengthCompleted = hasStrength && isStrengthWeekDayCompleted(dayIndex)
-            val hasRunning = running != null
-            val runningCompleted = running?.let { isRunWorkoutCompleted(it) } ?: false
-            val title = when (dayIndex) {
-                1 -> running?.title ?: "Corrida principal"
-                2 -> "Peito, ombro e triceps"
-                3 -> "Mobilidade e descanso"
-                4 -> "Pernas e core"
-                5 -> "Descanso"
-                6 -> "Costas e biceps"
-                7 -> running?.title ?: "Corrida longa"
-                else -> "Treino pessoal"
+            val strengthEntries = strengthByDay[dayIndex].orEmpty()
+            val runningEntries = runningByDay[dayIndex].orEmpty()
+            val strengthPlan = strengthEntries.firstOrNull()?.second
+            val running = runningEntries.firstOrNull()
+            val hasStrength = strengthEntries.isNotEmpty()
+            val strengthCompleted = hasStrength && strengthEntries.all { (_, plan) ->
+                isStrengthPlanCompletedThisWeek(plan, dayIndex)
             }
-            val description = when (dayIndex) {
-                1 -> "Treino principal de corrida, sem musculacao."
-                2 -> "Musculacao primeiro e corrida leve depois."
-                3 -> "Mobilidade, caminhada leve ou descanso completo."
-                4 -> "Pernas e core primeiro; corrida curta para soltar."
-                5 -> "Recupere energia para o treino de sabado."
-                6 -> "Costas e biceps seguidos do bloco de ritmo."
-                7 -> "Corrida leve para construir base aerobica."
-                else -> "Siga o planejamento da semana."
+            val hasRunning = runningEntries.isNotEmpty()
+            val runningCompleted = hasRunning && runningEntries.all(::isRunWorkoutCompleted)
+            val title = when {
+                strengthPlan != null && running != null -> strengthPlan.title + " + " + running.title
+                strengthPlan != null -> strengthCarouselTitle(strengthPlan)
+                running != null -> running.title
+                dayIndex == 3 -> "Mobilidade e descanso"
+                else -> "Descanso"
+            }
+            val description = when {
+                strengthPlan != null && running != null -> "Musculacao primeiro; depois, " + running.description.lowercase(Locale("pt", "BR"))
+                strengthPlan != null -> strengthPlan.focus
+                running != null -> running.description
+                dayIndex == 3 -> "Mobilidade, caminhada leve ou descanso completo."
+                else -> "Dia livre para sono, alimentacao e recuperacao."
             }
             val meta = when {
-                strengthPlan != null && running != null -> {
-                    strengthPlan.exercises.size.toString() + " exercicios | " + formatKm(totalRunDistance(running))
+                hasStrength && hasRunning -> {
+                    strengthEntries.sumOf { it.second.exercises.size }.toString() + " exercicios | " +
+                        formatKm(runningEntries.sumOf(::totalRunDistance))
                 }
-                strengthPlan != null -> strengthPlan.exercises.size.toString() + " exercicios"
-                running != null -> formatKm(totalRunDistance(running)) + " | " + formatDuration(estimatedWorkoutSeconds(running))
+                hasStrength -> strengthEntries.sumOf { it.second.exercises.size }.toString() + " exercicios"
+                hasRunning -> formatKm(runningEntries.sumOf(::totalRunDistance)) + " | " +
+                    formatDuration(runningEntries.sumOf(::estimatedWorkoutSeconds))
                 dayIndex == 3 -> "Mobilidade leve | caminhada opcional"
                 else -> "Sono | alimentacao | recuperacao"
             }
@@ -1223,6 +1554,32 @@ class MainActivity : Activity() {
         return false
     }
 
+    private fun isStrengthPlanCompletedThisWeek(plan: WorkoutPlan, dayIndex: Int): Boolean {
+        val sessions = strengthSessionLogs()
+        for (index in 0 until sessions.length()) {
+            val item = sessions.getJSONObject(index)
+            if (item.optString("week") != weekKey() || item.optString("status", "completed") != "completed") continue
+            if (item.optString("plan_id") == plan.id || item.optString("plan_title") == plan.title) return true
+        }
+        val logs = allLogs()
+        for (index in 0 until logs.length()) {
+            val item = logs.getJSONObject(index)
+            if (item.optString("week") == weekKey() && item.optString("plan") == plan.title) return true
+        }
+        val plansOnDay = plans.indices.count { index -> workoutPlanDayIndex(plans[index], index) == dayIndex }
+        return plansOnDay == 1 && isStrengthWeekDayCompleted(dayIndex)
+    }
+
+    private fun weekdayNames(): List<String> = listOf(
+        "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo",
+    )
+
+    private fun weekdayShortNames(): List<String> = listOf("SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM")
+
+    private fun workoutPlanDayIndex(plan: WorkoutPlan, planIndex: Int): Int {
+        return Mo2PersonalPlanRules.resolveWorkoutDay(plan.dayIndex, plan.focus, planIndex)
+    }
+
     private fun dayIndexFor(day: String): Int? {
         return try {
             val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(day) ?: return null
@@ -1252,7 +1609,14 @@ class MainActivity : Activity() {
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         val primary = actionButton(missionButtonLabel(), green, bg)
-        primary.setOnClickListener { switchTab(missionButtonTab()) }
+        primary.setOnClickListener {
+            val dayIndex = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull()?.coerceIn(1, 7) ?: 1
+            when (missionButtonTab()) {
+                "workout" -> openWeeklyStrengthDay(dayIndex)
+                "running" -> openWeeklyRunningDay(dayIndex)
+                else -> switchTab("coach")
+            }
+        }
         row.addView(primary, LinearLayout.LayoutParams(0, dp(50), 1f))
 
         val backup = actionButton("Backup", surface2, green)
@@ -1310,15 +1674,18 @@ class MainActivity : Activity() {
 
     private fun todayMission(): Pair<String, String> {
         val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
-        return when (day) {
-            1 -> Pair("Corrida principal", "Segunda sem musculacao: faca o treino forte de corrida e proteja a recuperacao.")
-            2 -> Pair("Treino A + leve", "Musculacao primeiro. Depois, corrida leve se estiver inteiro.")
-            3 -> Pair("Recuperacao", "Dia para mobilidade, caminhada leve ou descanso sem culpa.")
-            4 -> Pair("Treino B controlado", "Pernas e core primeiro. Corrida curta so para soltar.")
-            5 -> Pair("Preparar o sabado", "Descanso, sono e alimentacao para chegar bem ao Treino C.")
-            6 -> Pair("Treino C + ritmo", "Costas e biceps, depois bloco de ritmo sem sprintar.")
-            7 -> Pair("Longo leve", "Corrida facil para construir base aerobica e fechar a semana.")
-            else -> Pair("Treino pessoal", "Abra o cockpit e siga o proximo bloco planejado.")
+        val strength = plans.mapIndexed { index, plan -> Pair(index, plan) }
+            .firstOrNull { (index, plan) -> workoutPlanDayIndex(plan, index) == day }
+            ?.second
+        val running = currentRunningWeekWorkouts().firstOrNull { workout -> scheduledDayFor(workout) == dayKey() }
+        return when {
+            strength != null && running != null -> Pair(
+                strength.title + " + " + running.title,
+                "Musculacao primeiro; depois siga as etapas planejadas da corrida.",
+            )
+            strength != null -> Pair(strength.title, strength.focus)
+            running != null -> Pair(running.title, running.description)
+            else -> Pair("Recuperacao", "Nenhuma atividade planejada hoje. Priorize sono, mobilidade ou descanso.")
         }
     }
 
@@ -1332,11 +1699,13 @@ class MainActivity : Activity() {
 
     private fun missionButtonTab(): String {
         val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
-        return when (day) {
-            1, 7 -> "running"
-            3, 5 -> "coach"
-            else -> "workout"
-        }
+        val strength = plans.mapIndexed { index, plan -> Pair(index, plan) }
+            .firstOrNull { (index, plan) -> workoutPlanDayIndex(plan, index) == day }
+            ?.second
+        val running = currentRunningWeekWorkouts().firstOrNull { workout -> scheduledDayFor(workout) == dayKey() }
+        if (strength != null && !isStrengthPlanCompletedThisWeek(strength, day)) return "workout"
+        if (running != null && !isRunWorkoutCompleted(running)) return "running"
+        return "coach"
     }
 
     private fun readinessLine(stats: JSONObject): String {
@@ -1425,29 +1794,31 @@ class MainActivity : Activity() {
         return box
     }
 
-    private fun hybridWeekLines(): List<String> = listOf(
-        "Segunda: corrida forte 5 km, sem musculacao.",
-        "Terca: Treino A + corrida leve 15-25 min.",
-        "Quarta: descanso ou mobilidade.",
-        "Quinta: Treino B pernas/core + corrida leve 10-15 min.",
-        "Sexta: descanso.",
-        "Sabado: Treino C costas/biceps + corrida ritmo.",
-        "Domingo: corrida longa leve 35-50 min.",
-    )
+    private fun hybridWeekLines(): List<String> {
+        val strengthByDay = plans.mapIndexed { index, plan -> Pair(index, plan) }
+            .groupBy { (index, plan) -> workoutPlanDayIndex(plan, index) }
+        val runsByDay = currentRunningWeekWorkouts().groupBy { workout ->
+            dayIndexFor(scheduledDayFor(workout)) ?: workout.dayIndex
+        }
+        return (1..7).map { dayIndex ->
+            val activities = strengthByDay[dayIndex].orEmpty().map { it.second.title } +
+                runsByDay[dayIndex].orEmpty().map { it.title }
+            weekdayNames()[dayIndex - 1] + ": " + activities.ifEmpty { listOf("Descanso") }.joinToString(" + ") + "."
+        }
+    }
 
-    private fun runningWeekLines(): List<String> = listOf(
-        "Segunda: 10 min leve + 6x400 m forte + 8-10 min leve.",
-        "Terca: depois do Treino A, 15-25 min bem confortavel.",
-        "Quinta: depois de pernas, 10-15 min leve para soltar.",
-        "Sabado: 10 min leve + 15-20 min ritmo RPE 7 + 5 min leve.",
-        "Domingo: 35-50 min leve para construir base aerobica.",
-        "Quarta e sexta: descanso, mobilidade ou caminhada leve.",
-    )
+    private fun runningWeekLines(): List<String> {
+        return currentRunningWeekWorkouts()
+            .sortedBy(::scheduledDayFor)
+            .map { workout ->
+                weekdayNames()[(dayIndexFor(scheduledDayFor(workout)) ?: workout.dayIndex).coerceIn(1, 7) - 1] +
+                    ": " + workout.title + " | " + runningStageSummary(workout) + "."
+            }
+    }
 
     private fun renderWorkout(root: LinearLayout) {
         val plan = currentPlan()
         root.addView(workoutHeader(plan))
-        root.addView(sectionTitle("Planos"))
         root.addView(planSelector())
         val completion = currentStrengthSessionCompletion()
         if (completion != null) {
@@ -1464,64 +1835,70 @@ class MainActivity : Activity() {
         if (requestedSection == "workout_current") pageScrollTarget = register
         root.addView(register)
         root.addView(smartStrengthCoachPanel())
-        val deferredSection = requestedSection
-        val deferred = LinearLayout(this)
-        deferred.orientation = LinearLayout.VERTICAL
-        root.addView(deferred)
-        root.postDelayed({
-            if (!root.isAttachedToWindow || currentTab != "workout") return@postDelayed
-            deferred.addView(sectionTitle("Exercicios do treino"))
-            val exerciseList = exerciseList()
-            deferred.addView(exerciseList)
-            deferred.addView(sectionTitle("Apoio da sessao"))
-            val support = gymModePanel()
-            deferred.addView(support)
-
-            val target = when (deferredSection) {
-                "workout_media" -> register
-                "workout_exercises" -> exerciseList
-                "workout_support" -> support
-                else -> null
-            }
-            target?.let { view ->
-                view.postDelayed({ scrollPageToTarget(root, view) }, 80L)
-            }
-        }, 120L)
+        root.addView(sectionTitle("Exercicios do treino"))
+        val list = exerciseList()
+        root.addView(list)
+        when (requestedSection) {
+            "workout_media" -> pageScrollTarget = register
+            "workout_exercises", "workout_support" -> pageScrollTarget = list
+        }
     }
 
     private fun workoutHeader(plan: WorkoutPlan): View {
-        val totalSets = plan.exercises.sumOf { exercise -> defaultSetCountFor(exercise.target) }
-        val averageRest = plan.exercises
-            .map { exercise -> restSecondsForPlanExercise(exercise) }
-            .filter { seconds -> seconds > 0 }
-            .average()
-            .takeIf { value -> !value.isNaN() }
-            ?.roundToInt()
-            ?: 0
         val completed = completedExerciseCount()
-
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
-        box.setPadding(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm))
-        box.addView(label("TREINO DE HOJE", green, 13f, true))
+        box.setPadding(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Md))
 
-        val titleRow = LinearLayout(this)
-        titleRow.orientation = LinearLayout.HORIZONTAL
-        titleRow.gravity = Gravity.CENTER_VERTICAL
-        val title = LinearLayout(this)
-        title.orientation = LinearLayout.VERTICAL
-        title.addView(label(plan.title, white, 28f, true))
-        title.addView(label(plan.focus, muted, 15f, false))
-        titleRow.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        titleRow.addView(statusChip(if (completed >= plan.exercises.size) "CONCLUIDO" else "EM ANDAMENTO"))
-        box.addView(titleRow)
-        box.addView(label(
-            plan.exercises.size.toString() + " exercicios | " + totalSets + " series | descanso medio " + averageRest + "s",
-            muted,
-            14f,
-            false,
+        val appRow = LinearLayout(this)
+        appRow.orientation = LinearLayout.HORIZONTAL
+        appRow.gravity = Gravity.CENTER_VERTICAL
+        appRow.addView(label("Treino", white, 28f, true), LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
         ))
+        val more = workoutIconButton(Mo2ActionIcon.More, white, surface2, "Opcoes do treino")
+        more.setOnClickListener { anchor -> showWorkoutMenu(anchor) }
+        appRow.addView(more, LinearLayout.LayoutParams(dp(42), dp(42)))
+        box.addView(appRow)
+
+        val planRow = LinearLayout(this)
+        planRow.orientation = LinearLayout.HORIZONTAL
+        planRow.gravity = Gravity.CENTER_VERTICAL
+        val planText = LinearLayout(this)
+        planText.orientation = LinearLayout.VERTICAL
+        planText.addView(label(plan.title, white, 21f, true))
+        val focus = workoutPlanSubtitle(plan, plans.indexOfFirst { it.id == plan.id }.coerceAtLeast(0))
+        val focusLabel = label(focus, muted, 13f, false)
+        focusLabel.maxLines = 1
+        focusLabel.ellipsize = TextUtils.TruncateAt.END
+        planText.addView(focusLabel)
+        planRow.addView(planText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        planRow.addView(statusChip(if (completed >= plan.exercises.size) "CONCLUIDO" else "EM ANDAMENTO"))
+        val planParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        planParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        box.addView(planRow, planParams)
         return box
+    }
+
+    private fun showWorkoutMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add("Editar plano de treinos")
+        popup.menu.add("Ver historico")
+        popup.menu.add("Abrir exercicios")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title.toString()) {
+                "Editar plano de treinos" -> switchTab("plan_editor")
+                "Ver historico" -> switchTab("history")
+                "Abrir exercicios" -> switchTab("exercises")
+            }
+            true
+        }
+        popup.show()
     }
 
     private fun completedStrengthWorkoutPanel(completion: JSONObject): View {
@@ -1566,7 +1943,6 @@ class MainActivity : Activity() {
 
     private fun workoutProgressPanel(): View {
         val plan = currentPlan()
-        val exercise = currentExercise()
         val logs = allLogs()
         var planSetsToday = 0
         var planVolumeToday = 0.0
@@ -1578,49 +1954,47 @@ class MainActivity : Activity() {
             }
         }
 
-        val sets = plannedSetsForCurrentExercise()
-        val doneSets = countDonePlannedSets(sets)
         val completedExercises = completedExerciseCount()
         val planPercent = progressPercent(completedExercises, plan.exercises.size)
+        val startedAt = prefs.getLong("strength_session_started_at_ms", 0L)
+        val elapsedMinutes = if (startedAt > 0L) {
+            ((System.currentTimeMillis() - startedAt) / 60000L).coerceAtLeast(0L)
+        } else {
+            0L
+        }
 
-        val box = card(surface3)
+        val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("SESSAO DE HOJE", green, 13f, true))
-        box.addView(label(completedExercises.toString() + " de " + plan.exercises.size + " exercicios concluidos", white, 22f, true))
-        box.addView(label("Agora: " + exercise.name, muted, 14f, false))
-        box.addView(workoutMetricStrip(listOf(
-            Pair("SERIES", planSetsToday.toString()),
-            Pair("VOLUME", planVolumeToday.roundToInt().toString() + " kg"),
-            Pair("ATUAL", doneSets.toString() + "/" + sets.length()),
-        )))
-        box.addView(dashboardProgressLine(
-            "Avanco do treino",
-            completedExercises.toString() + " de " + plan.exercises.size + " exercicios concluidos",
-            planPercent,
-            green,
-        ))
+        box.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+        box.background = rounded(surface, dp(Mo2Radius.Md), border)
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        params.setMargins(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm))
+        box.layoutParams = params
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
-        val previous = actionButton("Anterior", surface2, white)
-        previous.setOnClickListener {
-            if (selectedExerciseIndex > 0) {
-                selectedExerciseIndex -= 1
-                prefs.edit().putInt("selected_exercise", selectedExerciseIndex).apply()
-                renderWorkoutInPlace()
-            }
-        }
-        row.addView(previous, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val next = actionButton("Proximo", green, bg)
-        next.setOnClickListener {
-            if (selectedExerciseIndex < plan.exercises.lastIndex) {
-                selectedExerciseIndex += 1
-                prefs.edit().putInt("selected_exercise", selectedExerciseIndex).apply()
-                renderWorkoutInPlace()
-            }
-        }
-        row.addView(next, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(row))
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.addView(label(
+            completedExercises.toString() + " de " + plan.exercises.size + " concluidos",
+            white,
+            14f,
+            true,
+        ), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(label(elapsedMinutes.toString() + " min", muted, 12f, false))
+        val volume = label(planVolumeToday.roundToInt().toString() + " kg", muted, 12f, false)
+        volume.setPadding(dp(Mo2Spacing.Md), 0, 0, 0)
+        row.addView(volume)
+        val setCount = label(planSetsToday.toString() + " series", muted, 12f, false)
+        setCount.setPadding(dp(Mo2Spacing.Md), 0, 0, 0)
+        row.addView(setCount)
+        box.addView(row)
+        val progress = Mo2Components.progressBar(this, planPercent, green)
+        val progressParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(6))
+        progressParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        box.addView(progress, progressParams)
         return box
     }
 
@@ -1687,169 +2061,289 @@ class MainActivity : Activity() {
         val sets = plannedSetsForCurrentExercise()
         val doneCount = countDonePlannedSets(sets)
 
-        val box = card(surface3)
+        val box = card(surface)
         box.orientation = LinearLayout.VERTICAL
-        box.addView(label("AJUSTE INTELIGENTE", green, 13f, true))
-        box.addView(label("Proxima carga: " + formatLoad(adjustment.nextLoad), white, 24f, true))
-        box.addView(label(adjustment.loadReason, muted, 14f, false))
-        box.addView(label("Volume sugerido: " + adjustment.suggestedSetCount + " series", white, 18f, true))
-        box.addView(label(doneCount.toString() + "/" + sets.length() + " series feitas agora. " + adjustment.volumeReason, muted, 14f, false))
         val availableWeights = availableWeightsFor(exercise, adjustment.nextLoad)
         val weightMode = if (customAvailableWeightsFor(exercise) == null) "Sugestoes padrao" else "Pesos personalizados"
-        box.addView(label(weightMode + ": " + availableWeightSummary(availableWeights), muted, 13f, false))
+
+        val heading = LinearLayout(this)
+        heading.orientation = LinearLayout.HORIZONTAL
+        heading.gravity = Gravity.CENTER_VERTICAL
+        val icon = workoutIconButton(Mo2ActionIcon.Star, Mo2Colors.Running, surface2, "Ajuste inteligente")
+        icon.isClickable = false
+        heading.addView(icon, LinearLayout.LayoutParams(dp(38), dp(38)))
+        val headingText = LinearLayout(this)
+        headingText.orientation = LinearLayout.VERTICAL
+        headingText.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm), 0)
+        headingText.addView(label("Ajuste inteligente", white, 14f, true))
+        headingText.addView(label(
+            doneCount.toString() + "/" + sets.length() + " series feitas",
+            muted,
+            11f,
+            false,
+        ))
+        heading.addView(headingText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        heading.addView(label(formatLoad(adjustment.nextLoad), green, 19f, true))
+        box.addView(heading)
+
+        val reason = label(adjustment.loadReason + " " + adjustment.volumeReason, muted, 12f, false)
+        reason.maxLines = 2
+        reason.ellipsize = TextUtils.TruncateAt.END
+        val reasonParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        reasonParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        box.addView(reason, reasonParams)
+        val weights = label(weightMode + ": " + availableWeightSummary(availableWeights), Mo2Colors.TextMuted, 11f, false)
+        weights.maxLines = 1
+        weights.ellipsize = TextUtils.TruncateAt.END
+        box.addView(weights)
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         val applyLoad = actionButton("Aplicar carga", green, bg)
         applyLoad.setOnClickListener { applySmartLoadToPendingSets() }
-        row.addView(applyLoad, LinearLayout.LayoutParams(0, dp(50), 1f))
+        row.addView(applyLoad, LinearLayout.LayoutParams(0, dp(46), 1f))
 
-        val applyVolume = actionButton("Ajustar series", surface2, green)
+        val applyVolume = actionButton(adjustment.suggestedSetCount.toString() + " series", surface2, green)
         applyVolume.setOnClickListener { applySmartVolumeToCurrentExercise() }
-        row.addView(applyVolume, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(row))
-
-        val available = actionButton("Pesos disponiveis", surface2, white)
+        row.addView(applyVolume, LinearLayout.LayoutParams(0, dp(46), 0.72f))
+        val available = workoutIconButton(Mo2ActionIcon.Dumbbell, white, surface2, "Pesos disponiveis")
         available.setOnClickListener { showAvailableWeightsDialog(exercise) }
-        box.addView(buttonParams(available))
+        row.addView(available, LinearLayout.LayoutParams(dp(46), dp(46)))
+        box.addView(spacedRow(row))
         return box
     }
 
     private fun showAvailableWeightsDialog(exercise: ExercisePlan) {
         val adjustment = strengthAdjustmentFor(exercise)
         val weights = availableWeightsFor(exercise, adjustment.nextLoad)
+        val candidates = (defaultAvailableWeightsFor(exercise, adjustment.nextLoad) + weights)
+            .filter { value -> value > 0.0 }
+            .distinctBy { value -> (value * 100.0).roundToInt() }
+            .sorted()
+        val selectedWeights = weights.toMutableList()
         val customized = customAvailableWeightsFor(exercise) != null
+        lateinit var dialog: AlertDialog
+
+        val sheet = LinearLayout(this)
+        sheet.orientation = LinearLayout.VERTICAL
+        sheet.setPadding(dp(18), dp(12), dp(18), dp(18))
+        sheet.background = rounded(surface, dp(Mo2Radius.Modal), border)
+
+        val handle = View(this)
+        handle.background = rounded(Mo2Colors.Disabled, dp(Mo2Radius.Pill), null)
+        val handleParams = LinearLayout.LayoutParams(dp(42), dp(4))
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL
+        handleParams.setMargins(0, 0, 0, dp(Mo2Spacing.Md))
+        sheet.addView(handle, handleParams)
+
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+        val headerText = LinearLayout(this)
+        headerText.orientation = LinearLayout.VERTICAL
+        headerText.addView(label("Pesos disponiveis", white, 21f, true))
+        headerText.addView(label(exercise.name, muted, 12f, false))
+        header.addView(headerText, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+        val close = workoutIconButton(Mo2ActionIcon.Clear, white, surface2, "Fechar")
+        close.setOnClickListener { dialog.dismiss() }
+        header.addView(close, LinearLayout.LayoutParams(dp(40), dp(40)))
+        sheet.addView(header)
+
         val content = LinearLayout(this)
         content.orientation = LinearLayout.VERTICAL
-        content.setPadding(dp(18), dp(18), dp(18), dp(12))
-        content.background = rounded(surface, dp(Mo2Radius.Modal), border)
-        content.addView(label("PESOS DISPONIVEIS", green, 13f, true))
-        content.addView(label(exercise.name, white, 22f, true))
-        content.addView(label(if (customized) "LISTA PERSONALIZADA" else "SUGESTOES PADRAO", if (customized) amber else muted, 12f, true))
+        content.setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md))
+        content.addView(label(
+            if (customized) "VALORES PERSONALIZADOS" else "SUGESTOES PADRAO",
+            if (customized) green else muted,
+            10f,
+            true,
+        ))
+        content.addView(label(
+            "Toque para incluir ou remover um valor das sugestoes deste exercicio.",
+            muted,
+            11f,
+            false,
+        ))
 
-        lateinit var dialog: AlertDialog
-        var reopening = false
-        weights.forEach { weight ->
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER_VERTICAL
-            row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs))
-            row.background = rounded(surface2, dp(Mo2Radius.Md), border)
-            row.addView(label(formatLoad(weight), white, 16f, true), LinearLayout.LayoutParams(0, dp(48), 1f))
-            val remove = actionButton("x", surface2, danger)
-            remove.textSize = accessibleTextSize(22f)
-            remove.contentDescription = "Remover " + formatLoad(weight)
-            remove.setOnClickListener {
-                saveAvailableWeights(exercise, weights.filterNot { value -> kotlin.math.abs(value - weight) < 0.001 })
-                reopening = true
-                dialog.dismiss()
-                showAvailableWeightsDialog(exercise)
+        val grid = GridLayout(this)
+        grid.columnCount = 4
+        grid.alignmentMode = GridLayout.ALIGN_BOUNDS
+        grid.useDefaultMargins = false
+        val gridParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        gridParams.setMargins(0, dp(Mo2Spacing.Md), 0, 0)
+        content.addView(grid, gridParams)
+
+        fun containsWeight(weight: Double): Boolean {
+            return selectedWeights.any { selected -> kotlin.math.abs(selected - weight) < 0.001 }
+        }
+
+        fun styleChip(chip: TextView, weight: Double) {
+            val active = containsWeight(weight)
+            chip.setTextColor(if (active) green else muted)
+            chip.background = rounded(
+                if (active) Mo2Colors.PrimarySoft else surface2,
+                dp(Mo2Radius.Sm),
+                if (active) green else border,
+            )
+        }
+
+        candidates.forEach { weight ->
+            val chip = label(formatLoad(weight).removeSuffix(" kg"), muted, 12f, true)
+            chip.gravity = Gravity.CENTER
+            chip.isClickable = true
+            chip.isFocusable = true
+            chip.contentDescription = formatLoad(weight) + if (containsWeight(weight)) ", selecionado" else ", nao selecionado"
+            styleChip(chip, weight)
+            chip.setOnClickListener {
+                val existing = selectedWeights.indexOfFirst { selected -> kotlin.math.abs(selected - weight) < 0.001 }
+                if (existing >= 0) selectedWeights.removeAt(existing) else selectedWeights.add(weight)
+                chip.contentDescription = formatLoad(weight) + if (containsWeight(weight)) ", selecionado" else ", nao selecionado"
+                styleChip(chip, weight)
             }
-            row.addView(remove, LinearLayout.LayoutParams(dp(52), dp(48)))
-            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            params.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
-            content.addView(row, params)
-        }
-        if (weights.isEmpty()) {
-            content.addView(label("Nenhum peso configurado", muted, 14f, false))
+            val chipParams = GridLayout.LayoutParams().apply {
+                width = 0
+                height = dp(44)
+                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            }
+            grid.addView(chip, chipParams)
         }
 
-        val newWeight = input("Peso em kg (ex.: 17,5)", "")
+        content.addView(label("ADICIONAR VALOR PERSONALIZADO", muted, 10f, true).also { view ->
+            view.setPadding(0, dp(Mo2Spacing.Lg), 0, 0)
+        })
+        val customRow = LinearLayout(this)
+        customRow.orientation = LinearLayout.HORIZONTAL
+        customRow.gravity = Gravity.CENTER_VERTICAL
+        val newWeight = input("Ex.: 17,5 kg", "")
         newWeight.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-        content.addView(newWeight)
-        val add = actionButton("Adicionar peso", green, bg)
+        customRow.addView(newWeight, LinearLayout.LayoutParams(0, dp(46), 1f))
+        val add = workoutIconButton(Mo2ActionIcon.Plus, green, surface2, "Adicionar peso")
         add.setOnClickListener {
             val value = newWeight.textValue().replace(',', '.').toDoubleOrNull()
             if (value == null || value <= 0.0) {
                 Toast.makeText(this, "Informe um peso maior que zero.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            saveAvailableWeights(exercise, weights + value)
-            reopening = true
+            saveAvailableWeights(exercise, selectedWeights + value)
             dialog.dismiss()
             showAvailableWeightsDialog(exercise)
         }
-        content.addView(buttonParams(add))
+        val addParams = LinearLayout.LayoutParams(dp(46), dp(46))
+        addParams.setMargins(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), 0, 0)
+        customRow.addView(add, addParams)
+        content.addView(customRow)
 
-        val restore = actionButton("Restaurar sugestoes padrao", surface2, green)
+        val restore = actionButton("Restaurar valores padrao", surface2, green)
         restore.setOnClickListener {
             clearAvailableWeights(exercise)
-            reopening = true
             dialog.dismiss()
             showAvailableWeightsDialog(exercise)
         }
-        content.addView(buttonParams(restore))
-        val close = actionButton("Fechar", surface2, white)
-        close.setOnClickListener { dialog.dismiss() }
-        content.addView(buttonParams(close))
+        val restoreParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(44),
+        )
+        restoreParams.setMargins(0, dp(Mo2Spacing.Md), 0, 0)
+        content.addView(restore, restoreParams)
 
         val scroll = ScrollView(this)
         scroll.isFillViewport = true
         scroll.isVerticalScrollBarEnabled = true
         scroll.addView(content)
+        sheet.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f,
+        ))
+
+        val save = actionButton("Salvar pesos", green, bg)
+        save.setOnClickListener {
+            saveAvailableWeights(exercise, selectedWeights.sorted())
+            dialog.dismiss()
+        }
+        val saveParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(50),
+        )
+        saveParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        sheet.addView(save, saveParams)
+
         dialog = AlertDialog.Builder(this)
-            .setView(scroll)
+            .setView(sheet)
             .create()
-        dialog.setOnShowListener {
-            content.startAnimation(smoothPopupAnimation())
-            dialog.window?.setLayout(
-                (resources.displayMetrics.widthPixels * 0.94f).roundToInt(),
-                (resources.displayMetrics.heightPixels * 0.82f).roundToInt(),
-            )
-        }
         dialog.setOnDismissListener {
-            if (!reopening && currentTab == "workout") renderWorkoutInPlace()
+            if (currentTab == "workout") renderWorkoutInPlace()
         }
-        dialog.show()
+        showWorkoutBottomSheet(dialog, sheet, 0.82f)
     }
 
     private fun restTimerPanel(): View {
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
-        box.setPadding(0, dp(Mo2Spacing.Lg), 0, dp(Mo2Spacing.Sm))
+        box.setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Xs))
         val active = restTimerRemainingSeconds() > 0L
-        val heading = LinearLayout(this)
-        heading.orientation = LinearLayout.HORIZONTAL
-        heading.gravity = Gravity.CENTER_VERTICAL
-        heading.addView(label("DESCANSO", green, 13f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        heading.addView(label(if (active) "ATIVO" else "PRONTO", if (active) green else muted, 11f, true))
-        box.addView(heading)
-
         val controls = LinearLayout(this)
         controls.orientation = LinearLayout.HORIZONTAL
         controls.gravity = Gravity.CENTER_VERTICAL
         val reduce = actionButton("-30", surface2, white)
+        reduce.textSize = accessibleTextSize(13f)
+        reduce.maxLines = 1
         reduce.contentDescription = "Reduzir descanso em 30 segundos"
         reduce.isEnabled = active
         reduce.setOnClickListener { adjustRestTime(-30) }
-        controls.addView(reduce, LinearLayout.LayoutParams(dp(64), dp(52)))
+        controls.addView(reduce, LinearLayout.LayoutParams(dp(66), dp(44)))
 
-        val timer = label(restTimerDisplay(), white, 34f, true)
+        val timerBox = LinearLayout(this)
+        timerBox.orientation = LinearLayout.VERTICAL
+        timerBox.gravity = Gravity.CENTER
+        val timerCaption = label("DESCANSO", if (active) green else muted, 10f, true)
+        timerCaption.gravity = Gravity.CENTER
+        timerBox.addView(timerCaption)
+        val timer = label(restTimerDisplay(), white, 28f, true)
         timer.gravity = Gravity.CENTER
         restTimerText = timer
-        val timerParams = LinearLayout.LayoutParams(0, dp(58), 1f)
+        timerBox.addView(timer)
+        val timerParams = LinearLayout.LayoutParams(0, dp(52), 1f)
         timerParams.setMargins(dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm), 0)
-        controls.addView(timer, timerParams)
+        controls.addView(timerBox, timerParams)
 
         val add = actionButton("+30", surface2, white)
+        add.textSize = accessibleTextSize(13f)
+        add.maxLines = 1
         add.contentDescription = "Adicionar 30 segundos ao descanso"
         add.setOnClickListener { adjustRestTime(30) }
-        controls.addView(add, LinearLayout.LayoutParams(dp(64), dp(52)))
+        controls.addView(add, LinearLayout.LayoutParams(dp(66), dp(44)))
+        val toggle = workoutIconButton(
+            if (active) Mo2ActionIcon.Pause else Mo2ActionIcon.Play,
+            if (active) danger else green,
+            surface2,
+            if (active) "Parar descanso" else "Iniciar descanso",
+        )
+        toggle.setOnClickListener {
+            if (active) clearRestTimer() else startRestTimerForCurrentExercise()
+        }
+        val toggleParams = LinearLayout.LayoutParams(dp(44), dp(44))
+        toggleParams.setMargins(dp(Mo2Spacing.Sm), 0, 0, 0)
+        controls.addView(toggle, toggleParams)
         box.addView(controls)
-        box.addView(label(restTimerSubtitle(), muted, 14f, false))
+        val subtitle = label(restTimerSubtitle(), muted, 11f, false)
+        subtitle.gravity = Gravity.CENTER
+        subtitle.maxLines = 1
+        subtitle.ellipsize = TextUtils.TruncateAt.END
+        box.addView(subtitle)
         if (active) restTimerHandler.post(restTimerRunnable)
         else notifyRestTimerFinishedIfNeeded()
-
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        val start = actionButton(if (active) "Reiniciar" else "Iniciar", green, bg)
-        start.setOnClickListener { startRestTimerForCurrentExercise() }
-        row.addView(start, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val stop = actionButton("Parar", surface2, danger)
-        stop.isEnabled = active
-        stop.setOnClickListener { clearRestTimer() }
-        row.addView(stop, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(row))
         return box
     }
 
@@ -2078,7 +2572,7 @@ class MainActivity : Activity() {
         val overview = card(surface3)
         overview.orientation = LinearLayout.VERTICAL
         overview.addView(label("ESSA SEMANA", green, 13f, true))
-        overview.addView(label("Semana " + week + " de 6", white, 28f, true))
+        overview.addView(label("Semana " + week + " de " + runningPlanWeekCount(), white, 28f, true))
         overview.addView(label("Meta: completar os 5 treinos e evoluir com controle ate os 5 km.", muted, 14f, false))
 
         val metrics = LinearLayout(this)
@@ -2277,7 +2771,7 @@ class MainActivity : Activity() {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("PLANEJAMENTO COMPLETO", green, 13f, true))
-        box.addView(label("6 semanas progressivas para prova de 5 km", white, 22f, true))
+        box.addView(label(runningPlanWeekCount().toString() + " semanas para a prova de 5 km", white, 22f, true))
         runningPlan.groupBy { it.week }.forEach { entry ->
             box.addView(label("Semana " + entry.key, amber, 16f, true))
             entry.value.forEach { workout ->
@@ -2524,7 +3018,7 @@ class MainActivity : Activity() {
     private fun planEditorSummary(): View {
         val box = card(surface3)
         box.orientation = LinearLayout.VERTICAL
-        val custom = prefs.contains("custom_workout_plans")
+        val custom = prefs.contains("custom_workout_plans") || prefs.contains("custom_running_plan")
         box.addView(label("STATUS DO PLANO", green, 13f, true))
         box.addView(label(if (custom) "Plano personalizado ativo" else "Plano padrao ativo", white, 23f, true))
         box.addView(label(plans.size.toString() + " treinos de musculacao | " + runningPlan.size + " corridas planejadas", muted, 15f, false))
@@ -2544,17 +3038,28 @@ class MainActivity : Activity() {
                 prefs.edit().putInt("editor_plan", index).putInt("editor_exercise", 0).apply()
                 render()
             }
-            item.addView(label(plan.title + " - " + plan.focus, white, 17f, true))
-            item.addView(label(plan.exercises.size.toString() + " exercicios", muted, 13f, false))
+            item.addView(label(plan.title + " - " + workoutFocusText(plan.focus), white, 17f, true))
+            item.addView(label(
+                weekdayNames()[workoutPlanDayIndex(plan, index) - 1] + " | " + plan.exercises.size + " exercicios",
+                muted,
+                13f,
+                false,
+            ))
             box.addView(item)
         }
 
         val add = actionButton("Adicionar treino", surface2, green)
         add.setOnClickListener {
             val updated = plans.toMutableList()
-            updated.add(WorkoutPlan("custom-" + System.currentTimeMillis(), "Novo treino", "Dia e foco", listOf(
-                ExercisePlan("Novo exercicio", "3 x 10", "60s", "Edite este exercicio antes de usar."),
-            )))
+            val todayIndex = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull()?.coerceIn(1, 7) ?: 1
+            updated.add(WorkoutPlan(
+                id = "custom-" + System.currentTimeMillis(),
+                title = "Novo treino",
+                focus = "Foco do treino",
+                exercises = listOf(ExercisePlan("Novo exercicio", "3 x 10", "60s", "Edite este exercicio antes de usar.")),
+                dayIndex = todayIndex,
+                homeCardKey = Mo2WorkoutHomeCard.defaultForPlanIndex(updated.size),
+            ))
             saveWorkoutPlans(updated)
             prefs.edit().putInt("editor_plan", updated.lastIndex).putInt("editor_exercise", 0).apply()
             Toast.makeText(this, "Treino adicionado.", Toast.LENGTH_SHORT).show()
@@ -2564,22 +3069,72 @@ class MainActivity : Activity() {
         return box
     }
 
+    private fun weekdaySelector(initialDayIndex: Int, onSelected: (Int) -> Unit): View {
+        val scroll = HorizontalScrollView(this)
+        scroll.isHorizontalScrollBarEnabled = false
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        var selected = initialDayIndex.coerceIn(1, 7)
+        val buttons = mutableListOf<TextView>()
+        weekdayShortNames().forEachIndexed { index, day ->
+            val button = pill(day, selected == index + 1, 76, 46)
+            buttons.add(button)
+            row.addView(button)
+            button.setOnClickListener {
+                selected = index + 1
+                buttons.forEachIndexed { buttonIndex, item ->
+                    val active = buttonIndex + 1 == selected
+                    item.setTextColor(if (active) bg else white)
+                    item.background = rounded(if (active) green else surface, dp(8), if (active) green else border)
+                }
+                onSelected(selected)
+            }
+        }
+        scroll.addView(row)
+        return scroll
+    }
+
     private fun planDetailsEditor(): View {
         val planIndex = editorPlanIndex()
         val plan = plans[planIndex]
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("EDITAR TREINO", green, 13f, true))
+        var selectedDayIndex = workoutPlanDayIndex(plan, planIndex)
         val title = input("Nome do treino", plan.title)
-        val focus = input("Dia e foco", plan.focus)
+        val focus = input("Foco e observacoes", workoutFocusText(plan.focus))
         box.addView(title)
         box.addView(focus)
+        box.addView(label("DIA DA SEMANA", muted, 12f, true))
+        box.addView(weekdaySelector(selectedDayIndex) { dayIndex -> selectedDayIndex = dayIndex })
+        box.addView(label("CARD DA TELA INICIAL", muted, 12f, true))
+        val currentCard = workoutHomeCardOption(plan.homeCardKey, planIndex)
+        val cardPreview = ImageView(this)
+        cardPreview.setImageResource(currentCard.imageRes)
+        cardPreview.scaleType = ImageView.ScaleType.CENTER_CROP
+        cardPreview.contentDescription = "Card da Home: " + currentCard.title
+        cardPreview.background = rounded(surface2, dp(Mo2Radius.Md), border)
+        cardPreview.clipToOutline = true
+        box.addView(
+            cardPreview,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(138),
+            ).apply {
+                setMargins(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm))
+            },
+        )
+        val chooseCard = actionButton("Trocar card da Home: " + currentCard.title, surface2, green)
+        chooseCard.maxLines = 1
+        chooseCard.setAutoSizeTextTypeUniformWithConfiguration(12, 16, 1, TypedValue.COMPLEX_UNIT_SP)
+        chooseCard.setOnClickListener { showWorkoutHomeCardDialog(planIndex) }
+        box.addView(buttonParams(chooseCard))
 
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         val save = actionButton("Salvar treino", green, bg)
         save.setOnClickListener {
-            saveWorkoutPlanDetails(planIndex, title.textValue(), focus.textValue())
+            saveWorkoutPlanDetails(planIndex, title.textValue(), focus.textValue(), selectedDayIndex)
         }
         row.addView(save, LinearLayout.LayoutParams(0, dp(50), 1f))
         val duplicate = actionButton("Duplicar", surface2, white)
@@ -2680,47 +3235,366 @@ class MainActivity : Activity() {
     }
 
     private fun runningPlanEditor(): View {
-        val box = card()
-        box.orientation = LinearLayout.VERTICAL
-        box.addView(label("AJUSTES DA CORRIDA", green, 13f, true))
-        box.addView(label("Os treinos de 5 km continuam estruturados, mas voce pode calibrar tudo para sua esteira.", muted, 14f, false))
+        val section = LinearLayout(this)
+        section.orientation = LinearLayout.VERTICAL
+
+        val calibration = card()
+        calibration.orientation = LinearLayout.VERTICAL
+        calibration.addView(label("AJUSTES DA CORRIDA", green, 13f, true))
+        calibration.addView(label("Calibre o ciclo inteiro; as edicoes individuais abaixo continuam preservadas.", muted, 14f, false))
         val speed = input("Ajuste de velocidade km/h", prefs.getString("running_speed_offset", "0.0") ?: "0.0")
         val scale = input("Multiplicador de distancia", prefs.getString("running_distance_scale", "1.00") ?: "1.00")
         val start = input("Inicio do ciclo yyyy-mm-dd", prefs.getString("running_plan_start_day", dayKey()) ?: dayKey())
-        box.addView(speed)
-        box.addView(scale)
-        box.addView(start)
-        box.addView(label("Exemplo: velocidade 0.3 deixa todas as fases 0,3 km/h mais rapidas; distancia 0.90 reduz os blocos para 90%.", muted, 13f, false))
+        calibration.addView(speed)
+        calibration.addView(scale)
+        calibration.addView(start)
+        calibration.addView(label("Exemplo: velocidade 0.3 soma 0,3 km/h; distancia 0.90 usa 90% de cada etapa.", muted, 13f, false))
 
         val save = actionButton("Salvar ajustes da corrida", green, bg)
         save.setOnClickListener {
             val speedValue = speed.textValue().replace(',', '.').toDoubleOrNull() ?: 0.0
             val scaleValue = (scale.textValue().replace(',', '.').toDoubleOrNull() ?: 1.0).coerceIn(0.60, 1.40)
+            val startDay = start.textValue().trim()
+            if (!isValidDayKey(startDay)) {
+                Toast.makeText(this, "Use uma data valida no formato yyyy-mm-dd.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             prefs.edit()
                 .putString("running_speed_offset", speedValue.coerceIn(-2.0, 2.0).toString())
                 .putString("running_distance_scale", scaleValue.toString())
-                .putString("running_plan_start_day", start.textValue().ifBlank { dayKey() })
+                .putString("running_plan_start_day", startDay)
                 .remove("selected_run_id")
                 .apply()
             clearActiveRun()
             Toast.makeText(this, "Corrida ajustada.", Toast.LENGTH_SHORT).show()
             render()
         }
-        box.addView(buttonParams(save))
-        return box
+        calibration.addView(buttonParams(save))
+        section.addView(calibration)
+
+        val effectivePlan = runningPlan
+        val availableWeeks = effectivePlan.map { it.week }.distinct().sorted().ifEmpty { listOf(1) }
+        val requestedWeek = prefs.getInt("editor_running_week", currentRunningPlanWeek())
+        val selectedWeek = availableWeeks.minByOrNull { week -> kotlin.math.abs(week - requestedWeek) } ?: 1
+        val weekWorkouts = effectivePlan.filter { it.week == selectedWeek }
+        val savedWorkoutId = prefs.getString("editor_running_workout_id", null)
+        val selectedWorkout = weekWorkouts.firstOrNull { it.id == savedWorkoutId } ?: weekWorkouts.firstOrNull()
+
+        val selector = card()
+        selector.orientation = LinearLayout.VERTICAL
+        selector.addView(label("PLANEJAMENTO DE CORRIDA", Mo2Colors.Running, 13f, true))
+        selector.addView(label("Escolha a semana e a sessao que deseja alterar.", white, 19f, true))
+        val weekScroll = HorizontalScrollView(this)
+        weekScroll.isHorizontalScrollBarEnabled = false
+        val weekRow = LinearLayout(this)
+        weekRow.orientation = LinearLayout.HORIZONTAL
+        availableWeeks.forEach { week ->
+            val button = pill("Semana " + week, week == selectedWeek, 112, 46)
+            button.setOnClickListener {
+                prefs.edit()
+                    .putInt("editor_running_week", week)
+                    .remove("editor_running_workout_id")
+                    .putInt("editor_running_stage", 0)
+                    .apply()
+                render()
+            }
+            weekRow.addView(button)
+        }
+        weekScroll.addView(weekRow)
+        selector.addView(weekScroll)
+        weekWorkouts.forEach { workout ->
+            val active = workout.id == selectedWorkout?.id
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.VERTICAL
+            row.setPadding(dp(14), dp(12), dp(14), dp(12))
+            row.background = rounded(if (active) surface3 else surface, dp(Mo2Radius.Md), if (active) Mo2Colors.Running else border)
+            row.addView(label(weekdayNames()[workout.dayIndex - 1] + " | " + workout.title, white, 16f, true))
+            row.addView(label(workout.stages.size.toString() + " etapas | " + formatKm(totalRunDistance(workout)), muted, 13f, false))
+            row.setOnClickListener {
+                prefs.edit()
+                    .putString("editor_running_workout_id", workout.id)
+                    .putInt("editor_running_stage", 0)
+                    .apply()
+                render()
+            }
+            val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            params.setMargins(0, dp(8), 0, 0)
+            selector.addView(row, params)
+        }
+        val addWorkout = actionButton("Adicionar corrida nesta semana", surface2, Mo2Colors.Running)
+        addWorkout.setOnClickListener { addRunningPlanWorkout(selectedWeek) }
+        selector.addView(buttonParams(addWorkout))
+        section.addView(selector)
+
+        if (selectedWorkout == null) return section
+
+        val details = card()
+        details.orientation = LinearLayout.VERTICAL
+        details.addView(label("EDITAR SESSAO", Mo2Colors.Running, 13f, true))
+        var selectedDayIndex = selectedWorkout.dayIndex.coerceIn(1, 7)
+        val title = input("Nome da corrida", selectedWorkout.title)
+        val focus = input("Objetivo", selectedWorkout.focus)
+        val description = textArea("Descricao", selectedWorkout.description)
+        val week = input("Semana do ciclo", selectedWorkout.week.toString())
+        week.inputType = InputType.TYPE_CLASS_NUMBER
+        details.addView(title)
+        details.addView(focus)
+        details.addView(description)
+        details.addView(week)
+        details.addView(label("DIA DA SEMANA", muted, 12f, true))
+        details.addView(weekdaySelector(selectedDayIndex) { dayIndex -> selectedDayIndex = dayIndex })
+        val saveWorkout = actionButton("Salvar sessao", green, bg)
+        saveWorkout.setOnClickListener {
+            saveRunningWorkoutDetails(
+                selectedWorkout,
+                week.textValue(),
+                selectedDayIndex,
+                title.textValue(),
+                focus.textValue(),
+                description.textValue(),
+            )
+        }
+        details.addView(buttonParams(saveWorkout))
+        val workoutActions = LinearLayout(this)
+        workoutActions.orientation = LinearLayout.HORIZONTAL
+        val duplicate = actionButton("Duplicar", surface2, white)
+        duplicate.setOnClickListener { duplicateRunningPlanWorkout(selectedWorkout) }
+        workoutActions.addView(duplicate, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val removeWorkout = actionButton("Remover", surface2, danger)
+        removeWorkout.setOnClickListener { removeRunningPlanWorkout(selectedWorkout) }
+        workoutActions.addView(removeWorkout, LinearLayout.LayoutParams(0, dp(48), 1f))
+        details.addView(spacedRow(workoutActions))
+        section.addView(details)
+
+        val stages = card()
+        stages.orientation = LinearLayout.VERTICAL
+        stages.addView(label("ETAPAS", Mo2Colors.Running, 13f, true))
+        val selectedStageIndex = prefs.getInt("editor_running_stage", 0).coerceIn(selectedWorkout.stages.indices)
+        selectedWorkout.stages.forEachIndexed { index, stage ->
+            val active = index == selectedStageIndex
+            val stageButton = actionButton(
+                (index + 1).toString() + ". " + stage.title + " | " + formatKm(stage.distanceKm) + " | " + formatSpeed(stage.speedKmh),
+                if (active) surface3 else surface,
+                if (active) Mo2Colors.Running else white,
+            )
+            stageButton.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            stageButton.setOnClickListener {
+                prefs.edit().putInt("editor_running_stage", index).apply()
+                render()
+            }
+            stages.addView(buttonParams(stageButton))
+        }
+        val selectedStage = selectedWorkout.stages[selectedStageIndex]
+        val stageTitle = input("Nome da etapa", selectedStage.title)
+        val distance = input("Distancia km", selectedStage.distanceKm.toString())
+        val stageSpeed = input("Velocidade km/h", selectedStage.speedKmh.toString())
+        val note = textArea("Orientacao da etapa", selectedStage.note)
+        distance.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        stageSpeed.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        stages.addView(stageTitle)
+        stages.addView(distance)
+        stages.addView(stageSpeed)
+        stages.addView(note)
+        val saveStage = actionButton("Salvar etapa", green, bg)
+        saveStage.setOnClickListener {
+            saveRunningPlanStage(
+                selectedWorkout,
+                selectedStageIndex,
+                stageTitle.textValue(),
+                distance.textValue(),
+                stageSpeed.textValue(),
+                note.textValue(),
+            )
+        }
+        stages.addView(buttonParams(saveStage))
+        val moveRow = LinearLayout(this)
+        moveRow.orientation = LinearLayout.HORIZONTAL
+        val up = actionButton("Subir", surface2, white)
+        up.isEnabled = selectedStageIndex > 0
+        up.alpha = if (up.isEnabled) 1f else 0.45f
+        up.setOnClickListener { moveRunningPlanStage(selectedWorkout, selectedStageIndex, -1) }
+        moveRow.addView(up, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val down = actionButton("Descer", surface2, white)
+        down.isEnabled = selectedStageIndex < selectedWorkout.stages.lastIndex
+        down.alpha = if (down.isEnabled) 1f else 0.45f
+        down.setOnClickListener { moveRunningPlanStage(selectedWorkout, selectedStageIndex, 1) }
+        moveRow.addView(down, LinearLayout.LayoutParams(0, dp(48), 1f))
+        stages.addView(spacedRow(moveRow))
+        val stageActions = LinearLayout(this)
+        stageActions.orientation = LinearLayout.HORIZONTAL
+        val addStage = actionButton("Adicionar etapa", surface2, Mo2Colors.Running)
+        addStage.setOnClickListener { addRunningPlanStage(selectedWorkout, selectedStageIndex) }
+        stageActions.addView(addStage, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val removeStage = actionButton("Remover etapa", surface2, danger)
+        removeStage.setOnClickListener { removeRunningPlanStage(selectedWorkout, selectedStageIndex) }
+        stageActions.addView(removeStage, LinearLayout.LayoutParams(0, dp(48), 1f))
+        stages.addView(spacedRow(stageActions))
+        section.addView(stages)
+        return section
+    }
+
+    private fun addRunningPlanWorkout(week: Int) {
+        val workout = RunningWorkout(
+            id = "custom-run-" + System.currentTimeMillis(),
+            week = week.coerceIn(1, 12),
+            dayName = "Segunda",
+            dayIndex = 1,
+            title = "Nova corrida",
+            focus = "Objetivo da sessao",
+            description = "Edite o dia e as etapas antes de iniciar.",
+            stages = listOf(RunningStage("Etapa 1", 1.0, 7.0, "Ritmo confortavel.")),
+        )
+        saveRunningPlan(runningPlan + workout)
+        prefs.edit()
+            .putInt("editor_running_week", workout.week)
+            .putString("editor_running_workout_id", workout.id)
+            .putInt("editor_running_stage", 0)
+            .apply()
+        Toast.makeText(this, "Corrida adicionada ao plano.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun saveRunningWorkoutDetails(
+        workout: RunningWorkout,
+        weekRaw: String,
+        dayIndex: Int,
+        titleRaw: String,
+        focusRaw: String,
+        descriptionRaw: String,
+    ) {
+        val week = weekRaw.toIntOrNull()?.coerceIn(1, 12)
+        if (week == null || titleRaw.isBlank()) {
+            Toast.makeText(this, "Informe semana e nome validos.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val updatedWorkout = workout.copy(
+            week = week,
+            dayIndex = dayIndex.coerceIn(1, 7),
+            dayName = weekdayNames()[dayIndex.coerceIn(1, 7) - 1],
+            title = titleRaw.trim(),
+            focus = focusRaw.trim().ifBlank { "Treino de corrida" },
+            description = descriptionRaw.trim(),
+        )
+        replaceRunningPlanWorkout(updatedWorkout)
+        clearRunningScheduleOverrideSilently(workout.id)
+        prefs.edit().putInt("editor_running_week", week).putString("editor_running_workout_id", workout.id).apply()
+        Toast.makeText(this, "Sessao de corrida salva.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun duplicateRunningPlanWorkout(workout: RunningWorkout) {
+        val copy = workout.copy(id = "custom-run-" + System.currentTimeMillis(), title = workout.title + " copia")
+        saveRunningPlan(runningPlan + copy)
+        prefs.edit().putString("editor_running_workout_id", copy.id).putInt("editor_running_stage", 0).apply()
+        Toast.makeText(this, "Sessao duplicada.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun removeRunningPlanWorkout(workout: RunningWorkout) {
+        if (runningPlan.size <= 1) {
+            Toast.makeText(this, "Mantenha pelo menos uma corrida no plano.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val wasActive = prefs.getString("running_active_id", "") == workout.id
+        val updated = runningPlan.filterNot { it.id == workout.id }
+        saveRunningPlan(updated)
+        clearRunningScheduleOverrideSilently(workout.id)
+        if (wasActive) clearActiveRun()
+        prefs.edit().remove("editor_running_workout_id").putInt("editor_running_stage", 0).apply()
+        Toast.makeText(this, "Sessao removida; o historico foi preservado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun saveRunningPlanStage(
+        workout: RunningWorkout,
+        stageIndex: Int,
+        titleRaw: String,
+        distanceRaw: String,
+        speedRaw: String,
+        noteRaw: String,
+    ) {
+        val distance = distanceRaw.replace(',', '.').toDoubleOrNull()
+        val speed = speedRaw.replace(',', '.').toDoubleOrNull()
+        if (titleRaw.isBlank() || distance == null || distance <= 0.0 || speed == null || speed !in 1.0..30.0) {
+            Toast.makeText(this, "Revise nome, distancia e velocidade da etapa.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val stages = workout.stages.toMutableList()
+        stages[stageIndex] = RunningStage(titleRaw.trim(), roundKm(distance), roundSpeed(speed), noteRaw.trim())
+        replaceRunningPlanWorkout(workout.copy(stages = stages))
+        Toast.makeText(this, "Etapa salva.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun addRunningPlanStage(workout: RunningWorkout, afterIndex: Int) {
+        val stages = workout.stages.toMutableList()
+        val source = stages.getOrNull(afterIndex) ?: RunningStage("Etapa", 1.0, 7.0, "")
+        val insertAt = (afterIndex + 1).coerceIn(0, stages.size)
+        stages.add(insertAt, source.copy(title = "Nova etapa"))
+        replaceRunningPlanWorkout(workout.copy(stages = stages))
+        prefs.edit().putInt("editor_running_stage", insertAt).apply()
+        Toast.makeText(this, "Etapa adicionada.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun removeRunningPlanStage(workout: RunningWorkout, stageIndex: Int) {
+        if (workout.stages.size <= 1) {
+            Toast.makeText(this, "Mantenha pelo menos uma etapa.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val stages = workout.stages.toMutableList()
+        stages.removeAt(stageIndex)
+        replaceRunningPlanWorkout(workout.copy(stages = stages))
+        prefs.edit().putInt("editor_running_stage", stageIndex.coerceAtMost(stages.lastIndex)).apply()
+        Toast.makeText(this, "Etapa removida.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun moveRunningPlanStage(workout: RunningWorkout, stageIndex: Int, direction: Int) {
+        val target = stageIndex + direction
+        if (target !in workout.stages.indices) return
+        val stages = workout.stages.toMutableList()
+        val moved = stages.removeAt(stageIndex)
+        stages.add(target, moved)
+        replaceRunningPlanWorkout(workout.copy(stages = stages))
+        prefs.edit().putInt("editor_running_stage", target).apply()
+        render()
+    }
+
+    private fun replaceRunningPlanWorkout(updatedWorkout: RunningWorkout) {
+        val updated = runningPlan.toMutableList()
+        val index = updated.indexOfFirst { it.id == updatedWorkout.id }
+        if (index < 0) return
+        updated[index] = updatedWorkout
+        saveRunningPlan(updated)
+        if (activeRunningWorkout()?.id == updatedWorkout.id) clearActiveRun()
+        selectedRunId = updatedWorkout.id
+        prefs.edit().putString("selected_run_id", updatedWorkout.id).apply()
+    }
+
+    private fun clearRunningScheduleOverrideSilently(workoutId: String) {
+        val overrides = safeObject("running_schedule_overrides")
+        if (!overrides.has(workoutId)) return
+        overrides.remove(workoutId)
+        prefs.edit().putString("running_schedule_overrides", overrides.toString()).apply()
     }
 
     private fun planEditorResetPanel(): View {
         val box = card()
         box.orientation = LinearLayout.VERTICAL
         box.addView(label("RESTAURAR PADRAO", green, 13f, true))
-        box.addView(label("Use se quiser voltar ao plano A/B/C e corrida original da v12.1.0.", muted, 14f, false))
+        box.addView(label("Volta ao plano A/B/C e ao ciclo original de corrida. O historico nao e apagado.", muted, 14f, false))
         val reset = actionButton("Restaurar plano padrao", surface2, danger)
         reset.setOnClickListener {
             prefs.edit()
                 .remove("custom_workout_plans")
+                .remove("custom_running_plan")
                 .remove("running_speed_offset")
                 .remove("running_distance_scale")
+                .remove("running_schedule_overrides")
+                .remove("editor_running_workout_id")
+                .remove("editor_running_week")
+                .remove("editor_running_stage")
                 .putString("running_plan_start_day", dayKey())
                 .putInt("editor_plan", todayPlanIndex())
                 .putInt("editor_exercise", 0)
@@ -4583,11 +5457,21 @@ class MainActivity : Activity() {
     }
 
     private fun renderExercises(root: LinearLayout) {
+        val renderGeneration = ++exerciseRenderGeneration
         syncCatalogPrefs()
-        root.addView(sectionTitle("Catalogo de exercicios"))
-
-        val catalogItems = catalog
+        val catalogItems = catalogCache
+        if (catalogItems == null) {
+            root.addView(exerciseCatalogAppBar(-1, "Todos", null))
+            val loading = card(surface)
+            loading.orientation = LinearLayout.VERTICAL
+            loading.addView(label("Carregando biblioteca...", white, 18f, true))
+            loading.addView(label("Preparando exercicios, filtros e midias locais.", muted, 14f, false))
+            root.addView(loading)
+            loadExerciseCatalogAsync()
+            return
+        }
         if (catalogItems.isEmpty()) {
+            root.addView(exerciseCatalogAppBar(0, "Todos", null))
             val empty = card()
             empty.orientation = LinearLayout.VERTICAL
             empty.addView(label("Catalogo indisponivel", white, 20f, true))
@@ -4596,198 +5480,1244 @@ class MainActivity : Activity() {
             return
         }
 
-        val summary = card(surface3)
-        summary.orientation = LinearLayout.VERTICAL
-        summary.addView(label("BIBLIOTECA DO TREINO", green, 13f, true))
         val favoriteIds = favoriteCatalogIds()
         val hiddenIds = hiddenCatalogIds()
-        summary.addView(label(catalogItems.size.toString() + " exercicios", white, 25f, true))
-        summary.addView(label(favoriteIds.size.toString() + " favoritos | " + hiddenIds.size + " ocultos. Busque por nome, musculo ou equipamento.", muted, 15f, false))
-        summary.addView(label(mediaCacheFileCount().toString() + " frames | " + mediaCacheSizeLabel() + " em cache local.", muted, 14f, false))
-        val cacheRow = LinearLayout(this)
-        cacheRow.orientation = LinearLayout.HORIZONTAL
-        val preload = actionButton("Preparar treino", green, bg)
-        preload.setOnClickListener { prefetchCurrentWorkoutMedia() }
-        cacheRow.addView(preload, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val clearCache = actionButton("Limpar cache", surface2, white)
-        clearCache.setOnClickListener { clearMediaCache() }
-        cacheRow.addView(clearCache, LinearLayout.LayoutParams(0, dp(50), 1f))
-        summary.addView(spacedRow(cacheRow))
-        root.addView(summary)
-
-        val muscleOptions = listOf("Todos", "Favoritos", "Ocultos") + catalogItems.map { it.muscle }.distinct().sorted()
+        val muscleOptions = listOf("Todos", "Favoritos", "Ocultos", "Pernas") +
+            catalogItems.map { it.muscle }.distinct().sorted()
         val savedMuscle = prefs.getString("catalog_muscle", "Todos") ?: "Todos"
         val selectedMuscle = if (muscleOptions.contains(savedMuscle)) savedMuscle else "Todos"
         val currentQuery = prefs.getString("catalog_query", "") ?: ""
-        val search = input("Buscar por nome, musculo ou equipamento", currentQuery)
-        root.addView(search)
-
-        val searchRow = LinearLayout(this)
-        searchRow.orientation = LinearLayout.HORIZONTAL
-        val applySearch = actionButton("Buscar", green, bg)
-        applySearch.setOnClickListener {
-            prefs.edit()
-                .putString("catalog_query", search.textValue())
-                .putInt("catalog_result_limit", 30)
-                .remove("catalog_selected")
-                .apply()
-            hideKeyboard()
-            render()
-        }
-        searchRow.addView(applySearch, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val clearSearch = actionButton("Limpar", surface2, white)
-        clearSearch.setOnClickListener {
-            prefs.edit()
-                .remove("catalog_query")
-                .remove("catalog_selected")
-                .putInt("catalog_result_limit", 30)
-                .apply()
-            hideKeyboard()
-            render()
-        }
-        searchRow.addView(clearSearch, LinearLayout.LayoutParams(0, dp(50), 1f))
-        root.addView(searchRow)
-
-        val muscles = muscleOptions
-        val muscleScroll = HorizontalScrollView(this)
-        muscleScroll.isHorizontalScrollBarEnabled = false
-        val muscleRow = LinearLayout(this)
-        muscleRow.orientation = LinearLayout.HORIZONTAL
-        muscles.forEach { muscle ->
-            val active = selectedMuscle == muscle
-            val button = pill(muscle, active, 178, 50)
-            button.setOnClickListener {
-                prefs.edit()
-                    .putString("catalog_muscle", muscle)
-                    .putInt("catalog_result_limit", 30)
-                    .remove("catalog_selected")
-                    .apply()
-                render()
-            }
-            muscleRow.addView(button)
-        }
-        muscleScroll.addView(muscleRow)
-        root.addView(muscleScroll)
 
         val filtered = catalogItems
-            .filter {
-                when (selectedMuscle) {
-                    "Todos" -> !hiddenIds.contains(it.id)
-                    "Favoritos" -> favoriteIds.contains(it.id) && !hiddenIds.contains(it.id)
-                    "Ocultos" -> hiddenIds.contains(it.id)
-                    else -> it.muscle == selectedMuscle
-                }
+            .filter { exercise ->
+                Mo2ExerciseCatalogUiRules.matchesFilter(
+                    filter = selectedMuscle,
+                    muscle = exercise.muscle,
+                    isFavorite = exercise.id in favoriteIds,
+                    isHidden = exercise.id in hiddenIds,
+                )
             }
-            .filter { selectedMuscle == "Ocultos" || !hiddenIds.contains(it.id) }
             .filter { matchesCatalogQuery(it, currentQuery) }
+        val selectedId = prefs.getString("catalog_selected", null)
+        val selected = filtered.firstOrNull { it.id == selectedId } ?: filtered.firstOrNull()
 
-        if (filtered.isEmpty()) {
+        root.addView(exerciseCatalogAppBar(catalogItems.size, selectedMuscle, selected))
+        root.addView(exerciseSearchBar(currentQuery))
+        root.addView(exerciseQuickFilters(selectedMuscle))
+
+        if (selected == null) {
             val empty = card()
             empty.orientation = LinearLayout.VERTICAL
             empty.addView(label("Nenhum exercicio encontrado", white, 20f, true))
             empty.addView(label("Tente outro grupo muscular ou ajuste a busca.", muted, 15f, false))
+            val reset = actionButton("Limpar busca e filtros", green, bg)
+            reset.setOnClickListener {
+                prefs.edit()
+                    .remove("catalog_query")
+                    .putString("catalog_muscle", "Todos")
+                    .remove("catalog_selected")
+                    .apply()
+                render()
+            }
+            empty.addView(buttonParams(reset))
             root.addView(empty)
             return
         }
 
-        val selectedId = prefs.getString("catalog_selected", null)
-        val selected = filtered.firstOrNull { it.id == selectedId } ?: filtered.first()
+        val titleRow = LinearLayout(this)
+        titleRow.orientation = LinearLayout.HORIZONTAL
+        titleRow.gravity = Gravity.TOP
+        val titleColumn = LinearLayout(this)
+        titleColumn.orientation = LinearLayout.VERTICAL
+        val exerciseTitle = label(selected.name, white, 25f, true)
+        exerciseTitle.maxLines = 3
+        titleColumn.addView(exerciseTitle)
+        titleRow.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-        val detail = card()
-        detail.orientation = LinearLayout.VERTICAL
-        detail.addView(label("MIDIA DE EXECUCAO POR LINK", green, 13f, true))
-        detail.addView(label(selected.name, white, 25f, true))
-        detail.addView(label(exerciseMeta(selected), muted, 14f, false))
-        detail.addView(label(mediaHealthLabel(selected), muted, 13f, false))
         val favorite = favoriteIds.contains(selected.id)
-        val favoriteButton = actionButton(if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos", if (favorite) amber else surface2, if (favorite) bg else white)
+        val favoriteButton = exerciseIconButton(
+            if (favorite) Mo2ActionIcon.HeartFilled else Mo2ActionIcon.Heart,
+            if (favorite) amber else white,
+            if (favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
+        )
         favoriteButton.setOnClickListener { toggleFavorite(selected) }
-        detail.addView(buttonParams(favoriteButton))
-        val hidden = hiddenIds.contains(selected.id)
-        val hideButton = actionButton(if (hidden) "Restaurar no catalogo" else "Ocultar exercicio/midia", surface2, if (hidden) green else amber)
-        hideButton.setOnClickListener { toggleHiddenCatalogExercise(selected) }
-        detail.addView(buttonParams(hideButton))
+        titleRow.addView(favoriteButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply {
+            marginStart = dp(Mo2Spacing.Sm)
+        })
+        val editButton = exerciseIconButton(Mo2ActionIcon.Edit, green, "Editar titulo, descricao e GIF")
+        editButton.setOnClickListener { showEditCatalogExerciseDialog(selected) }
+        titleRow.addView(editButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply {
+            marginStart = dp(Mo2Spacing.Sm)
+        })
+        root.addView(titleRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Xl)
+        })
 
-        val media = RemoteExerciseMediaView(this, selected.links)
-        val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(230))
-        mediaParams.setMargins(0, dp(12), 0, dp(12))
-        detail.addView(media, mediaParams)
+        val tagsScroll = HorizontalScrollView(this)
+        tagsScroll.isHorizontalScrollBarEnabled = false
+        val tags = LinearLayout(this)
+        tags.orientation = LinearLayout.HORIZONTAL
+        Mo2ExerciseCatalogUiRules.displayTags(
+            selected.muscle,
+            Mo2ExerciseCatalogUiRules.equipmentLabel(selected.name, selected.equipment),
+            selected.type,
+            selected.level,
+        ).forEach { tag -> tags.addView(exerciseTag(tag)) }
+        tagsScroll.addView(tags)
+        root.addView(tagsScroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Sm)
+        })
 
-        detail.addView(label("Descricao", green, 14f, true))
-        detail.addView(label(selected.description.ifBlank { "Exercicio catalogado para " + selected.muscle + " com foco em " + selected.primary + "." }, white, 15f, false))
+        val mediaFrame = FrameLayout(this)
+        mediaFrame.background = rounded(surface, dp(Mo2Radius.Sm), border)
+        mediaFrame.clipToOutline = true
+        val media = RemoteExerciseMediaView(this, selected.links, showSourceLabel = false)
+        mediaFrame.addView(media, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+        ))
+        val playbackButton = exerciseIconButton(Mo2ActionIcon.Pause, white, "Pausar ou reproduzir GIF")
+        val playbackIcon = playbackButton.getChildAt(0) as Mo2ActionIconView
+        playbackButton.setOnClickListener {
+            val playing = media.togglePlayback()
+            playbackIcon.updateIcon(if (playing) Mo2ActionIcon.Pause else Mo2ActionIcon.Play)
+        }
+        mediaFrame.addView(playbackButton, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.BOTTOM or Gravity.END).apply {
+            setMargins(0, 0, dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+        })
+        val mediaSize = (resources.displayMetrics.widthPixels - dp(Mo2Spacing.Lg * 2))
+            .coerceAtMost(dp(420))
+            .coerceAtLeast(dp(240))
+        root.addView(mediaFrame, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            mediaSize,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Lg)
+        })
+
+        val primaryActions = LinearLayout(this)
+        primaryActions.orientation = LinearLayout.HORIZONTAL
+        val addToWorkout = exerciseCommandButton(
+            Mo2ActionIcon.Plus,
+            "Adicionar ao treino",
+            primary = true,
+        )
+        addToWorkout.setOnClickListener { showAddCatalogExerciseToWorkoutDialog(selected) }
+        primaryActions.addView(addToWorkout, LinearLayout.LayoutParams(0, dp(52), 1f))
+        val registerSet = exerciseCommandButton(
+            Mo2ActionIcon.Register,
+            "Registrar serie",
+            primary = false,
+        )
+        registerSet.setOnClickListener { showRegisterCatalogExerciseDialog(selected) }
+        primaryActions.addView(registerSet, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+            marginStart = dp(Mo2Spacing.Sm)
+        })
+        root.addView(primaryActions, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Md)
+        })
+
+        root.addView(exerciseSectionHeading("Como executar"))
+        Mo2ExerciseCatalogUiRules.executionSteps(
+            selected.name,
+            selected.equipment,
+            selected.movement,
+            selected.description,
+        ).forEachIndexed { index, step ->
+            root.addView(exerciseInstructionStep(index + 1, step))
+        }
 
         if (selected.technicalCare.isNotBlank()) {
-            detail.addView(label("Cuidados", green, 14f, true))
-            detail.addView(label(selected.technicalCare, white, 15f, false))
+            root.addView(exerciseSafetyNote(selected.technicalCare))
         }
 
-        detail.addView(label("Detalhes", green, 14f, true))
-        detail.addView(label("Primario: " + selected.primary.ifBlank { "-" }, white, 14f, false))
-        detail.addView(label("Secundarios: " + selected.secondary.ifBlank { "-" }, muted, 14f, false))
-        detail.addView(label("Nivel: " + selected.level.ifBlank { "-" } + " | Tipo: " + selected.type.ifBlank { "-" }, muted, 14f, false))
-
-        val preferred = preferredAlternativeFor(selected)
-        detail.addView(label("Alternativos para o mesmo musculo", green, 14f, true))
-        if (preferred != null) {
-            detail.addView(label("Preferido: " + preferred.name, amber, 14f, true))
-        }
-        alternativesFor(selected).forEach { alternative ->
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-            val activePreferred = preferred?.id == alternative.id
-            val alt = pill((if (activePreferred) "[pref] " else "") + alternative.name, false, 220, 48)
-            alt.setOnClickListener {
-                prefs.edit().putString("catalog_selected", alternative.id).apply()
-                render()
+        val musclesRow = LinearLayout(this)
+        musclesRow.orientation = LinearLayout.HORIZONTAL
+        val primaryMuscleInfo = exerciseMuscleInfo(
+            "Principal",
+            selected.primary.ifBlank { selected.muscle },
+        )
+        val secondaryMuscleInfo = exerciseMuscleInfo(
+            "Secundarios",
+            selected.secondary.ifBlank { "Sem destaque" },
+        )
+        musclesRow.addView(
+            primaryMuscleInfo,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        musclesRow.addView(
+            secondaryMuscleInfo,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(Mo2Spacing.Sm)
+            },
+        )
+        musclesRow.post {
+            val contentHeight = maxOf(primaryMuscleInfo.measuredHeight, secondaryMuscleInfo.measuredHeight)
+            listOf(primaryMuscleInfo, secondaryMuscleInfo).forEach { muscleInfo ->
+                val params = muscleInfo.layoutParams as LinearLayout.LayoutParams
+                if (params.height != contentHeight) {
+                    params.height = contentHeight
+                    muscleInfo.layoutParams = params
+                }
             }
-            row.addView(alt, LinearLayout.LayoutParams(0, dp(48), 1f))
-            val prefer = actionButton("Preferir", surface2, if (activePreferred) amber else white)
-            prefer.setOnClickListener { setPreferredAlternative(selected, alternative) }
-            row.addView(prefer, LinearLayout.LayoutParams(dp(108), dp(48)))
-            detail.addView(spacedRow(row))
         }
+        root.addView(musclesRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Md)
+        })
 
-        val reps = input("Reps", "10")
-        val load = input("Carga kg", lastLoadFor(selected.name))
-        detail.addView(reps)
-        detail.addView(load)
-        val save = actionButton("Registrar este exercicio", green, bg)
-        save.setOnClickListener {
-            saveSet(selected.name, reps.textValue(), load.textValue(), "2", "8", "Catalogo: " + selected.muscle)
-        }
-        detail.addView(buttonParams(save))
-        root.addView(detail)
-
-        val list = card()
-        list.orientation = LinearLayout.VERTICAL
-        list.addView(label("EXERCICIOS DISPONIVEIS (" + filtered.size + ")", green, 13f, true))
-        val resultLimit = prefs.getInt("catalog_result_limit", 30).coerceIn(30, 120)
-        filtered.take(resultLimit).forEach { exercise ->
-            val item = card(if (exercise.id == selected.id) surface2 else surface)
-            item.orientation = LinearLayout.VERTICAL
-            item.setOnClickListener {
-                prefs.edit().putString("catalog_selected", exercise.id).apply()
-                render()
+        val manualAlternatives = manualAlternativeIdsFor(selected.id)
+        root.addView(exerciseSectionHeading(
+            if (manualAlternatives == null) "Alternativas" else "Alternativas personalizadas",
+            "Editar",
+        ) { showEditCatalogAlternativesDialog(selected) })
+        val alternativesHost = LinearLayout(this)
+        alternativesHost.orientation = LinearLayout.VERTICAL
+        alternativesHost.minimumHeight = dp(64)
+        alternativesHost.addView(label("Carregando alternativas...", muted, 14f, false))
+        root.addView(alternativesHost)
+        Thread {
+            val alternatives = alternativesFor(selected)
+            val alternativeIds = alternatives.map(CatalogExercise::id).toSet()
+            val preferred = preferredAlternativeFor(selected)?.takeIf { it.id in alternativeIds }
+            runOnUiThread {
+                if (currentTab != "exercises" || exerciseRenderGeneration != renderGeneration) {
+                    return@runOnUiThread
+                }
+                alternativesHost.removeAllViews()
+                if (alternatives.isEmpty()) {
+                    alternativesHost.addView(label(
+                        "Nenhum alternativo configurado para este exercicio.",
+                        muted,
+                        14f,
+                        false,
+                    ))
+                }
+                alternatives.forEach { alternative ->
+                    alternativesHost.addView(
+                        exerciseAlternativeRow(
+                            selected,
+                            alternative,
+                            preferred?.id == alternative.id,
+                        ),
+                    )
+                }
             }
-            val prefix = (if (favoriteIds.contains(exercise.id)) "[fav] " else "") + (if (hiddenIds.contains(exercise.id)) "[oculto] " else "")
-            item.addView(label(prefix + exercise.name, white, 17f, true))
-            item.addView(label(exerciseMeta(exercise), muted, 13f, false))
-            list.addView(item)
+        }.start()
+
+        val relatedItems = if (currentQuery.isBlank() && selectedMuscle == "Todos") {
+            catalogItems.filter { exercise ->
+                exercise.id != selected.id &&
+                    exercise.muscle == selected.muscle &&
+                    exercise.id !in hiddenIds
+            }
+        } else {
+            filtered.filter { it.id != selected.id }
         }
-        if (filtered.size > resultLimit) {
-            list.addView(label("Mostrando " + resultLimit + " de " + filtered.size + ". Use a busca ou carregue mais.", muted, 14f, false))
-            if (resultLimit < 120) {
-                val more = actionButton("Mostrar mais 30", surface2, green)
+        val relatedTitle = when {
+            currentQuery.isNotBlank() -> "Resultados (" + filtered.size + ")"
+            selectedMuscle !in setOf("Todos", "Favoritos", "Ocultos") -> selectedMuscle
+            else -> "Mais para " + selected.muscle
+        }
+        root.addView(exerciseSectionHeading(relatedTitle))
+        if (relatedItems.isEmpty()) {
+            root.addView(label("Nenhum outro exercicio neste recorte.", muted, 14f, false))
+        } else {
+            val resultLimit = prefs.getInt("catalog_compact_result_limit", 8).coerceIn(8, 48)
+            relatedItems.take(resultLimit).forEach { exercise ->
+                root.addView(exerciseCatalogListRow(exercise, exercise.id in favoriteIds))
+            }
+            if (relatedItems.size > resultLimit) {
+                val more = actionButton("Mostrar mais", surface2, green)
                 more.setOnClickListener {
-                    prefs.edit().putInt("catalog_result_limit", (resultLimit + 30).coerceAtMost(120)).apply()
+                    prefs.edit()
+                        .putInt("catalog_compact_result_limit", (resultLimit + 8).coerceAtMost(48))
+                        .apply()
                     render()
                 }
-                list.addView(buttonParams(more))
-            } else {
-                list.addView(label("Limite de 120 itens na tela. Use a busca para acessar os demais.", amber, 14f, true))
+                root.addView(buttonParams(more))
             }
         }
-        root.addView(list)
+    }
+
+    private fun loadExerciseCatalogAsync() {
+        if (catalogLoading) return
+        catalogLoading = true
+        Thread {
+            val loaded = loadExerciseCatalog()
+            runOnUiThread {
+                catalogCache = loaded
+                catalogLoading = false
+                resetCatalogDerivedCaches()
+                if (currentTab == "exercises") render()
+            }
+        }.start()
+    }
+
+    private fun exerciseCatalogAppBar(
+        catalogSize: Int,
+        selectedFilter: String,
+        selected: CatalogExercise?,
+    ): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+
+        val back = exerciseIconButton(Mo2ActionIcon.Back, white, "Voltar para Mais", surfaceColor = bg, strokeColor = null)
+        back.setOnClickListener { switchTab("more") }
+        row.addView(back, LinearLayout.LayoutParams(dp(44), dp(44)))
+
+        val titleColumn = LinearLayout(this)
+        titleColumn.orientation = LinearLayout.VERTICAL
+        val title = label("Exercicios", white, 24f, true)
+        title.includeFontPadding = false
+        titleColumn.addView(title)
+        titleColumn.addView(label(
+            if (catalogSize < 0) "Carregando biblioteca" else
+                catalogSize.toString() + " movimentos na sua biblioteca",
+            muted,
+            12f,
+            false,
+        ))
+        row.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+
+        val favorites = exerciseIconButton(
+            if (selectedFilter == "Favoritos") Mo2ActionIcon.HeartFilled else Mo2ActionIcon.Heart,
+            if (selectedFilter == "Favoritos") amber else white,
+            if (selectedFilter == "Favoritos") "Mostrar todos" else "Ver favoritos",
+            surfaceColor = bg,
+            strokeColor = null,
+        )
+        favorites.setOnClickListener {
+            prefs.edit()
+                .putString("catalog_muscle", if (selectedFilter == "Favoritos") "Todos" else "Favoritos")
+                .remove("catalog_selected")
+                .putInt("catalog_compact_result_limit", 8)
+                .apply()
+            render()
+        }
+        row.addView(favorites, LinearLayout.LayoutParams(dp(44), dp(44)))
+
+        val more = exerciseIconButton(Mo2ActionIcon.More, white, "Mais opcoes", surfaceColor = bg, strokeColor = null)
+        more.setOnClickListener { anchor -> showExerciseCatalogMenu(anchor, selected, selectedFilter) }
+        row.addView(more, LinearLayout.LayoutParams(dp(44), dp(44)))
+        return row
+    }
+
+    private fun exerciseSearchBar(currentQuery: String): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+
+        val searchBox = LinearLayout(this)
+        searchBox.orientation = LinearLayout.HORIZONTAL
+        searchBox.gravity = Gravity.CENTER_VERTICAL
+        searchBox.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Xs), 0)
+        searchBox.background = rounded(surface2, dp(Mo2Radius.Sm), border)
+
+        searchBox.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.Search, muted),
+            LinearLayout.LayoutParams(dp(22), dp(22)),
+        )
+        val search = EditText(this)
+        search.hint = "Buscar exercicio"
+        search.setText(currentQuery)
+        search.setSingleLine(true)
+        search.setTextColor(white)
+        search.setHintTextColor(muted)
+        search.textSize = accessibleTextSize(15f)
+        search.background = null
+        search.imeOptions = EditorInfo.IME_ACTION_SEARCH
+        search.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        search.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm), 0)
+        searchBox.addView(search, LinearLayout.LayoutParams(0, dp(52), 1f))
+
+        val clear = exerciseIconButton(
+            Mo2ActionIcon.Clear,
+            muted,
+            "Limpar busca",
+            sizeDp = 40,
+            surfaceColor = surface2,
+            strokeColor = null,
+        )
+        clear.visibility = if (currentQuery.isBlank()) View.GONE else View.VISIBLE
+        clear.setOnClickListener {
+            prefs.edit()
+                .remove("catalog_query")
+                .remove("catalog_selected")
+                .putInt("catalog_compact_result_limit", 8)
+                .apply()
+            hideKeyboard()
+            render()
+        }
+        searchBox.addView(clear, LinearLayout.LayoutParams(dp(40), dp(40)))
+        row.addView(searchBox, LinearLayout.LayoutParams(0, dp(52), 1f))
+
+        val filters = exerciseIconButton(Mo2ActionIcon.Filter, green, "Filtrar exercicios", sizeDp = 52)
+        filters.setOnClickListener { showExerciseCatalogFilterDialog() }
+        row.addView(filters, LinearLayout.LayoutParams(dp(52), dp(52)).apply {
+            marginStart = dp(Mo2Spacing.Sm)
+        })
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) {
+                clear.visibility = if (value.isNullOrBlank()) View.GONE else View.VISIBLE
+            }
+            override fun afterTextChanged(value: Editable?) {
+                prefs.edit().putString("catalog_query", value?.toString().orEmpty()).apply()
+            }
+        })
+        search.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId != EditorInfo.IME_ACTION_SEARCH && actionId != EditorInfo.IME_ACTION_DONE) {
+                return@setOnEditorActionListener false
+            }
+            prefs.edit()
+                .putString("catalog_query", search.textValue())
+                .remove("catalog_selected")
+                .putInt("catalog_compact_result_limit", 8)
+                .apply()
+            hideKeyboard()
+            render()
+            true
+        }
+
+        return row.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(Mo2Spacing.Xl)
+            }
+        }
+    }
+
+    private fun exerciseQuickFilters(selectedFilter: String): View {
+        val scroll = HorizontalScrollView(this)
+        scroll.isHorizontalScrollBarEnabled = false
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        val filters = Mo2ExerciseCatalogUiRules.quickFilters.toMutableList()
+        if (selectedFilter !in filters) filters.add(selectedFilter)
+        filters.forEach { filter ->
+            val active = filter == selectedFilter
+            val chip = label(filter, if (active) bg else white, 14f, true)
+            chip.gravity = Gravity.CENTER
+            chip.setPadding(dp(Mo2Spacing.Lg), 0, dp(Mo2Spacing.Lg), 0)
+            chip.minHeight = dp(42)
+            chip.background = rounded(
+                if (active) green else surface,
+                dp(Mo2Radius.Sm),
+                if (active) green else border,
+            )
+            chip.isClickable = true
+            chip.isFocusable = true
+            chip.contentDescription = "Filtrar por " + filter
+            chip.setOnClickListener {
+                prefs.edit()
+                    .putString("catalog_muscle", filter)
+                    .remove("catalog_selected")
+                    .putInt("catalog_compact_result_limit", 8)
+                    .apply()
+                render()
+            }
+            row.addView(chip, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(42),
+            ).apply {
+                marginEnd = dp(Mo2Spacing.Sm)
+            })
+        }
+        scroll.addView(row)
+        return scroll.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(Mo2Spacing.Md)
+            }
+        }
+    }
+
+    private fun exerciseIconButton(
+        icon: Mo2ActionIcon,
+        tint: Int,
+        description: String,
+        sizeDp: Int = 44,
+        surfaceColor: Int = surface2,
+        strokeColor: Int? = border,
+    ): FrameLayout {
+        val button = FrameLayout(this)
+        button.background = rounded(surfaceColor, dp(Mo2Radius.Sm), strokeColor)
+        button.foreground = Mo2Drawables.rippleForeground(
+            this,
+            android.graphics.Color.argb(48, 248, 250, 252),
+            Mo2Radius.Sm,
+        )
+        button.clipToOutline = true
+        button.isClickable = true
+        button.isFocusable = true
+        button.contentDescription = description
+        button.tooltipText = description
+        val iconView = Mo2ActionIconView(this, icon, tint)
+        button.addView(iconView, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+        button.minimumWidth = dp(sizeDp)
+        button.minimumHeight = dp(sizeDp)
+        return button
+    }
+
+    private fun exerciseTag(text: String): View {
+        val tag = label(text, white, 12f, true)
+        tag.gravity = Gravity.CENTER
+        tag.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md), 0)
+        tag.background = rounded(surface2, dp(Mo2Radius.Sm), border)
+        return tag.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(32),
+            ).apply {
+                marginEnd = dp(Mo2Spacing.Sm)
+            }
+        }
+    }
+
+    private fun exerciseCommandButton(
+        icon: Mo2ActionIcon,
+        text: String,
+        primary: Boolean,
+    ): LinearLayout {
+        val button = LinearLayout(this)
+        button.orientation = LinearLayout.HORIZONTAL
+        button.gravity = Gravity.CENTER
+        button.background = Mo2Drawables.pressed(
+            context = this,
+            color = if (primary) green else surface2,
+            pressedColor = if (primary) Mo2Colors.PrimaryDark else surface3,
+            radiusDp = Mo2Radius.Sm,
+            strokeColor = if (primary) green else border,
+        )
+        button.foreground = Mo2Drawables.rippleForeground(
+            this,
+            android.graphics.Color.argb(48, 248, 250, 252),
+            Mo2Radius.Sm,
+        )
+        button.clipToOutline = true
+        button.isClickable = true
+        button.isFocusable = true
+        button.contentDescription = text
+        button.addView(
+            Mo2ActionIconView(this, icon, if (primary) bg else green),
+            LinearLayout.LayoutParams(dp(21), dp(21)),
+        )
+        val textView = label(text, if (primary) bg else white, 14f, true)
+        textView.gravity = Gravity.CENTER
+        textView.maxLines = 2
+        button.addView(textView, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Sm)
+        })
+        return button
+    }
+
+    private fun exerciseSectionHeading(
+        text: String,
+        actionLabel: String? = null,
+        onAction: (() -> Unit)? = null,
+    ): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        val heading = label(text, white, 20f, true)
+        heading.includeFontPadding = false
+        row.addView(heading, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        if (actionLabel != null && onAction != null) {
+            val action = LinearLayout(this)
+            action.orientation = LinearLayout.HORIZONTAL
+            action.gravity = Gravity.CENTER
+            action.setPadding(dp(Mo2Spacing.Sm), 0, 0, 0)
+            action.isClickable = true
+            action.isFocusable = true
+            action.contentDescription = actionLabel + " " + text
+            action.addView(
+                Mo2ActionIconView(this, Mo2ActionIcon.Edit, green),
+                LinearLayout.LayoutParams(dp(18), dp(18)),
+            )
+            action.addView(label(actionLabel, green, 14f, true), LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                marginStart = dp(Mo2Spacing.Xs)
+            })
+            action.setOnClickListener { onAction() }
+            row.addView(action, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(44),
+            ))
+        }
+        return row.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(Mo2Spacing.Xxl)
+                bottomMargin = dp(Mo2Spacing.Md)
+            }
+        }
+    }
+
+    private fun exerciseInstructionStep(number: Int, text: String): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.TOP
+        val marker = label(number.toString(), green, 13f, true)
+        marker.gravity = Gravity.CENTER
+        marker.background = rounded(Mo2Colors.PrimarySoft, dp(Mo2Radius.Pill))
+        row.addView(marker, LinearLayout.LayoutParams(dp(28), dp(28)))
+        val instruction = label(text, white, 15f, false)
+        instruction.setLineSpacing(0f, 1.12f)
+        row.addView(instruction, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        return row.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = dp(Mo2Spacing.Md)
+            }
+        }
+    }
+
+    private fun exerciseSafetyNote(text: String): View {
+        val note = LinearLayout(this)
+        note.orientation = LinearLayout.HORIZONTAL
+        note.gravity = Gravity.TOP
+        note.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+        note.background = rounded(surface2, dp(Mo2Radius.Sm), amber)
+        note.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.Warning, amber),
+            LinearLayout.LayoutParams(dp(22), dp(22)),
+        )
+        val message = label(text, white, 14f, false)
+        note.addView(message, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        return note
+    }
+
+    private fun exerciseMuscleInfo(title: String, value: String): View {
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+        box.background = rounded(surface, dp(Mo2Radius.Sm), border)
+        box.addView(label(title, muted, 11f, true))
+        val valueLabel = label(value, white, 14f, true)
+        box.addView(valueLabel)
+        return box
+    }
+
+    private fun exerciseAlternativeRow(
+        selected: CatalogExercise,
+        alternative: CatalogExercise,
+        preferred: Boolean,
+    ): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+        row.background = rounded(surface2, dp(Mo2Radius.Sm), if (preferred) amber else border)
+        row.isClickable = true
+        row.isFocusable = true
+        row.contentDescription = "Abrir " + alternative.name
+        row.setOnClickListener {
+            prefs.edit()
+                .putString("catalog_selected", alternative.id)
+                .putString("catalog_muscle", "Todos")
+                .remove("catalog_query")
+                .apply()
+            render()
+        }
+
+        val iconBox = FrameLayout(this)
+        iconBox.background = rounded(surface3, dp(Mo2Radius.Sm))
+        iconBox.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.Dumbbell, green),
+            FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER),
+        )
+        row.addView(iconBox, LinearLayout.LayoutParams(dp(42), dp(42)))
+
+        val textColumn = LinearLayout(this)
+        textColumn.orientation = LinearLayout.VERTICAL
+        val name = label(alternative.name, white, 15f, true)
+        name.maxLines = 2
+        textColumn.addView(name)
+        val compatibility = Mo2ExerciseAlternativeEngine.compatibilityLabel(
+            selected.toAlternativeProfile(),
+            alternative.toAlternativeProfile(),
+        )
+        textColumn.addView(label(
+            compatibility + " | " +
+                Mo2ExerciseCatalogUiRules.equipmentLabel(alternative.name, alternative.equipment),
+            if (preferred) amber else muted,
+            12f,
+            preferred,
+        ))
+        row.addView(textColumn, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+
+        val star = exerciseIconButton(
+            if (preferred) Mo2ActionIcon.StarFilled else Mo2ActionIcon.Star,
+            if (preferred) amber else muted,
+            if (preferred) "Alternativo preferido" else "Definir como preferido",
+            sizeDp = 40,
+            surfaceColor = surface2,
+            strokeColor = null,
+        )
+        star.setOnClickListener { setPreferredAlternative(selected, alternative) }
+        row.addView(star, LinearLayout.LayoutParams(dp(40), dp(40)))
+        row.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted),
+            LinearLayout.LayoutParams(dp(20), dp(20)),
+        )
+        return row.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = dp(Mo2Spacing.Sm)
+            }
+        }
+    }
+
+    private fun exerciseCatalogListRow(exercise: CatalogExercise, favorite: Boolean): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Md))
+        row.background = rounded(surface, dp(Mo2Radius.Sm), border)
+        row.isClickable = true
+        row.isFocusable = true
+        row.contentDescription = "Abrir " + exercise.name
+        row.setOnClickListener {
+            prefs.edit().putString("catalog_selected", exercise.id).apply()
+            render()
+        }
+        val iconBox = FrameLayout(this)
+        iconBox.background = rounded(surface2, dp(Mo2Radius.Sm))
+        iconBox.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.Dumbbell, green),
+            FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER),
+        )
+        row.addView(iconBox, LinearLayout.LayoutParams(dp(42), dp(42)))
+
+        val textColumn = LinearLayout(this)
+        textColumn.orientation = LinearLayout.VERTICAL
+        val name = label(exercise.name, white, 15f, true)
+        name.maxLines = 2
+        textColumn.addView(name)
+        textColumn.addView(label(
+            exercise.muscle + " | " +
+                Mo2ExerciseCatalogUiRules.equipmentLabel(exercise.name, exercise.equipment),
+            muted,
+            12f,
+            false,
+        ))
+        row.addView(textColumn, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        if (favorite) {
+            row.addView(
+                Mo2ActionIconView(this, Mo2ActionIcon.HeartFilled, amber),
+                LinearLayout.LayoutParams(dp(20), dp(20)).apply {
+                    marginEnd = dp(Mo2Spacing.Sm)
+                },
+            )
+        }
+        row.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted),
+            LinearLayout.LayoutParams(dp(20), dp(20)),
+        )
+        return row.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = dp(Mo2Spacing.Sm)
+            }
+        }
+    }
+
+    private fun showExerciseCatalogMenu(
+        anchor: View,
+        selected: CatalogExercise?,
+        selectedFilter: String,
+    ) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, "Preparar midias do treino")
+        popup.menu.add(
+            0,
+            2,
+            1,
+            if (selectedFilter == "Ocultos") "Voltar ao catalogo" else "Ver exercicios ocultos",
+        )
+        if (selected != null) {
+            popup.menu.add(
+                0,
+                3,
+                2,
+                if (selected.id in hiddenCatalogIds()) "Restaurar exercicio" else "Ocultar exercicio",
+            )
+        }
+        popup.menu.add(0, 4, 3, "Limpar cache de midia (" + mediaCacheSizeLabel() + ")")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> prefetchCurrentWorkoutMedia()
+                2 -> {
+                    prefs.edit()
+                        .putString("catalog_muscle", if (selectedFilter == "Ocultos") "Todos" else "Ocultos")
+                        .remove("catalog_selected")
+                        .apply()
+                    render()
+                }
+                3 -> selected?.let(::toggleHiddenCatalogExercise)
+                4 -> clearMediaCache()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun showExerciseCatalogFilterDialog() {
+        val filters = (listOf("Todos", "Favoritos", "Ocultos", "Pernas") +
+            catalog.map(CatalogExercise::muscle).distinct().sorted()).distinct()
+        val selected = prefs.getString("catalog_muscle", "Todos") ?: "Todos"
+        val checked = filters.indexOf(selected).coerceAtLeast(0)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Filtrar exercicios")
+            .setSingleChoiceItems(filters.toTypedArray(), checked) { target, index ->
+                prefs.edit()
+                    .putString("catalog_muscle", filters[index])
+                    .remove("catalog_selected")
+                    .putInt("catalog_compact_result_limit", 8)
+                    .apply()
+                target.dismiss()
+                render()
+            }
+            .setNegativeButton("Cancelar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun showAddCatalogExerciseToWorkoutDialog(exercise: CatalogExercise) {
+        val availablePlans = plans
+        val labels = availablePlans.map { plan -> plan.title + " - " + plan.focus }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Adicionar ao treino")
+            .setItems(labels.toTypedArray()) { _, index ->
+                val plan = availablePlans[index]
+                if (plan.exercises.any { normalized(it.name) == normalized(exercise.name) }) {
+                    Toast.makeText(this, "Este exercicio ja esta em " + plan.title + ".", Toast.LENGTH_SHORT).show()
+                    return@setItems
+                }
+                val notes = exercise.technicalCare
+                    .ifBlank { exercise.description }
+                    .ifBlank { "Mantenha a execucao controlada." }
+                replacePlanExercises(
+                    index,
+                    plan.exercises + ExercisePlan(
+                        name = exercise.name,
+                        target = "3 x 10",
+                        rest = "60s",
+                        notes = notes,
+                    ),
+                )
+                Toast.makeText(this, exercise.name + " adicionado a " + plan.title + ".", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("Cancelar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun showRegisterCatalogExerciseDialog(exercise: CatalogExercise) {
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Md))
+        content.addView(label(exercise.name, white, 21f, true))
+        content.addView(label("Registre a serie feita agora. Os dados ficam no historico local.", muted, 13f, false))
+        val reps = input("Repeticoes", "10")
+        reps.inputType = InputType.TYPE_CLASS_NUMBER
+        val lastLoad = lastLoadFor(exercise.name)
+        val load = input(
+            "Carga em kg",
+            lastLoad.takeUnless { it.replace(',', '.').toDoubleOrNull() == 0.0 }.orEmpty(),
+        )
+        load.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        val rir = input("RIR (opcional)", "2")
+        rir.inputType = InputType.TYPE_CLASS_NUMBER
+        val rpe = input("RPE (opcional)", "8")
+        rpe.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        content.addView(label("Repeticoes", muted, 12f, true).apply {
+            setPadding(0, dp(Mo2Spacing.Sm), 0, 0)
+        })
+        content.addView(reps)
+        content.addView(label("Carga em kg", muted, 12f, true).apply {
+            setPadding(0, dp(Mo2Spacing.Sm), 0, 0)
+        })
+        content.addView(load)
+        content.addView(label("RIR", muted, 12f, true).apply {
+            setPadding(0, dp(Mo2Spacing.Sm), 0, 0)
+        })
+        content.addView(rir)
+        content.addView(label("RPE", muted, 12f, true).apply {
+            setPadding(0, dp(Mo2Spacing.Sm), 0, 0)
+        })
+        content.addView(rpe)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Registrar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if ((reps.textValue().toIntOrNull() ?: 0) <= 0) {
+                    reps.error = "Informe as repeticoes"
+                    return@setOnClickListener
+                }
+                saveSet(
+                    exercise = exercise.name,
+                    repsRaw = reps.textValue(),
+                    loadRaw = load.textValue(),
+                    rirRaw = rir.textValue(),
+                    rpeRaw = rpe.textValue(),
+                    notes = "Catalogo: " + exercise.muscle,
+                    renderAfter = false,
+                )
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showEditCatalogExerciseDialog(exercise: CatalogExercise) {
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(16), dp(16), dp(16), dp(10))
+        content.addView(label("EDITAR EXERCICIO", green, 13f, true))
+        content.addView(label(exercise.name, white, 22f, true))
+        content.addView(label("As alteracoes ficam somente neste celular e podem ser restauradas.", muted, 13f, false))
+        val title = input("Titulo", exercise.name)
+        val description = textArea("Descricao da execucao", exercise.description)
+        val links = textArea("Links HTTPS ou midia incluida no app, um por linha", exercise.links.joinToString("\n"))
+        links.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_VARIATION_URI
+        content.addView(title)
+        content.addView(description)
+        content.addView(links)
+        content.addView(label("Uma URL de GIF animado e exibida diretamente; varias URLs alternam como frames.", muted, 12f, false))
+
+        val scroll = ScrollView(this)
+        scroll.addView(content)
+        val hasOverride = safeObject("catalog_exercise_overrides").has(exercise.id)
+        val dialog = AlertDialog.Builder(this)
+            .setView(scroll)
+            .setNegativeButton("Cancelar", null)
+            .setNeutralButton("Restaurar", null)
+            .setPositiveButton("Salvar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(if (hasOverride) danger else muted)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).isEnabled = hasOverride
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (saveCatalogExerciseOverride(exercise, title.textValue(), description.textValue(), links.textValue())) {
+                    dialog.dismiss()
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                restoreCatalogExercise(exercise.id)
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showEditCatalogAlternativesDialog(exercise: CatalogExercise) {
+        val hiddenIds = hiddenCatalogIds()
+        val available = catalog.filter { candidate ->
+            candidate.id != exercise.id && candidate.id !in hiddenIds
+        }
+        val validIds = available.map(CatalogExercise::id).toSet()
+        val manualIds = manualAlternativeIdsFor(exercise.id)
+        val selectedIds = linkedSetOf<String>()
+        val initialIds = manualIds ?: automaticAlternativesFor(exercise).take(8).map(CatalogExercise::id)
+        selectedIds.addAll(
+            Mo2ExerciseAlternativeEngine.normalizeManualIds(
+                currentId = exercise.id,
+                ids = initialIds,
+                validIds = validIds,
+            ),
+        )
+
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(18), dp(18), dp(18), dp(12))
+        content.addView(label("EDITAR ALTERNATIVOS", green, 13f, true))
+        content.addView(label(exercise.name, white, 22f, true))
+        content.addView(label(
+            "Selecione ate " + Mo2ExerciseAlternativeEngine.maxManualAlternatives() +
+                " substitutos. O ranking automatico prioriza regiao e padrao de movimento.",
+            muted,
+            13f,
+            false,
+        ))
+
+        val search = input("Buscar exercicio, musculo ou equipamento", "")
+        val selectedCount = label("", muted, 13f, true)
+        val results = LinearLayout(this)
+        results.orientation = LinearLayout.VERTICAL
+        content.addView(search)
+        content.addView(selectedCount)
+        content.addView(results)
+
+        fun updateSelectedCount() {
+            selectedCount.text = selectedIds.size.toString() + " selecionados"
+        }
+
+        lateinit var renderResults: () -> Unit
+        renderResults = {
+            results.removeAllViews()
+            val query = search.textValue()
+            val candidates = if (query.isBlank()) {
+                val byId = available.associateBy(CatalogExercise::id)
+                val selected = selectedIds.mapNotNull(byId::get)
+                (selected + automaticAlternativesFor(exercise))
+                    .distinctBy(CatalogExercise::id)
+                    .take(24)
+            } else {
+                available.filter { candidate -> matchesCatalogQuery(candidate, query) }.take(30)
+            }
+
+            if (candidates.isEmpty()) {
+                results.addView(label("Nenhum exercicio encontrado para esta busca.", muted, 14f, false))
+            }
+            candidates.forEach { candidate ->
+                val item = card(if (candidate.id in selectedIds) surface3 else surface2)
+                item.orientation = LinearLayout.VERTICAL
+                val check = CheckBox(this)
+                check.text = candidate.name
+                check.isChecked = candidate.id in selectedIds
+                check.setTextColor(white)
+                check.textSize = accessibleTextSize(16f)
+                check.gravity = Gravity.CENTER_VERTICAL
+                check.minHeight = dp(48)
+                check.buttonTintList = ColorStateList(
+                    arrayOf(
+                        intArrayOf(android.R.attr.state_checked),
+                        intArrayOf(),
+                    ),
+                    intArrayOf(green, border),
+                )
+                item.addView(check)
+                val compatibility = Mo2ExerciseAlternativeEngine.compatibilityLabel(
+                    exercise.toAlternativeProfile(),
+                    candidate.toAlternativeProfile(),
+                )
+                item.addView(label(
+                    compatibility + " | " +
+                        Mo2ExerciseCatalogUiRules.equipmentLabel(candidate.name, candidate.equipment),
+                    muted,
+                    12f,
+                    false,
+                ))
+                check.setOnCheckedChangeListener { button, checked ->
+                    if (checked && candidate.id !in selectedIds &&
+                        selectedIds.size >= Mo2ExerciseAlternativeEngine.maxManualAlternatives()
+                    ) {
+                        Toast.makeText(
+                            this,
+                            "Limite de " + Mo2ExerciseAlternativeEngine.maxManualAlternatives() + " alternativos.",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        button.isChecked = false
+                        return@setOnCheckedChangeListener
+                    }
+                    if (checked) selectedIds.add(candidate.id) else selectedIds.remove(candidate.id)
+                    item.background = rounded(
+                        if (checked) surface3 else surface2,
+                        dp(Mo2Radius.Lg),
+                        border,
+                    )
+                    updateSelectedCount()
+                }
+                item.setOnClickListener { check.toggle() }
+                results.addView(item)
+            }
+            updateSelectedCount()
+        }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(value: Editable?) = renderResults()
+        })
+        renderResults()
+
+        val scroll = ScrollView(this)
+        scroll.isFillViewport = true
+        scroll.isVerticalScrollBarEnabled = true
+        scroll.addView(content)
+        val dialog = AlertDialog.Builder(this)
+            .setView(scroll)
+            .setNegativeButton("Cancelar", null)
+            .setNeutralButton("Usar automatico", null)
+            .setPositiveButton("Salvar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.window?.setLayout(
+                (resources.displayMetrics.widthPixels * 0.94f).roundToInt(),
+                (resources.displayMetrics.heightPixels * 0.88f).roundToInt(),
+            )
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(if (manualIds == null) muted else amber)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).isEnabled = manualIds != null
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                saveCatalogAlternativeOverride(exercise, selectedIds)
+                dialog.dismiss()
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                clearCatalogAlternativeOverride(exercise.id)
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun manualAlternativeIdsFor(exerciseId: String): List<String>? {
+        val overrides = safeObject("catalog_alternative_overrides")
+        if (!overrides.has(exerciseId)) return null
+        return jsonStringList(overrides.optJSONArray(exerciseId)).distinct()
+    }
+
+    private fun saveCatalogAlternativeOverride(exercise: CatalogExercise, selectedIds: Iterable<String>) {
+        val normalizedIds = Mo2ExerciseAlternativeEngine.normalizeManualIds(
+            currentId = exercise.id,
+            ids = selectedIds,
+            validIds = catalog.map(CatalogExercise::id).toSet(),
+        )
+        val array = JSONArray()
+        normalizedIds.forEach(array::put)
+        val overrides = safeObject("catalog_alternative_overrides")
+        overrides.put(exercise.id, array)
+
+        val preferred = safeObject("preferred_catalog_alternatives")
+        if (preferred.optString(exercise.id) !in normalizedIds) preferred.remove(exercise.id)
+        prefs.edit()
+            .putString("catalog_alternative_overrides", overrides.toString())
+            .putString("preferred_catalog_alternatives", preferred.toString())
+            .apply()
+        Toast.makeText(this, "Alternativos personalizados salvos.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun clearCatalogAlternativeOverride(exerciseId: String) {
+        val overrides = safeObject("catalog_alternative_overrides")
+        overrides.remove(exerciseId)
+        val editor = prefs.edit()
+        if (overrides.length() == 0) {
+            editor.remove("catalog_alternative_overrides")
+        } else {
+            editor.putString("catalog_alternative_overrides", overrides.toString())
+        }
+        editor.apply()
+        Toast.makeText(this, "Ranking automatico restaurado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun saveCatalogExerciseOverride(
+        exercise: CatalogExercise,
+        titleRaw: String,
+        descriptionRaw: String,
+        linksRaw: String,
+    ): Boolean {
+        val title = titleRaw.trim()
+        if (title.isBlank()) {
+            Toast.makeText(this, "O titulo nao pode ficar vazio.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val validation = Mo2PersonalPlanRules.validateMediaLinks(linksRaw)
+        if (!validation.isValid) {
+            Toast.makeText(this, "Use links HTTPS validos ou uma midia incluida no app.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val linksJson = JSONArray()
+        validation.links.forEach { link -> linksJson.put(link) }
+        val overrides = safeObject("catalog_exercise_overrides")
+        overrides.put(exercise.id, JSONObject()
+            .put("name", title)
+            .put("description", descriptionRaw.trim())
+            .put("links", linksJson))
+        prefs.edit().putString("catalog_exercise_overrides", overrides.toString()).apply()
+        catalogCache = null
+        resetCatalogDerivedCaches()
+        Toast.makeText(this, "Exercicio personalizado.", Toast.LENGTH_SHORT).show()
+        render()
+        return true
+    }
+
+    private fun restoreCatalogExercise(exerciseId: String) {
+        val overrides = safeObject("catalog_exercise_overrides")
+        overrides.remove(exerciseId)
+        prefs.edit().putString("catalog_exercise_overrides", overrides.toString()).apply()
+        catalogCache = null
+        resetCatalogDerivedCaches()
+        Toast.makeText(this, "Titulo, descricao e GIF originais restaurados.", Toast.LENGTH_SHORT).show()
+        render()
     }
 
     private fun syncCatalogPrefs() {
@@ -4806,9 +6736,10 @@ class MainActivity : Activity() {
         return try {
             val raw = assets.open("exercise_catalog.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
             val array = JSONArray(raw)
+            val overrides = safeObject("catalog_exercise_overrides")
             (0 until array.length()).map { index ->
                 val item = array.getJSONObject(index)
-                CatalogExercise(
+                val base = CatalogExercise(
                     id = item.optString("id"),
                     name = item.optString("name"),
                     slug = item.optString("slug"),
@@ -4829,10 +6760,28 @@ class MainActivity : Activity() {
                     review = item.optString("review"),
                     links = jsonStringList(item.optJSONArray("links")),
                 )
+                applyCatalogExerciseOverride(base, overrides.optJSONObject(base.id))
             }.filter { it.name.isNotBlank() && it.muscle.isNotBlank() }
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    private fun resetCatalogDerivedCaches() {
+        catalogQueryTokensCache.clear()
+        catalogSearchIndexCache.clear()
+        catalogNameIndexCache.clear()
+        catalogMatchCache.clear()
+        catalogMatchMissCache.clear()
+    }
+
+    private fun applyCatalogExerciseOverride(base: CatalogExercise, override: JSONObject?): CatalogExercise {
+        if (override == null) return base
+        return base.copy(
+            name = override.optString("name", base.name).ifBlank { base.name },
+            description = if (override.has("description")) override.optString("description") else base.description,
+            links = if (override.has("links")) jsonStringList(override.optJSONArray("links")) else base.links,
+        )
     }
 
     private fun jsonStringList(array: JSONArray?): List<String> {
@@ -4843,48 +6792,83 @@ class MainActivity : Activity() {
     }
 
     private fun alternativesFor(exercise: CatalogExercise): List<CatalogExercise> {
-        val wanted = exercise.alternatives
-            .split(";")
-            .map { normalized(it) }
-            .filter { it.length > 2 }
-
-        val direct = catalog.filter { candidate ->
-            candidate.id != exercise.id && wanted.any { token ->
-                normalized(candidate.name).contains(token) ||
-                    normalized(candidate.slug).contains(token) ||
-                    normalized(candidate.primary).contains(token)
-            }
+        val hiddenIds = hiddenCatalogIds()
+        val byId = catalog.associateBy(CatalogExercise::id)
+        val manualIds = manualAlternativeIdsFor(exercise.id)
+        if (manualIds != null) {
+            return manualIds.mapNotNull(byId::get)
+                .filter { candidate -> candidate.id != exercise.id && candidate.id !in hiddenIds }
         }
+        return automaticAlternativesFor(exercise)
+            .filter { candidate -> candidate.id !in hiddenIds }
+            .take(8)
+    }
 
-        val sameMuscle = catalog.filter { candidate ->
-            candidate.id != exercise.id && candidate.muscle == exercise.muscle
-        }
+    private fun automaticAlternativesFor(
+        exercise: CatalogExercise,
+        excludedIds: Set<String> = emptySet(),
+    ): List<CatalogExercise> {
+        val byId = catalog.associateBy(CatalogExercise::id)
+        val profiles = catalog.map { candidate -> candidate.toAlternativeProfile() }
+        return Mo2ExerciseAlternativeEngine.rank(
+            current = exercise.toAlternativeProfile(),
+            candidates = profiles,
+            excludedIds = excludedIds,
+        ).mapNotNull { match -> byId[match.id] }
+    }
 
-        return (direct + sameMuscle).distinctBy { it.id }.take(8)
+    private fun CatalogExercise.toAlternativeProfile(): Mo2ExerciseProfile {
+        return Mo2ExerciseProfile(
+            id = id,
+            name = name,
+            slug = slug,
+            muscle = muscle,
+            subgroup = subgroup,
+            movement = movement,
+            type = type,
+            level = level,
+            primary = primary,
+            equipment = equipment,
+            alternatives = alternatives,
+        )
     }
 
     private fun matchesCatalogQuery(exercise: CatalogExercise, query: String): Boolean {
-        val tokens = normalized(query).split(" ").filter { it.isNotBlank() }
+        val tokens = catalogQueryTokensCache.getOrPut(query) {
+            normalized(query).split(" ").filter { it.isNotBlank() }
+        }
         if (tokens.isEmpty()) return true
-        val haystack = normalized(listOf(
-            exercise.name,
-            exercise.slug,
-            exercise.muscle,
-            exercise.subgroup,
-            exercise.primary,
-            exercise.secondary,
-            exercise.equipment,
-            exercise.movement,
-        ).joinToString(" "))
+        val haystack = catalogSearchIndexCache.getOrPut(exercise.id) {
+            normalized(listOf(
+                exercise.name,
+                exercise.slug,
+                exercise.muscle,
+                exercise.subgroup,
+                exercise.primary,
+                exercise.secondary,
+                exercise.equipment,
+                exercise.movement,
+            ).joinToString(" "))
+        }
         return tokens.all { haystack.contains(it) }
     }
 
     private fun catalogMatchForWorkoutExercise(name: String): CatalogExercise? {
+        val cacheKey = normalized(name)
+        catalogMatchCache[cacheKey]?.let { return it }
+        if (cacheKey in catalogMatchMissCache) return null
+
         val hidden = hiddenCatalogIds()
         val available = catalog.filter { !hidden.contains(it.id) }
         val aliases = workoutCatalogAliases(name)
-        return bestCatalogMatch(aliases, available.filter { it.links.isNotEmpty() })
+        val matched = bestCatalogMatch(aliases, available.filter { it.links.isNotEmpty() })
             ?: bestCatalogMatch(aliases, available)
+        if (matched == null) {
+            catalogMatchMissCache.add(cacheKey)
+        } else {
+            catalogMatchCache[cacheKey] = matched
+        }
+        return matched
     }
 
     private fun bestCatalogMatch(aliases: List<String>, candidates: List<CatalogExercise>): CatalogExercise? {
@@ -4894,17 +6878,21 @@ class MainActivity : Activity() {
             val aliasNorm = normalized(alias)
             val tokens = aliasNorm.split(" ").filter { it.length > 2 && it !in listOf("com", "para", "sem") }
             candidates.forEach { candidate ->
-                val nameNorm = normalized(candidate.name)
-                val haystack = normalized(listOf(
-                    candidate.name,
-                    candidate.slug,
-                    candidate.muscle,
-                    candidate.subgroup,
-                    candidate.primary,
-                    candidate.secondary,
-                    candidate.equipment,
-                    candidate.movement,
-                ).joinToString(" "))
+                val nameNorm = catalogNameIndexCache.getOrPut(candidate.id) {
+                    normalized(candidate.name)
+                }
+                val haystack = catalogSearchIndexCache.getOrPut(candidate.id) {
+                    normalized(listOf(
+                        candidate.name,
+                        candidate.slug,
+                        candidate.muscle,
+                        candidate.subgroup,
+                        candidate.primary,
+                        candidate.secondary,
+                        candidate.equipment,
+                        candidate.movement,
+                    ).joinToString(" "))
+                }
                 var score = 0
                 if (nameNorm == aliasNorm) score += 120
                 if (nameNorm.contains(aliasNorm) || aliasNorm.contains(nameNorm)) score += 70
@@ -4939,6 +6927,8 @@ class MainActivity : Activity() {
             normalized("Leg press") to listOf("Leg press 45", "Leg press horizontal", "Leg press vertical"),
             normalized("Leg press leve") to listOf("Leg press 45", "Leg press horizontal", "Leg press vertical"),
             normalized("Agachamento livre ou guiado") to listOf("Agachamento livre com barra", "Agachamento no Smith", "Agachamento hack"),
+            normalized("Agachamento guiado") to listOf("Agachamento no Smith"),
+            normalized("Agachamento no Smith") to listOf("Agachamento no Smith"),
             normalized("Cadeira extensora") to listOf("Cadeira extensora bilateral", "Cadeira extensora com pausa", "Cadeira extensora unilateral"),
             normalized("Mesa flexora") to listOf("Mesa flexora", "Cadeira flexora", "Flexora unilateral"),
             normalized("Stiff") to listOf("Stiff com barra", "Stiff com halteres", "Levantamento terra romeno"),
@@ -4961,15 +6951,24 @@ class MainActivity : Activity() {
     }
 
     private fun mediaHealthLabel(exercise: CatalogExercise): String {
-        val frames = if (exercise.links.isEmpty()) "sem frames remotos" else exercise.links.size.toString() + " frames remotos"
+        val bundledCount = exercise.links.count { link -> link.startsWith("asset://") }
+        val media = when {
+            exercise.links.isEmpty() -> "indisponivel"
+            bundledCount == exercise.links.size && bundledCount == 1 -> "GIF local"
+            bundledCount == exercise.links.size -> bundledCount.toString() + " arquivos locais"
+            bundledCount > 0 -> bundledCount.toString() + " locais + " +
+                (exercise.links.size - bundledCount).toString() + " remotos"
+            exercise.links.size == 1 -> "1 arquivo remoto"
+            else -> exercise.links.size.toString() + " frames remotos"
+        }
         val status = exercise.status.ifBlank { "fonte externa" }
-        return "Midia: " + frames + " | " + status
+        return "Midia: " + media + " | " + status
     }
 
     private fun normalized(text: String): String {
         return Normalizer.normalize(text.lowercase(Locale("pt", "BR")), Normalizer.Form.NFD)
-            .replace("\\p{Mn}+".toRegex(), "")
-            .replace("[^a-z0-9]+".toRegex(), " ")
+            .replace(combiningMarksRegex, "")
+            .replace(nonAlphaNumericRegex, " ")
             .trim()
     }
 
@@ -5092,7 +7091,7 @@ class MainActivity : Activity() {
         planning.addView(label("PLANEJAMENTO", green, 13f, true))
         planning.addView(label("Preferencias de treino", white, 22f, true))
         planning.addView(label(
-            "Plano base " + trainingPlanVersion + " | corrida semana " + currentRunningPlanWeek() + " de 6",
+            "Plano base " + trainingPlanVersion + " | corrida semana " + currentRunningPlanWeek() + " de " + runningPlanWeekCount(),
             muted,
             14f,
             false,
@@ -5227,6 +7226,8 @@ class MainActivity : Activity() {
             "custom_workout_plans",
         )
         val objectKeys = setOf(
+            "catalog_alternative_overrides",
+            "catalog_exercise_overrides",
             "unavailable_equipment",
             "preferred_catalog_alternatives",
             "running_schedule_overrides",
@@ -5281,20 +7282,57 @@ class MainActivity : Activity() {
     private fun planSelector(): View {
         val scroll = HorizontalScrollView(this)
         scroll.isHorizontalScrollBarEnabled = false
+        scroll.isFillViewport = true
+        scroll.setPadding(dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs))
+        scroll.background = rounded(surface, dp(Mo2Radius.Md), null)
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         plans.forEachIndexed { index, plan ->
             val active = selectedPlanIndex == index
-            val button = pill(plan.title + "\n" + plan.focus, active, 168, 72)
+            val button = LinearLayout(this)
+            button.orientation = LinearLayout.VERTICAL
+            button.gravity = Gravity.CENTER
+            button.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+            button.background = rounded(
+                if (active) Mo2Colors.PrimarySoft else android.graphics.Color.TRANSPARENT,
+                dp(Mo2Radius.Sm),
+                if (active) green else null,
+            )
+            val shortTitle = plan.title.removePrefix("Treino ").ifBlank { plan.title }
+            button.addView(label(shortTitle, if (active) white else muted, 14f, true))
+            val focus = plan.focus
+                .substringAfter("-", plan.focus)
+                .substringBefore("+")
+                .trim()
+                .replace("/", " · ")
+            val focusLabel = label(focus, if (active) green else Mo2Colors.TextMuted, 10f, active)
+            focusLabel.maxLines = 1
+            focusLabel.ellipsize = TextUtils.TruncateAt.END
+            focusLabel.gravity = Gravity.CENTER
+            button.addView(focusLabel, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
+            button.contentDescription = plan.title + ", " + focus
+            button.isClickable = true
+            button.isFocusable = true
             button.setOnClickListener {
                 selectedPlanIndex = index
                 selectedExerciseIndex = 0
                 prefs.edit().putInt("selected_plan", index).putInt("selected_exercise", 0).apply()
                 render()
             }
-            row.addView(button)
+            val buttonParams = LinearLayout.LayoutParams(dp(104), dp(58))
+            buttonParams.setMargins(if (index == 0) 0 else dp(Mo2Spacing.Xs), 0, 0, 0)
+            row.addView(button, buttonParams)
         }
         scroll.addView(row)
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        params.setMargins(0, 0, 0, dp(Mo2Spacing.Sm))
+        scroll.layoutParams = params
         return scroll
     }
 
@@ -5316,9 +7354,17 @@ class MainActivity : Activity() {
                 active -> Mo2Colors.Running
                 else -> border
             }
-            val item = card(itemColor)
-            item.orientation = LinearLayout.VERTICAL
-            item.background = rounded(itemColor, dp(Mo2Radius.Lg), itemBorder)
+            val item = LinearLayout(this)
+            item.orientation = LinearLayout.HORIZONTAL
+            item.gravity = Gravity.CENTER_VERTICAL
+            item.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+            item.background = rounded(itemColor, dp(Mo2Radius.Md), itemBorder)
+            val itemParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            itemParams.setMargins(0, dp(Mo2Spacing.Xs), 0, dp(Mo2Spacing.Xs))
+            item.layoutParams = itemParams
             item.setOnClickListener {
                 selectedExerciseIndex = index
                 prefs.edit().putInt("selected_exercise", index).apply()
@@ -5326,30 +7372,34 @@ class MainActivity : Activity() {
                 render()
             }
 
-            val header = LinearLayout(this)
-            header.orientation = LinearLayout.HORIZONTAL
-            header.gravity = Gravity.CENTER_VERTICAL
             val indexBadge = label((index + 1).toString(), if (completed || active) bg else muted, 13f, true)
             indexBadge.gravity = Gravity.CENTER
             indexBadge.background = rounded(if (completed || active) green else surface2, dp(Mo2Radius.Pill), if (completed || active) green else border)
-            header.addView(indexBadge, LinearLayout.LayoutParams(dp(32), dp(32)))
+            item.addView(indexBadge, LinearLayout.LayoutParams(dp(30), dp(30)))
 
             val title = LinearLayout(this)
             title.orientation = LinearLayout.VERTICAL
             title.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm), 0)
-            title.addView(label(exercise.name, if (completed) green else white, 18f, true))
-            title.addView(label(
-                doneSets.toString() + "/" + sets.length() + " series" + if (active) " | atual" else "",
+            val titleLabel = label(exercise.name, if (completed) green else white, 15f, true)
+            titleLabel.maxLines = 2
+            titleLabel.ellipsize = TextUtils.TruncateAt.END
+            title.addView(titleLabel)
+            val status = when {
+                completed -> doneSets.toString() + "/" + sets.length() + " series · concluido"
+                active -> doneSets.toString() + "/" + sets.length() + " series · atual"
+                else -> doneSets.toString() + "/" + sets.length() + " series · " + exercise.target
+            }
+            val statusLabel = label(
+                status,
                 if (completed) green else muted,
-                13f,
+                11f,
                 completed,
-            ))
-            header.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            header.addView(Mo2DragHandleView(this), LinearLayout.LayoutParams(dp(36), dp(44)))
-            item.addView(header)
-            item.addView(label(exercise.target + " | descanso " + exercise.rest, if (completed || active) white else muted, 14f, false))
-            item.addView(label(exercise.notes, muted, 13f, false))
-            item.addView(seriesProgressDots(sets))
+            )
+            statusLabel.maxLines = 1
+            statusLabel.ellipsize = TextUtils.TruncateAt.END
+            title.addView(statusLabel)
+            item.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            item.addView(Mo2DragHandleView(this), LinearLayout.LayoutParams(dp(34), dp(42)))
 
             attachExerciseDragGesture(item, index)
             item.setOnDragListener { view, event ->
@@ -5358,13 +7408,13 @@ class MainActivity : Activity() {
                     DragEvent.ACTION_DRAG_ENTERED -> {
                         view.scaleX = 1.02f
                         view.scaleY = 1.02f
-                        view.background = rounded(itemColor, dp(Mo2Radius.Lg), green)
+                        view.background = rounded(itemColor, dp(Mo2Radius.Md), green)
                         true
                     }
                     DragEvent.ACTION_DRAG_EXITED -> {
                         view.scaleX = 1f
                         view.scaleY = 1f
-                        view.background = rounded(itemColor, dp(Mo2Radius.Lg), itemBorder)
+                        view.background = rounded(itemColor, dp(Mo2Radius.Md), itemBorder)
                         true
                     }
                     DragEvent.ACTION_DROP -> {
@@ -5375,7 +7425,7 @@ class MainActivity : Activity() {
                     DragEvent.ACTION_DRAG_ENDED -> {
                         view.scaleX = 1f
                         view.scaleY = 1f
-                        view.background = rounded(itemColor, dp(Mo2Radius.Lg), itemBorder)
+                        view.background = rounded(itemColor, dp(Mo2Radius.Md), itemBorder)
                         true
                     }
                     else -> true
@@ -5457,35 +7507,92 @@ class MainActivity : Activity() {
     private fun registerPanel(): View {
         val exercise = currentExercise()
         val matched = catalogMatchForWorkoutExercise(exercise.name)
-        val lastSet = lastSetFor(exercise.name)
         val sets = plannedSetsForCurrentExercise()
         val doneCount = countDonePlannedSets(sets)
-        val box = card(surface3)
+        val box = card(surface)
         box.orientation = LinearLayout.VERTICAL
+        box.background = rounded(surface, dp(Mo2Radius.Lg), green)
+
         val heading = LinearLayout(this)
         heading.orientation = LinearLayout.HORIZONTAL
         heading.gravity = Gravity.CENTER_VERTICAL
-        val headingText = LinearLayout(this)
-        headingText.orientation = LinearLayout.VERTICAL
-        headingText.addView(label("EXERCICIO ATUAL", green, 13f, true))
-        headingText.addView(label(exercise.name, white, 23f, true))
-        heading.addView(headingText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        heading.addView(label(
+            "EXERCICIO ATUAL · " + (selectedExerciseIndex + 1) + " DE " + currentPlan().exercises.size,
+            green,
+            11f,
+            true,
+        ), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         heading.addView(statusChip(if (doneCount >= sets.length()) "CONCLUIDO" else "EM CURSO"))
         box.addView(heading)
-        box.addView(label(exercise.target + " | descanso " + exercise.rest, muted, 14f, false))
-        box.addView(label(exercise.notes, muted, 13f, false))
-        if (lastSet != null) {
-            box.addView(label("Ultima concluida: " + lastSet.optInt("reps") + " reps | " + lastSet.optDouble("load") + " kg", muted, 13f, false))
+
+        val titleRow = LinearLayout(this)
+        titleRow.orientation = LinearLayout.HORIZONTAL
+        titleRow.gravity = Gravity.CENTER_VERTICAL
+        val exerciseTitle = label(exercise.name, white, 22f, true)
+        exerciseTitle.maxLines = 2
+        exerciseTitle.ellipsize = TextUtils.TruncateAt.END
+        titleRow.addView(exerciseTitle, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+        val previous = workoutIconButton(Mo2ActionIcon.Back, if (selectedExerciseIndex > 0) white else muted, surface2, "Exercicio anterior")
+        previous.isEnabled = selectedExerciseIndex > 0
+        previous.setOnClickListener {
+            selectedExerciseIndex -= 1
+            prefs.edit().putInt("selected_exercise", selectedExerciseIndex).apply()
+            renderWorkoutInPlace()
         }
+        val previousParams = LinearLayout.LayoutParams(dp(40), dp(40))
+        previousParams.setMargins(dp(Mo2Spacing.Sm), 0, 0, 0)
+        titleRow.addView(previous, previousParams)
+        val next = workoutIconButton(
+            Mo2ActionIcon.ChevronRight,
+            if (selectedExerciseIndex < currentPlan().exercises.lastIndex) white else muted,
+            surface2,
+            "Proximo exercicio",
+        )
+        next.isEnabled = selectedExerciseIndex < currentPlan().exercises.lastIndex
+        next.setOnClickListener {
+            selectedExerciseIndex += 1
+            prefs.edit().putInt("selected_exercise", selectedExerciseIndex).apply()
+            renderWorkoutInPlace()
+        }
+        val nextParams = LinearLayout.LayoutParams(dp(40), dp(40))
+        nextParams.setMargins(dp(Mo2Spacing.Xs), 0, 0, 0)
+        titleRow.addView(next, nextParams)
+        val titleParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        titleParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        box.addView(titleRow, titleParams)
+
+        val attributes = HorizontalScrollView(this)
+        attributes.isHorizontalScrollBarEnabled = false
+        val attributeRow = LinearLayout(this)
+        attributeRow.orientation = LinearLayout.HORIZONTAL
+        attributeRow.addView(workoutInfoChip(exercise.target))
+        attributeRow.addView(workoutInfoChip("Descanso " + exercise.rest))
+        matched?.muscle?.takeIf(String::isNotBlank)?.let { muscle ->
+            attributeRow.addView(workoutInfoChip(muscle))
+        }
+        attributes.addView(attributeRow)
+        val attributeParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        attributeParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        box.addView(attributes, attributeParams)
+
         box.addView(currentExerciseGuidancePanel(exercise, matched))
-        box.addView(dashboardProgressLine("Series", doneCount.toString() + " de " + sets.length() + " concluidas", progressPercent(doneCount, sets.length()), green))
         box.addView(restTimerPanel())
 
         val seriesHeader = LinearLayout(this)
         seriesHeader.orientation = LinearLayout.HORIZONTAL
         seriesHeader.gravity = Gravity.CENTER_VERTICAL
-        seriesHeader.setPadding(0, dp(Mo2Spacing.Lg), 0, dp(Mo2Spacing.Xs))
-        seriesHeader.addView(label("SERIES", white, 16f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        seriesHeader.setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Xs))
+        seriesHeader.addView(label("Series", white, 16f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         seriesHeader.addView(label(doneCount.toString() + "/" + sets.length(), if (doneCount >= sets.length()) green else muted, 14f, true))
         box.addView(seriesHeader)
         box.addView(plannedSetColumnHeader())
@@ -5494,20 +7601,22 @@ class MainActivity : Activity() {
             box.addView(plannedSetRow(index, sets.getJSONObject(index)))
         }
 
-        val add = actionButton("+", surface2, green)
-        add.textSize = 22f
+        val add = actionButton("+  Adicionar serie", surface2, green)
+        add.textSize = accessibleTextSize(14f)
         add.contentDescription = "Adicionar serie"
         add.setOnClickListener { addPlannedSetForCurrentExercise() }
-        box.addView(buttonParams(add))
+        val addParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44))
+        addParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        box.addView(add, addParams)
 
         val actions = LinearLayout(this)
         actions.orientation = LinearLayout.HORIZONTAL
-        val swap = actionButton("Trocar exercicio", surface2, green)
+        val swap = actionButton("Trocar", surface2, green)
         swap.setOnClickListener { swapCurrentExerciseForRecommended() }
-        actions.addView(swap, LinearLayout.LayoutParams(0, dp(54), 1f))
+        actions.addView(swap, LinearLayout.LayoutParams(0, dp(48), 0.72f))
         val finish = actionButton("Concluir treino", green, bg)
         finish.setOnClickListener { finishStrengthWorkout() }
-        actions.addView(finish, LinearLayout.LayoutParams(0, dp(54), 1f))
+        actions.addView(finish, LinearLayout.LayoutParams(0, dp(48), 1.28f))
         box.addView(spacedRow(actions))
         return box
     }
@@ -5515,125 +7624,163 @@ class MainActivity : Activity() {
     private fun currentExerciseGuidancePanel(exercise: ExercisePlan, matched: CatalogExercise?): View {
         val box = LinearLayout(this)
         box.orientation = LinearLayout.VERTICAL
-        box.setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm))
+        box.setPadding(0, dp(Mo2Spacing.Md), 0, 0)
 
         if (matched == null) {
-            box.addView(label("Midia do catalogo ainda nao vinculada a este exercicio.", amber, 14f, true))
-            box.addView(label("Use Trocar exercicio ou a aba Exercicios se quiser buscar uma alternativa com GIF.", muted, 13f, false))
+            val unavailable = label("Midia de execucao ainda nao vinculada.", amber, 13f, true)
+            box.addView(unavailable)
+            val guidance = label(exercise.notes, muted, 12f, false)
+            guidance.maxLines = 2
+            guidance.ellipsize = TextUtils.TruncateAt.END
+            box.addView(guidance)
             return box
         }
 
         val unavailable = isEquipmentUnavailable(matched.equipment)
-        box.addView(label("EXECUCAO", green, 13f, true))
-        box.addView(label(
-            exerciseMeta(matched) + " | " + mediaHealthLabel(matched),
-            muted,
-            13f,
-            false,
-        ))
         if (unavailable) {
-            box.addView(label("Equipamento marcado como indisponivel: " + matched.equipment, danger, 14f, true))
+            val warning = label("Equipamento indisponivel: " + matched.equipment, danger, 12f, true)
+            warning.setPadding(0, 0, 0, dp(Mo2Spacing.Sm))
+            box.addView(warning)
         }
 
         if (matched.links.isNotEmpty()) {
-            val media = RemoteExerciseMediaView(this, matched.links)
-            val mediaParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(220))
+            val media = RemoteExerciseMediaView(this, matched.links, showSourceLabel = false)
+            media.background = rounded(surface2, dp(Mo2Radius.Md), border)
+            media.clipToOutline = true
+            val mediaParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
             mediaParams.setMargins(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm))
             box.addView(media, mediaParams)
         } else {
-            box.addView(label("Este exercicio existe no catalogo, mas ainda nao tem GIF remoto.", amber, 14f, true))
+            box.addView(label("GIF ainda nao disponivel para este exercicio.", amber, 13f, true))
         }
 
         val description = matched.description.ifBlank {
             "Exercicio do catalogo para " + matched.muscle + " com foco em " + matched.primary.ifBlank { matched.subgroup } + "."
         }
-        box.addView(label(description, white, 14f, false))
+        val disclosure = LinearLayout(this)
+        disclosure.orientation = LinearLayout.VERTICAL
+        disclosure.background = rounded(surface2, dp(Mo2Radius.Sm), border)
+        val disclosureHeader = LinearLayout(this)
+        disclosureHeader.orientation = LinearLayout.HORIZONTAL
+        disclosureHeader.gravity = Gravity.CENTER_VERTICAL
+        disclosureHeader.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+        val disclosureText = LinearLayout(this)
+        disclosureText.orientation = LinearLayout.VERTICAL
+        disclosureText.addView(label("Tecnica e cuidados", white, 12f, true))
+        val previewText = exercise.notes.ifBlank { description }
+        val preview = label(previewText, muted, 10f, false)
+        preview.maxLines = 1
+        preview.ellipsize = TextUtils.TruncateAt.END
+        disclosureText.addView(preview)
+        disclosureHeader.addView(disclosureText, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+        val chevron = Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, green)
+        disclosureHeader.addView(chevron, LinearLayout.LayoutParams(dp(24), dp(24)))
+        disclosure.addView(disclosureHeader)
+
+        val details = LinearLayout(this)
+        details.orientation = LinearLayout.VERTICAL
+        details.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+        details.visibility = View.GONE
+        details.addView(label(description, white, 12f, false))
         if (matched.technicalCare.isNotBlank()) {
-            box.addView(label("Cuidado: " + matched.technicalCare, muted, 13f, false))
+            val care = label("Cuidado: " + matched.technicalCare, muted, 11f, false)
+            care.setPadding(0, dp(Mo2Spacing.Sm), 0, 0)
+            details.addView(care)
         }
-        box.addView(label(
-            matched.muscle + " | " + matched.equipment.ifBlank { "equipamento variavel" } + " | nivel " + matched.level.ifBlank { "-" },
-            muted,
-            13f,
+        details.addView(label(
+            matched.muscle + " · " + matched.equipment.ifBlank { "equipamento variavel" },
+            Mo2Colors.TextMuted,
+            10f,
             false,
         ))
-
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        val unavailableButton = actionButton(if (unavailable) "Rever equipamento" else "Equipamento indisponivel", surface2, if (unavailable) danger else amber)
-        unavailableButton.setOnClickListener { showEquipmentUnavailableDialog(matched) }
-        row.addView(unavailableButton, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val open = actionButton("Abrir catalogo", surface2, green)
-        open.setOnClickListener {
-            prefs.edit()
-                .putString("catalog_muscle", matched.muscle)
-                .putString("catalog_selected", matched.id)
-                .apply()
-            switchTab("exercises")
+        disclosure.addView(details)
+        disclosureHeader.isClickable = true
+        disclosureHeader.isFocusable = true
+        disclosureHeader.setOnClickListener {
+            val opening = details.visibility != View.VISIBLE
+            details.visibility = if (opening) View.VISIBLE else View.GONE
+            chevron.rotation = if (opening) 90f else 0f
         }
-        row.addView(open, LinearLayout.LayoutParams(0, dp(50), 1f))
-        box.addView(spacedRow(row))
+        box.addView(disclosure)
         return box
+    }
+
+    private fun workoutInfoChip(text: String): TextView {
+        val chip = label(text, muted, 10f, true)
+        chip.gravity = Gravity.CENTER
+        chip.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md), 0)
+        chip.background = rounded(surface2, dp(Mo2Radius.Sm), border)
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            dp(32),
+        )
+        params.setMargins(0, 0, dp(Mo2Spacing.Sm), 0)
+        chip.layoutParams = params
+        return chip
     }
 
     private fun plannedSetColumnHeader(): View {
         val row = LinearLayout(this)
         row.orientation = LinearLayout.HORIZONTAL
         row.gravity = Gravity.CENTER_VERTICAL
-        row.setPadding(dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm), 0)
-        val spacerParams = LinearLayout.LayoutParams(dp(40), LinearLayout.LayoutParams.WRAP_CONTENT)
-        row.addView(label("", muted, 11f, true), spacerParams)
-        val load = label("KG", muted, 11f, true)
+        row.setPadding(dp(Mo2Spacing.Xs), 0, dp(Mo2Spacing.Xs), 0)
+        val spacerParams = LinearLayout.LayoutParams(dp(36), LinearLayout.LayoutParams.WRAP_CONTENT)
+        row.addView(label("SERIE", muted, 9f, true), spacerParams)
+        val load = label("CARGA", muted, 9f, true)
         load.gravity = Gravity.CENTER
         val loadParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         loadParams.setMargins(0, 0, dp(Mo2Spacing.Sm), 0)
         row.addView(load, loadParams)
-        val reps = label("REPS", muted, 11f, true)
+        val reps = label("REPS", muted, 9f, true)
         reps.gravity = Gravity.CENTER
         val repsParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         repsParams.setMargins(0, 0, dp(Mo2Spacing.Sm), 0)
         row.addView(reps, repsParams)
-        val done = label("FEITA", muted, 10f, true)
+        val done = label("FEITA", muted, 9f, true)
         done.gravity = Gravity.CENTER
-        row.addView(done, LinearLayout.LayoutParams(dp(48), LinearLayout.LayoutParams.WRAP_CONTENT))
+        row.addView(done, LinearLayout.LayoutParams(dp(44), LinearLayout.LayoutParams.WRAP_CONTENT))
         return row
     }
 
     private fun plannedSetRow(index: Int, item: JSONObject): View {
         val done = item.optBoolean("done", false)
         val row = LinearLayout(this)
-        row.orientation = LinearLayout.VERTICAL
-        row.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs))
         val rowParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        rowParams.setMargins(0, dp(Mo2Spacing.Xs), 0, dp(Mo2Spacing.Xs))
+        rowParams.setMargins(0, dp(3), 0, dp(3))
         row.layoutParams = rowParams
         row.background = plannedSetRowBackground(done)
-
-        val content = LinearLayout(this)
-        content.orientation = LinearLayout.HORIZONTAL
-        content.gravity = Gravity.CENTER_VERTICAL
 
         val number = label((index + 1).toString(), if (done) bg else muted, 13f, true)
         number.gravity = Gravity.CENTER
         number.background = rounded(if (done) green else surface2, dp(Mo2Radius.Pill), if (done) green else border)
-        val numberParams = LinearLayout.LayoutParams(dp(32), dp(32))
+        val numberParams = LinearLayout.LayoutParams(dp(28), dp(28))
         numberParams.setMargins(0, 0, dp(Mo2Spacing.Sm), 0)
-        content.addView(number, numberParams)
+        row.addView(number, numberParams)
 
         val storedLoad = item.optString("load", lastLoadFor(currentExercise().name))
         val load = input("kg", editableLoadText(storedLoad))
         load.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         load.gravity = Gravity.CENTER
-        val loadParams = LinearLayout.LayoutParams(0, dp(52), 1f)
+        val loadParams = LinearLayout.LayoutParams(0, dp(44), 1f)
         loadParams.setMargins(0, 0, dp(Mo2Spacing.Sm), 0)
-        content.addView(load, loadParams)
+        row.addView(load, loadParams)
 
         val reps = input("reps", item.optString("reps", defaultRepsFor(currentExercise().target)))
         reps.inputType = InputType.TYPE_CLASS_NUMBER
         reps.gravity = Gravity.CENTER
-        val repsParams = LinearLayout.LayoutParams(0, dp(52), 1f)
+        val repsParams = LinearLayout.LayoutParams(0, dp(44), 1f)
         repsParams.setMargins(0, 0, dp(Mo2Spacing.Sm), 0)
-        content.addView(reps, repsParams)
+        row.addView(reps, repsParams)
 
         val check = CheckBox(this)
         check.isChecked = done
@@ -5643,12 +7790,7 @@ class MainActivity : Activity() {
             intArrayOf(green, muted),
         )
         check.contentDescription = if (done) "Desmarcar serie " + (index + 1) else "Concluir serie " + (index + 1)
-        content.addView(check, LinearLayout.LayoutParams(dp(48), dp(52)))
-        row.addView(content)
-
-        val status = label(if (done) "CONCLUIDA" else "PENDENTE", if (done) green else muted, 11f, true)
-        status.setPadding(dp(40), dp(Mo2Spacing.Xs), 0, 0)
-        row.addView(status)
+        row.addView(check, LinearLayout.LayoutParams(dp(44), dp(44)))
         check.setOnClickListener {
             if (done) {
                 uncompletePlannedSet(index, load.textValue(), reps.textValue())
@@ -5981,7 +8123,7 @@ class MainActivity : Activity() {
             .put("time", timeKey())
             .put("plan_id", plan.id)
             .put("plan_title", plan.title)
-            .put("plan_focus", plan.focus)
+            .put("plan_focus", workoutPlanSubtitle(plan, plans.indexOfFirst { it.id == plan.id }.coerceAtLeast(0)))
             .put("status", "completed")
             .put("completed_sets", planSetCounts.values.sum())
             .put("total_planned_sets", totalPlannedSets)
@@ -6383,41 +8525,171 @@ class MainActivity : Activity() {
         return visible + if (weights.size > 6) " +" + (weights.size - 6) else ""
     }
 
+    private fun exerciseNamesPlannedForSelectedWorkoutDay(): List<String> {
+        val planIndex = selectedPlanIndex.coerceIn(plans.indices)
+        val selectedDay = workoutPlanDayIndex(plans[planIndex], planIndex)
+        return plans.mapIndexed { index, plan -> index to plan }
+            .filter { (index, plan) -> workoutPlanDayIndex(plan, index) == selectedDay }
+            .flatMap { (_, plan) -> plan.exercises.map(ExercisePlan::name) }
+    }
+
+    private fun catalogIdsPlannedForSelectedWorkoutDay(): Set<String> {
+        return exerciseNamesPlannedForSelectedWorkoutDay()
+            .mapNotNull(::catalogMatchForWorkoutExercise)
+            .map(CatalogExercise::id)
+            .toSet()
+    }
+
+    private fun isExercisePlannedForSelectedWorkoutDay(candidate: CatalogExercise): Boolean {
+        if (candidate.id in catalogIdsPlannedForSelectedWorkoutDay()) return true
+        val candidateName = normalized(candidate.name)
+        return exerciseNamesPlannedForSelectedWorkoutDay().any { plannedName ->
+            normalized(plannedName) == candidateName ||
+                workoutCatalogAliases(plannedName).any { alias -> normalized(alias) == candidateName }
+        }
+    }
+
     private fun swapCurrentExerciseForRecommended() {
-        val matched = catalogMatchForWorkoutExercise(currentExercise().name)
-        if (matched == null) {
-            Toast.makeText(this, "Nenhuma alternativa recomendada encontrada.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val preferred = preferredAlternativeFor(matched)
         val reason = prefs.getString("swap_reason_filter", "occupied") ?: "occupied"
-        val options = (listOfNotNull(preferred).filter { equipmentAvailableForSuggestion(it) } + recommendedSwapOptions(matched, reason))
-            .distinctBy { it.id }
-            .take(8)
-        if (options.isEmpty()) {
-            Toast.makeText(this, "Nenhuma alternativa recomendada encontrada.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        showRecommendedExerciseDialog(matched, options, preferred?.id, reason)
+        requestWorkoutSwapOptions(reason)
     }
 
-    private fun recommendedSwapOptions(current: CatalogExercise, reason: String): List<CatalogExercise> {
-        val hiddenIds = hiddenCatalogIds()
-        val base = alternativesFor(current)
-            .filter { it.id != current.id }
-            .filter { !hiddenIds.contains(it.id) }
-            .filter { equipmentAvailableForSuggestion(it) }
-        val filtered = when (reason) {
-            "same_level" -> base.filter { it.level.isBlank() || current.level.isBlank() || normalized(it.level) == normalized(current.level) }
-            "same_muscle" -> base.filter { normalized(it.muscle) == normalized(current.muscle) }
-            else -> base
+    private fun requestWorkoutSwapOptions(reason: String) {
+        val planIndex = selectedPlanIndex.coerceIn(plans.indices)
+        val exerciseIndex = selectedExerciseIndex.coerceIn(plans[planIndex].exercises.indices)
+        val exerciseName = plans[planIndex].exercises[exerciseIndex].name
+        val request = Mo2WorkoutSwapRequest(
+            currentAliases = workoutCatalogAliases(exerciseName),
+            plannedAliasGroups = exerciseNamesPlannedForSelectedWorkoutDay()
+                .map(::workoutCatalogAliases),
+            reason = reason,
+            hiddenIds = hiddenCatalogIds(),
+            unavailableEquipmentKeys = unavailableEquipmentKeysSnapshot(),
+            manualAlternativesByExerciseId = catalogAlternativeOverridesSnapshot(),
+            preferredAlternativeByExerciseId = preferredAlternativesSnapshot(),
+        )
+
+        workoutSwapTask?.cancel(true)
+        workoutSwapRequestGeneration += 1
+        val generation = workoutSwapRequestGeneration
+        dismissWorkoutSwapLoadingDialog()
+        workoutSwapLoadingDialog = showWorkoutSwapLoadingDialog(exerciseName)
+        workoutSwapTask = workoutSwapExecutor.submit {
+            val outcome = runCatching {
+                Mo2WorkoutSwapEngine.resolve(catalog, request)
+            }
+            runOnUiThread {
+                if (generation != workoutSwapRequestGeneration || isFinishing || isDestroyed) {
+                    return@runOnUiThread
+                }
+                workoutSwapTask = null
+                dismissWorkoutSwapLoadingDialog()
+                if (
+                    currentTab != "workout" ||
+                    selectedPlanIndex != planIndex ||
+                    selectedExerciseIndex != exerciseIndex ||
+                    currentExercise().name != exerciseName
+                ) {
+                    return@runOnUiThread
+                }
+                val result = outcome.getOrNull()
+                if (outcome.isFailure) {
+                    Log.e("Mo2WorkoutSwap", "Falha ao preparar alternativas", outcome.exceptionOrNull())
+                    Toast.makeText(this, "Nao foi possivel preparar as alternativas.", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                if (result == null || result.baseOptions.isEmpty()) {
+                    Toast.makeText(this, "Nenhuma alternativa recomendada encontrada.", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                catalogMatchCache[normalized(exerciseName)] = result.current
+                result.baseOptions.forEach { option ->
+                    catalogMatchCache.putIfAbsent(normalized(option.name), option)
+                }
+                showRecommendedExerciseDialog(result, reason)
+            }
         }
-        return filtered.ifEmpty { base }
     }
 
-    private fun equipmentAvailableForSuggestion(exercise: CatalogExercise): Boolean {
-        return !isEquipmentUnavailable(exercise.equipment)
+    private fun showWorkoutSwapLoadingDialog(exerciseName: String): AlertDialog {
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.HORIZONTAL
+        content.gravity = Gravity.CENTER_VERTICAL
+        content.setPadding(dp(20), dp(20), dp(20), dp(20))
+        content.background = rounded(surface, dp(Mo2Radius.Modal), border)
+
+        val progress = ProgressBar(this)
+        progress.isIndeterminate = true
+        progress.indeterminateTintList = ColorStateList.valueOf(green)
+        content.addView(progress, LinearLayout.LayoutParams(dp(42), dp(42)))
+
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.setPadding(dp(Mo2Spacing.Md), 0, 0, 0)
+        text.addView(label("Buscando alternativas", white, 17f, true))
+        text.addView(label(exerciseName, muted, 13f, false))
+        content.addView(text, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setNegativeButton("Cancelar") { _, _ -> cancelWorkoutSwapRequest(dismissDialog = false) }
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnCancelListener { cancelWorkoutSwapRequest(dismissDialog = false) }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+        return dialog
+    }
+
+    private fun cancelWorkoutSwapRequest(dismissDialog: Boolean = true) {
+        workoutSwapRequestGeneration += 1
+        workoutSwapTask?.cancel(true)
+        workoutSwapTask = null
+        if (dismissDialog) dismissWorkoutSwapLoadingDialog()
+    }
+
+    private fun dismissWorkoutSwapLoadingDialog() {
+        val dialog = workoutSwapLoadingDialog
+        workoutSwapLoadingDialog = null
+        if (dialog?.isShowing == true) dialog.dismiss()
+    }
+
+    private fun catalogAlternativeOverridesSnapshot(): Map<String, List<String>> {
+        val overrides = safeObject("catalog_alternative_overrides")
+        val result = mutableMapOf<String, List<String>>()
+        val keys = overrides.keys()
+        while (keys.hasNext()) {
+            val exerciseId = keys.next()
+            result[exerciseId] = jsonStringList(overrides.optJSONArray(exerciseId))
+        }
+        return result
+    }
+
+    private fun preferredAlternativesSnapshot(): Map<String, String> {
+        val preferred = safeObject("preferred_catalog_alternatives")
+        val result = mutableMapOf<String, String>()
+        val keys = preferred.keys()
+        while (keys.hasNext()) {
+            val exerciseId = keys.next()
+            preferred.optString(exerciseId)
+                .takeIf(String::isNotBlank)
+                ?.let { alternativeId -> result[exerciseId] = alternativeId }
+        }
+        return result
+    }
+
+    private fun unavailableEquipmentKeysSnapshot(): Set<String> {
+        val unavailable = unavailableEquipmentMap()
+        val result = mutableSetOf<String>()
+        val keys = unavailable.keys()
+        while (keys.hasNext()) result.add(keys.next())
+        return result
     }
 
     private fun unavailableEquipmentMap(): JSONObject = safeObject("unavailable_equipment")
@@ -6502,91 +8774,299 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    private fun showRecommendedExerciseDialog(current: CatalogExercise, options: List<CatalogExercise>, preferredId: String?, reason: String) {
+    private fun showRecommendedExerciseDialog(result: Mo2WorkoutSwapResult, reason: String) {
+        val current = result.current
+        if (result.baseOptions.isEmpty()) {
+            Toast.makeText(this, "Nenhuma alternativa livre para esse filtro.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        lateinit var dialog: AlertDialog
+        var activeReason = reason
+        var preferredId = result.preferredId
+        var selectedOption: CatalogExercise? = preferredId
+            ?.let { id -> result.baseOptions.firstOrNull { option -> option.id == id } }
+            ?: Mo2WorkoutSwapEngine.optionsForReason(result, activeReason).firstOrNull()
+
+        val sheet = LinearLayout(this)
+        sheet.orientation = LinearLayout.VERTICAL
+        sheet.setPadding(dp(18), dp(12), dp(18), dp(18))
+        sheet.background = rounded(surface, dp(Mo2Radius.Modal), border)
+
+        val handle = View(this)
+        handle.background = rounded(Mo2Colors.Disabled, dp(Mo2Radius.Pill), null)
+        val handleParams = LinearLayout.LayoutParams(dp(42), dp(4))
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL
+        handleParams.setMargins(0, 0, 0, dp(Mo2Spacing.Md))
+        sheet.addView(handle, handleParams)
+
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+        val headerText = LinearLayout(this)
+        headerText.orientation = LinearLayout.VERTICAL
+        headerText.addView(label("Trocar exercicio", white, 21f, true))
+        headerText.addView(label("Escolha uma alternativa compativel.", muted, 12f, false))
+        header.addView(headerText, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+        val close = workoutIconButton(Mo2ActionIcon.Clear, white, surface2, "Fechar")
+        close.setOnClickListener { dialog.dismiss() }
+        header.addView(close, LinearLayout.LayoutParams(dp(40), dp(40)))
+        sheet.addView(header)
+
         val content = LinearLayout(this)
         content.orientation = LinearLayout.VERTICAL
-        content.setPadding(dp(18), dp(18), dp(18), dp(12))
-        content.background = rounded(surface, dp(Mo2Radius.Modal), border)
-        content.addView(label("TROCAR EXERCICIO", green, 13f, true))
-        content.addView(label(currentExercise().name, white, 22f, true))
-        content.addView(label("Escolha uma alternativa para " + current.muscle + ". O plano sera atualizado localmente.", muted, 14f, false))
+        content.setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md))
 
-        lateinit var dialog: AlertDialog
+        val currentSummary = LinearLayout(this)
+        currentSummary.orientation = LinearLayout.HORIZONTAL
+        currentSummary.gravity = Gravity.CENTER_VERTICAL
+        currentSummary.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm))
+        currentSummary.background = rounded(surface2, dp(Mo2Radius.Sm), border)
+        val currentIcon = workoutIconButton(Mo2ActionIcon.Dumbbell, green, surface3, "Exercicio atual")
+        currentIcon.isClickable = false
+        currentSummary.addView(currentIcon, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val currentText = LinearLayout(this)
+        currentText.orientation = LinearLayout.VERTICAL
+        currentText.setPadding(dp(Mo2Spacing.Md), 0, 0, 0)
+        currentText.addView(label("EXERCICIO ATUAL", muted, 9f, true))
+        val currentName = label(currentExercise().name, white, 13f, true)
+        currentName.maxLines = 2
+        currentName.ellipsize = TextUtils.TruncateAt.END
+        currentText.addView(currentName)
+        currentSummary.addView(currentText, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+        content.addView(currentSummary)
+
         val reasons = listOf(
             Pair("occupied", "Equip. ocupado"),
             Pair("missing", "Equip. inexistente"),
             Pair("same_muscle", "Mesmo musculo"),
             Pair("same_level", "Nivel similar"),
         )
-        val reasonGrid = LinearLayout(this)
-        reasonGrid.orientation = LinearLayout.VERTICAL
-        reasons.chunked(2).forEach { rowItems ->
-            val reasonRow = LinearLayout(this)
-            reasonRow.orientation = LinearLayout.HORIZONTAL
-            rowItems.forEach { item ->
-                val active = item.first == reason
-                val button = actionButton(item.second, if (active) green else surface2, if (active) bg else white)
-                button.textSize = accessibleTextSize(13f)
-                button.maxLines = 1
-                button.setOnClickListener {
-                    prefs.edit().putString("swap_reason_filter", item.first).apply()
-                    val refreshed = recommendedSwapOptions(current, item.first)
-                        .let { listOfNotNull(preferredAlternativeFor(current)).filter { pref -> equipmentAvailableForSuggestion(pref) } + it }
-                        .distinctBy { option -> option.id }
-                        .take(8)
-                    dialog.dismiss()
-                    if (refreshed.isEmpty()) Toast.makeText(this, "Nenhuma alternativa livre para esse filtro.", Toast.LENGTH_SHORT).show()
-                    else showRecommendedExerciseDialog(current, refreshed, preferredAlternativeFor(current)?.id, item.first)
+
+        content.addView(label("MOTIVO DA TROCA", muted, 10f, true).also { view ->
+            view.setPadding(0, dp(Mo2Spacing.Lg), 0, 0)
+        })
+        val reasonScroll = HorizontalScrollView(this)
+        reasonScroll.isHorizontalScrollBarEnabled = false
+        val reasonRow = LinearLayout(this)
+        reasonRow.orientation = LinearLayout.HORIZONTAL
+        val reasonViews = mutableMapOf<String, TextView>()
+        reasons.forEach { item ->
+            val chip = label(item.second, muted, 10f, true)
+            chip.gravity = Gravity.CENTER
+            chip.maxLines = 1
+            chip.isClickable = true
+            chip.isFocusable = true
+            reasonViews[item.first] = chip
+            val params = LinearLayout.LayoutParams(dp(112), dp(34))
+            params.setMargins(0, dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), 0)
+            reasonRow.addView(chip, params)
+        }
+        reasonScroll.addView(reasonRow)
+        content.addView(reasonScroll)
+
+        val hideEquipment = CheckBox(this)
+        hideEquipment.text = "Ocultar " + current.equipment.ifBlank { "este equipamento" } + " nas sugestoes de hoje"
+        hideEquipment.setTextColor(muted)
+        hideEquipment.textSize = accessibleTextSize(11f)
+        hideEquipment.isChecked = isEquipmentUnavailable(current.equipment)
+        hideEquipment.buttonTintList = ColorStateList(
+            arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+            intArrayOf(green, muted),
+        )
+        content.addView(hideEquipment)
+
+        content.addView(label("ALTERNATIVAS RECOMENDADAS", muted, 10f, true).also { view ->
+            view.setPadding(0, dp(Mo2Spacing.Md), 0, 0)
+        })
+        val optionsContainer = LinearLayout(this)
+        optionsContainer.orientation = LinearLayout.VERTICAL
+        content.addView(optionsContainer)
+
+        lateinit var renderOptions: () -> Unit
+        fun updateReasonStyles() {
+            reasonViews.forEach { (key, chip) ->
+                val active = key == activeReason
+                chip.setTextColor(if (active) green else muted)
+                chip.background = rounded(
+                    if (active) Mo2Colors.PrimarySoft else surface2,
+                    dp(Mo2Radius.Pill),
+                    if (active) green else border,
+                )
+            }
+        }
+
+        renderOptions = {
+            optionsContainer.removeAllViews()
+            val hiddenEquipmentKey = if (hideEquipment.isChecked) equipmentKey(current.equipment) else ""
+            val options = Mo2WorkoutSwapEngine.optionsForReason(result, activeReason)
+                .filterNot { option ->
+                    hiddenEquipmentKey.isNotBlank() && equipmentKey(option.equipment) == hiddenEquipmentKey
                 }
-                reasonRow.addView(button, LinearLayout.LayoutParams(0, dp(50), 1f))
+                .ifEmpty { Mo2WorkoutSwapEngine.optionsForReason(result, activeReason) }
+            if (options.none { option -> option.id == selectedOption?.id }) {
+                selectedOption = preferredId
+                    ?.let { id -> options.firstOrNull { option -> option.id == id } }
+                    ?: options.firstOrNull()
             }
-            reasonGrid.addView(spacedRow(reasonRow))
+
+            options.forEach { option ->
+                val selected = option.id == selectedOption?.id
+                val item = LinearLayout(this)
+                item.orientation = LinearLayout.HORIZONTAL
+                item.gravity = Gravity.CENTER_VERTICAL
+                item.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+                item.background = rounded(
+                    if (selected) Mo2Colors.PrimarySoft else surface2,
+                    dp(Mo2Radius.Md),
+                    if (selected) green else border,
+                )
+                item.isClickable = true
+                item.isFocusable = true
+                item.setOnClickListener {
+                    selectedOption = option
+                    renderOptions()
+                }
+
+                val optionIcon = workoutIconButton(Mo2ActionIcon.Dumbbell, if (selected) green else muted, surface3, option.name)
+                optionIcon.isClickable = false
+                item.addView(optionIcon, LinearLayout.LayoutParams(dp(44), dp(48)))
+                val text = LinearLayout(this)
+                text.orientation = LinearLayout.VERTICAL
+                text.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm), 0)
+                val name = label(option.name, white, 13f, true)
+                name.maxLines = 2
+                name.ellipsize = TextUtils.TruncateAt.END
+                text.addView(name)
+                val compatibility = Mo2ExerciseAlternativeEngine.compatibilityLabel(
+                    current.toAlternativeProfile(),
+                    option.toAlternativeProfile(),
+                )
+                val meta = label(
+                    compatibility + " · " + option.muscle + " · " + option.equipment.ifBlank { "equipamento variavel" },
+                    if (selected) green else muted,
+                    10f,
+                    selected,
+                )
+                meta.maxLines = 2
+                meta.ellipsize = TextUtils.TruncateAt.END
+                text.addView(meta)
+                item.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+                val trailing = LinearLayout(this)
+                trailing.orientation = LinearLayout.VERTICAL
+                trailing.gravity = Gravity.CENTER
+                val prefer = workoutIconButton(
+                    if (option.id == preferredId) Mo2ActionIcon.StarFilled else Mo2ActionIcon.Star,
+                    if (option.id == preferredId) amber else muted,
+                    surface2,
+                    if (option.id == preferredId) "Alternativa preferida" else "Definir como preferida",
+                )
+                prefer.setOnClickListener {
+                    setPreferredAlternative(current, option, renderAfterSave = false)
+                    preferredId = option.id
+                    selectedOption = option
+                    renderOptions()
+                }
+                trailing.addView(prefer, LinearLayout.LayoutParams(dp(34), dp(34)))
+                val choice = CheckBox(this)
+                choice.isChecked = selected
+                choice.isClickable = false
+                choice.buttonTintList = ColorStateList(
+                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                    intArrayOf(green, muted),
+                )
+                trailing.addView(choice, LinearLayout.LayoutParams(dp(34), dp(34)))
+                item.addView(trailing, LinearLayout.LayoutParams(dp(40), dp(68)))
+
+                val itemParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                )
+                itemParams.setMargins(0, dp(Mo2Spacing.Xs), 0, dp(Mo2Spacing.Xs))
+                optionsContainer.addView(item, itemParams)
+            }
         }
-        content.addView(reasonGrid)
 
-        options.forEach { option ->
-            val item = card(if (option.id == preferredId) surface3 else surface2)
-            item.orientation = LinearLayout.VERTICAL
-            item.addView(label((if (option.id == preferredId) "[preferido] " else "") + option.name, white, 16f, true))
-            item.addView(label(exerciseMeta(option), muted, 12f, false))
-            item.addView(label("Nivel: " + option.level.ifBlank { "-" } + " | Grupo: " + option.muscle, muted, 12f, false))
-
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-            val use = actionButton("Usar", green, bg)
-            use.setOnClickListener {
-                applyRecommendedExerciseSwap(option)
-                dialog.dismiss()
+        reasonViews.forEach { (key, chip) ->
+            chip.setOnClickListener {
+                activeReason = key
+                prefs.edit().putString("swap_reason_filter", key).apply()
+                updateReasonStyles()
+                renderOptions()
             }
-            row.addView(use, LinearLayout.LayoutParams(0, dp(46), 1f))
-            val prefer = actionButton("Preferir", surface2, if (option.id == preferredId) amber else white)
-            prefer.setOnClickListener {
-                setPreferredAlternative(current, option)
-                dialog.dismiss()
-            }
-            row.addView(prefer, LinearLayout.LayoutParams(0, dp(46), 1f))
-            item.addView(spacedRow(row))
-            content.addView(item)
         }
-
-        val cancel = actionButton("Cancelar", surface2, white)
-        cancel.setOnClickListener { dialog.dismiss() }
-        content.addView(buttonParams(cancel))
+        hideEquipment.setOnClickListener {
+            if (hideEquipment.isChecked) {
+                val equipmentReason = if (activeReason == "missing") "inexistente" else "ocupado"
+                markEquipmentUnavailable(current.equipment, equipmentReason)
+            } else {
+                clearUnavailableEquipment(current.equipment)
+            }
+            renderOptions()
+        }
+        updateReasonStyles()
+        renderOptions()
 
         val scroll = ScrollView(this)
         scroll.isFillViewport = true
         scroll.isVerticalScrollBarEnabled = true
         scroll.addView(content)
+        sheet.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f,
+        ))
+
+        val apply = actionButton("Trocar exercicio", green, bg)
+        apply.setOnClickListener {
+            val selected = selectedOption
+            if (selected == null) {
+                Toast.makeText(this, "Selecione uma alternativa.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            applyRecommendedExerciseSwap(selected)
+        }
+        val applyParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(50),
+        )
+        applyParams.setMargins(0, dp(Mo2Spacing.Sm), 0, 0)
+        sheet.addView(apply, applyParams)
 
         dialog = AlertDialog.Builder(this)
-            .setView(scroll)
+            .setView(sheet)
             .create()
+        showWorkoutBottomSheet(dialog, sheet, 0.88f)
+    }
+
+    private fun showWorkoutBottomSheet(
+        dialog: AlertDialog,
+        animatedView: View,
+        heightFraction: Float,
+    ) {
         dialog.setOnShowListener {
-            content.startAnimation(smoothPopupAnimation())
-            dialog.window?.setLayout(
-                (resources.displayMetrics.widthPixels * 0.94f).roundToInt(),
-                (resources.displayMetrics.heightPixels * 0.86f).roundToInt(),
-            )
+            animatedView.startAnimation(smoothPopupAnimation())
+            dialog.window?.let { window ->
+                window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                window.decorView.setPadding(dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+                val windowAttributes = window.attributes
+                windowAttributes.gravity = Gravity.BOTTOM
+                window.attributes = windowAttributes
+                window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+                window.setLayout(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    (resources.displayMetrics.heightPixels * heightFraction.coerceIn(0.55f, 0.94f)).roundToInt(),
+                )
+            }
         }
         dialog.show()
     }
@@ -6607,6 +9087,10 @@ class MainActivity : Activity() {
     }
 
     private fun applyRecommendedExerciseSwap(recommended: CatalogExercise) {
+        if (isExercisePlannedForSelectedWorkoutDay(recommended)) {
+            Toast.makeText(this, "Esse exercicio ja esta planejado para este dia.", Toast.LENGTH_SHORT).show()
+            return
+        }
         val planIndex = selectedPlanIndex.coerceIn(plans.indices)
         val plan = plans[planIndex]
         val exercises = plan.exercises.toMutableList()
@@ -6617,8 +9101,9 @@ class MainActivity : Activity() {
         )
         replacePlanExercises(planIndex, exercises)
         prefs.edit().remove(plannedSetKey()).apply()
+        catalogMatchCache[normalized(recommended.name)] = recommended
         Toast.makeText(this, "Exercicio trocado por " + recommended.name + ".", Toast.LENGTH_SHORT).show()
-        render()
+        renderWorkoutInPlace()
     }
 
     private fun showWorkoutSummaryPopup(completion: JSONObject) {
@@ -6676,11 +9161,42 @@ class MainActivity : Activity() {
             smartCoachLines().joinToString("\n"),
         ).joinToString("\n")
 
+        lateinit var dialog: AlertDialog
+        val sheet = LinearLayout(this)
+        sheet.orientation = LinearLayout.VERTICAL
+        sheet.setPadding(dp(18), dp(12), dp(18), dp(18))
+        sheet.background = rounded(surface, dp(Mo2Radius.Modal), border)
+
+        val handle = View(this)
+        handle.background = rounded(Mo2Colors.Disabled, dp(Mo2Radius.Pill), null)
+        val handleParams = LinearLayout.LayoutParams(dp(42), dp(4))
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL
+        handleParams.setMargins(0, 0, 0, dp(Mo2Spacing.Md))
+        sheet.addView(handle, handleParams)
+
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+        val headerText = LinearLayout(this)
+        headerText.orientation = LinearLayout.VERTICAL
+        headerText.addView(label(currentPlan().title + " concluido", white, 22f, true))
+        headerText.addView(label("Resumo da sessao", muted, 12f, false))
+        header.addView(headerText, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+        header.addView(statusChip("CONCLUIDO"))
+        val close = workoutIconButton(Mo2ActionIcon.Clear, white, surface2, "Fechar")
+        close.setOnClickListener { dialog.dismiss() }
+        val closeParams = LinearLayout.LayoutParams(dp(40), dp(40))
+        closeParams.setMargins(dp(Mo2Spacing.Sm), 0, 0, 0)
+        header.addView(close, closeParams)
+        sheet.addView(header)
+
         val content = LinearLayout(this)
         content.orientation = LinearLayout.VERTICAL
-        content.setPadding(dp(12), dp(14), dp(12), dp(8))
-        content.addView(label("RESUMO POS-TREINO", green, 13f, true))
-        content.addView(label(currentPlan().title + " concluido", white, 24f, true))
+        content.setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md))
         content.addView(label(
             if (partialExercises.isEmpty() && skippedExercises.isEmpty()) {
                 "Todos os exercicios planejados foram concluidos e salvos no historico."
@@ -6688,52 +9204,61 @@ class MainActivity : Activity() {
                 "Treino encerrado. O app registrou o que foi feito e marcou o restante como parcial ou pulado."
             },
             muted,
-            14f,
+            12f,
             false,
         ))
+        content.addView(workoutMetricStrip(listOf(
+            Pair("EXERCICIOS", exerciseCounts.size.toString() + "/" + currentPlan().exercises.size),
+            Pair("SERIES", exerciseCounts.values.sum().toString()),
+            Pair("DURACAO", formatDuration(completion.optLong("duration_seconds", 0L))),
+        )))
         content.addView(summaryMetricRow(
-            Triple("Series", exerciseCounts.values.sum().toString(), exerciseCounts.size.toString() + " exercicios"),
             Triple("Volume", totalVolume.roundToInt().toString() + " kg", "movimentado"),
+            Triple("Melhor carga", if (bestLoad <= 0.0) "-" else formatLoad(bestLoad), if (bestLoad <= 0.0) "sem carga" else bestExercise),
             green,
-        ))
-        content.addView(summaryMetricRow(
-            Triple("RPE", avgRpe, "media da sessao"),
-            Triple("Melhor carga", if (bestLoad <= 0.0) "-" else formatLoad(bestLoad), bestExercise),
-            amber,
         ))
 
         val details = card(surface2)
         details.orientation = LinearLayout.VERTICAL
-        details.addView(label("EXERCICIOS REALIZADOS", muted, 12f, true))
-        details.addView(label(exerciseLines, white, 14f, false))
+        details.addView(label("EXERCICIOS REALIZADOS", muted, 10f, true))
+        details.addView(label(exerciseLines, white, 12f, false))
         if (partialExercises.isNotEmpty()) {
-            details.addView(label("EXERCICIOS PARCIAIS", amber, 12f, true))
-            details.addView(label(partialExercises.joinToString("\n") { exercise -> "- " + exercise }, white, 14f, false))
+            details.addView(label("EXERCICIOS PARCIAIS", amber, 10f, true))
+            details.addView(label(partialExercises.joinToString("\n") { exercise -> "- " + exercise }, white, 12f, false))
         }
         if (skippedExercises.isNotEmpty()) {
-            details.addView(label("EXERCICIOS PULADOS", muted, 12f, true))
-            details.addView(label(skippedExercises.joinToString("\n") { exercise -> "- " + exercise }, white, 14f, false))
+            details.addView(label("EXERCICIOS PULADOS", muted, 10f, true))
+            details.addView(label(skippedExercises.joinToString("\n") { exercise -> "- " + exercise }, white, 12f, false))
         }
         if (runLines.isNotEmpty()) {
-            details.addView(label("CORRIDA HOJE", muted, 12f, true))
-            details.addView(label(runLines.joinToString("\n"), white, 14f, false))
+            details.addView(label("CORRIDA HOJE", muted, 10f, true))
+            details.addView(label(runLines.joinToString("\n"), white, 12f, false))
         }
         content.addView(details)
 
         val scroll = ScrollView(this)
+        scroll.isFillViewport = true
         scroll.addView(content)
-        val dialog = AlertDialog.Builder(this)
-            .setView(scroll)
-            .setNeutralButton("Copiar") { _, _ -> copyTextToClipboard("Resumo Mo2 LOG", message, "Resumo copiado.") }
-            .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+        sheet.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f,
+        ))
+
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val copy = actionButton("Copiar", surface2, Mo2Colors.Running)
+        copy.setOnClickListener { copyTextToClipboard("Resumo Mo2 LOG", message, "Resumo copiado.") }
+        actions.addView(copy, LinearLayout.LayoutParams(0, dp(50), 0.7f))
+        val done = actionButton("OK", green, bg)
+        done.setOnClickListener { dialog.dismiss() }
+        actions.addView(done, LinearLayout.LayoutParams(0, dp(50), 1.3f))
+        sheet.addView(spacedRow(actions))
+
+        dialog = AlertDialog.Builder(this)
+            .setView(sheet)
             .create()
-        dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(green)
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Mo2Colors.Running)
-            content.startAnimation(smoothPopupAnimation())
-        }
-        dialog.show()
+        showWorkoutBottomSheet(dialog, sheet, 0.78f)
     }
 
     private fun todayRunSummaryLines(): List<String> {
@@ -7363,22 +9888,20 @@ class MainActivity : Activity() {
             override fun onStart(utteranceId: String?) = Unit
 
             override fun onDone(utteranceId: String?) {
-                if (utteranceId != null && utteranceId == activeRestUtteranceId) {
-                    runOnUiThread {
-                        activeRestUtteranceId = null
-                        releaseRestAudioFocus()
-                    }
-                }
+                utteranceId?.let { completedId -> runOnUiThread { finishDuckedUtterance(completedId) } }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                if (utteranceId != null && utteranceId == activeRestUtteranceId) {
-                    runOnUiThread {
-                        activeRestUtteranceId = null
-                        releaseRestAudioFocus()
-                    }
-                }
+                utteranceId?.let { failedId -> runOnUiThread { finishDuckedUtterance(failedId) } }
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                utteranceId?.let { failedId -> runOnUiThread { finishDuckedUtterance(failedId) } }
+            }
+
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                utteranceId?.let { stoppedId -> runOnUiThread { finishDuckedUtterance(stoppedId) } }
             }
         })
     }
@@ -7388,7 +9911,15 @@ class MainActivity : Activity() {
     private fun speakRunCue(text: String, flush: Boolean = false) {
         if (!isRunningVoiceEnabled() || !voiceCoachReady) return
         val queueMode = if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-        voiceCoach?.speak(text, queueMode, null, "mo2log_run_" + System.currentTimeMillis())
+        val utteranceId = "mo2log_run_" + System.currentTimeMillis()
+        requestCueAudioFocus()
+        duckedUtteranceIds.add(utteranceId)
+        val result = voiceCoach?.speak(text, queueMode, null, utteranceId)
+        if (result != TextToSpeech.SUCCESS) {
+            finishDuckedUtterance(utteranceId)
+        } else {
+            runningSessionHandler.postDelayed({ finishDuckedUtterance(utteranceId) }, 15000L)
+        }
     }
 
     private fun saveRun(distance: Double, speed: Double, notes: String) {
@@ -7596,6 +10127,8 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Nao foi possivel gravar o backup neste aparelho.", Toast.LENGTH_LONG).show()
             return
         }
+        catalogCache = null
+        resetCatalogDerivedCaches()
         syncTrainingPlanVersion()
         restorePersistedState(currentTab)
         Toast.makeText(this, if (createSafetySnapshot) "Backup importado com copia de seguranca." else "Importacao desfeita.", Toast.LENGTH_LONG).show()
@@ -7753,6 +10286,8 @@ class MainActivity : Activity() {
         val array = JSONArray()
         ids.sorted().forEach { id -> array.put(id) }
         prefs.edit().putString("hidden_catalog_ids", array.toString()).apply()
+        catalogMatchCache.clear()
+        catalogMatchMissCache.clear()
     }
 
     private fun toggleHiddenCatalogExercise(exercise: CatalogExercise) {
@@ -7778,12 +10313,16 @@ class MainActivity : Activity() {
         return catalog.firstOrNull { it.id == preferredId }
     }
 
-    private fun setPreferredAlternative(exercise: CatalogExercise, alternative: CatalogExercise) {
+    private fun setPreferredAlternative(
+        exercise: CatalogExercise,
+        alternative: CatalogExercise,
+        renderAfterSave: Boolean = true,
+    ) {
         val map = safeObject("preferred_catalog_alternatives")
         map.put(exercise.id, alternative.id)
         prefs.edit().putString("preferred_catalog_alternatives", map.toString()).apply()
         Toast.makeText(this, "Substituto preferido salvo.", Toast.LENGTH_SHORT).show()
-        render()
+        if (renderAfterSave) render()
     }
 
     private fun todayLogs(): JSONArray {
@@ -7909,14 +10448,112 @@ class MainActivity : Activity() {
         return prefs.getInt("editor_exercise", 0).coerceIn(plan.exercises.indices)
     }
 
-    private fun saveWorkoutPlanDetails(planIndex: Int, titleRaw: String, focusRaw: String) {
+    private fun saveWorkoutPlanDetails(planIndex: Int, titleRaw: String, focusRaw: String, dayIndex: Int) {
         val title = titleRaw.ifBlank { "Treino" }
-        val focus = focusRaw.ifBlank { "Dia e foco" }
+        val focus = workoutFocusText(focusRaw).ifBlank { "Foco do treino" }
         val updated = plans.toMutableList()
-        updated[planIndex] = updated[planIndex].copy(title = title, focus = focus)
+        updated[planIndex] = updated[planIndex].copy(
+            title = title,
+            focus = focus,
+            dayIndex = dayIndex.coerceIn(1, 7),
+        )
         saveWorkoutPlans(updated)
         Toast.makeText(this, "Treino salvo.", Toast.LENGTH_SHORT).show()
         render()
+    }
+
+    private fun workoutHomeCardOptions(): List<WorkoutHomeCardOption> = listOf(
+        WorkoutHomeCardOption(
+            key = Mo2WorkoutHomeCard.Push,
+            title = "Empurrar",
+            subtitle = "Peito, ombros e triceps",
+            imageRes = R.drawable.home_tuesday_push,
+        ),
+        WorkoutHomeCardOption(
+            key = Mo2WorkoutHomeCard.Legs,
+            title = "Pernas",
+            subtitle = "Quadriceps, posterior e core",
+            imageRes = R.drawable.home_thursday_legs,
+        ),
+        WorkoutHomeCardOption(
+            key = Mo2WorkoutHomeCard.Pull,
+            title = "Puxar",
+            subtitle = "Costas e biceps",
+            imageRes = R.drawable.home_saturday_pull,
+        ),
+    )
+
+    private fun workoutHomeCardOption(key: String?, planIndex: Int): WorkoutHomeCardOption {
+        val normalized = Mo2WorkoutHomeCard.normalize(key, planIndex)
+        return workoutHomeCardOptions().first { option -> option.key == normalized }
+    }
+
+    private fun showWorkoutHomeCardDialog(planIndex: Int) {
+        val safePlanIndex = planIndex.coerceIn(plans.indices)
+        val selectedKey = Mo2WorkoutHomeCard.normalize(plans[safePlanIndex].homeCardKey, safePlanIndex)
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(Mo2Spacing.Lg), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg))
+        lateinit var dialog: AlertDialog
+
+        workoutHomeCardOptions().forEach { option ->
+            val selected = option.key == selectedKey
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+            row.background = rounded(
+                if (selected) surface3 else surface2,
+                dp(Mo2Radius.Md),
+                if (selected) green else border,
+            )
+            row.isClickable = true
+            row.isFocusable = true
+            row.contentDescription = option.title + if (selected) ", selecionado" else ""
+
+            val preview = ImageView(this)
+            preview.setImageResource(option.imageRes)
+            preview.scaleType = ImageView.ScaleType.CENTER_CROP
+            preview.background = rounded(surface, dp(Mo2Radius.Sm), border)
+            preview.clipToOutline = true
+            row.addView(preview, LinearLayout.LayoutParams(dp(112), dp(76)))
+
+            val text = LinearLayout(this)
+            text.orientation = LinearLayout.VERTICAL
+            text.setPadding(dp(Mo2Spacing.Md), 0, 0, 0)
+            text.addView(label(option.title, if (selected) green else white, 17f, true))
+            text.addView(label(option.subtitle, muted, 13f, false))
+            if (selected) text.addView(label("Selecionado", green, 12f, true))
+            row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+            row.setOnClickListener {
+                val updated = plans.toMutableList()
+                updated[safePlanIndex] = updated[safePlanIndex].copy(homeCardKey = option.key)
+                saveWorkoutPlans(updated)
+                dialog.dismiss()
+                Toast.makeText(this, "Card da Home atualizado.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+            content.addView(
+                row,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    setMargins(0, dp(Mo2Spacing.Xs), 0, dp(Mo2Spacing.Xs))
+                },
+            )
+        }
+
+        val scroll = ScrollView(this)
+        scroll.addView(content)
+        dialog = AlertDialog.Builder(this)
+            .setTitle("Card da tela inicial")
+            .setView(scroll)
+            .setNegativeButton("Cancelar", null)
+            .create()
+        dialog.setOnShowListener { styleHistoryDialog(dialog, content) }
+        dialog.show()
     }
 
     private fun saveExerciseDetails(planIndex: Int, exerciseIndex: Int, nameRaw: String, targetRaw: String, restRaw: String, notesRaw: String) {
@@ -7939,16 +10576,19 @@ class MainActivity : Activity() {
     }
 
     private fun saveWorkoutPlans(updated: List<WorkoutPlan>) {
+        val normalized = updated.mapIndexed { index, plan ->
+            plan.copy(homeCardKey = Mo2WorkoutHomeCard.normalize(plan.homeCardKey, index))
+        }
         prefs.edit()
-            .putString("custom_workout_plans", workoutPlansToJson(updated).toString())
-            .putInt("selected_plan", selectedPlanIndex.coerceIn(updated.indices))
+            .putString("custom_workout_plans", workoutPlansToJson(normalized).toString())
+            .putInt("selected_plan", selectedPlanIndex.coerceIn(normalized.indices))
             .putInt("selected_exercise", selectedExerciseIndex.coerceAtLeast(0))
             .apply()
     }
 
     private fun workoutPlansToJson(items: List<WorkoutPlan>): JSONArray {
         val array = JSONArray()
-        items.forEach { plan ->
+        items.forEachIndexed { planIndex, plan ->
             val exercises = JSONArray()
             plan.exercises.forEach { exercise ->
                 exercises.put(JSONObject()
@@ -7961,6 +10601,8 @@ class MainActivity : Activity() {
                 .put("id", plan.id)
                 .put("title", plan.title)
                 .put("focus", plan.focus)
+                .put("dayIndex", workoutPlanDayIndex(plan, planIndex))
+                .put("homeCard", Mo2WorkoutHomeCard.normalize(plan.homeCardKey, planIndex))
                 .put("exercises", exercises))
         }
         return array
@@ -7989,6 +10631,9 @@ class MainActivity : Activity() {
                     title = item.optString("title").ifBlank { "Treino" },
                     focus = item.optString("focus").ifBlank { "Dia e foco" },
                     exercises = exercises.ifEmpty { listOf(ExercisePlan("Exercicio", "3 x 10", "60s", "Sem notas.")) },
+                    dayIndex = item.optInt("dayIndex", 0).takeIf { it in 1..7 }
+                        ?: legacyWorkoutDayIndex(item.optString("focus"), i),
+                    homeCardKey = Mo2WorkoutHomeCard.normalize(item.optString("homeCard"), i),
                 ))
             }
             result.ifEmpty { null }
@@ -7997,7 +10642,18 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun legacyWorkoutDayIndex(focus: String, planIndex: Int): Int {
+        return Mo2PersonalPlanRules.resolveWorkoutDay(0, focus, planIndex)
+    }
+
     private fun buildRunningPlan(): List<RunningWorkout> {
+        val basePlan = customRunningPlan() ?: buildDefaultRunningPlan()
+        return basePlan.map { workout ->
+            workout.copy(stages = workout.stages.map(::personalizedRunningStage))
+        }
+    }
+
+    private fun buildDefaultRunningPlan(): List<RunningWorkout> {
         val plan = mutableListOf<RunningWorkout>()
         for (week in 1..6) plan.addAll(buildRunningWeek(week))
         return plan
@@ -8080,9 +10736,7 @@ class MainActivity : Activity() {
                 ),
             ),
         )
-        return raw.map { workout ->
-            workout.copy(stages = workout.stages.map { stage -> personalizedRunningStage(stage) })
-        }
+        return raw
     }
 
     private fun personalizedRunningStage(stage: RunningStage): RunningStage {
@@ -8092,6 +10746,73 @@ class MainActivity : Activity() {
             distanceKm = roundKm(stage.distanceKm * distanceScale),
             speedKmh = roundSpeed((stage.speedKmh + speedOffset).coerceIn(4.0, 18.0)),
         )
+    }
+
+    private fun customRunningPlan(): List<RunningWorkout>? {
+        val raw = prefs.getString("custom_running_plan", null) ?: return null
+        return try {
+            val array = JSONArray(raw)
+            val workouts = mutableListOf<RunningWorkout>()
+            for (index in 0 until array.length()) {
+                val item = array.getJSONObject(index)
+                val stagesJson = item.optJSONArray("stages") ?: JSONArray()
+                val stages = mutableListOf<RunningStage>()
+                for (stageIndex in 0 until stagesJson.length()) {
+                    val stage = stagesJson.getJSONObject(stageIndex)
+                    val distance = stage.optDouble("distanceKm", 0.0)
+                    val speed = stage.optDouble("speedKmh", 0.0)
+                    if (distance > 0.0 && speed > 0.0) {
+                        stages.add(RunningStage(
+                            title = stage.optString("title").ifBlank { "Etapa " + (stageIndex + 1) },
+                            distanceKm = distance,
+                            speedKmh = speed,
+                            note = stage.optString("note"),
+                        ))
+                    }
+                }
+                val dayIndex = item.optInt("dayIndex", 1).coerceIn(1, 7)
+                workouts.add(RunningWorkout(
+                    id = item.optString("id").ifBlank { "custom-run-" + index },
+                    week = item.optInt("week", 1).coerceIn(1, 12),
+                    dayName = weekdayNames()[dayIndex - 1],
+                    dayIndex = dayIndex,
+                    title = item.optString("title").ifBlank { "Corrida" },
+                    focus = item.optString("focus").ifBlank { "Treino de corrida" },
+                    description = item.optString("description"),
+                    stages = stages.ifEmpty { listOf(RunningStage("Etapa", 1.0, 7.0, "")) },
+                ))
+            }
+            workouts.ifEmpty { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun saveRunningPlan(effectivePlan: List<RunningWorkout>) {
+        if (effectivePlan.isEmpty()) return
+        val speedOffset = prefs.getString("running_speed_offset", "0.0")?.toDoubleOrNull() ?: 0.0
+        val distanceScale = (prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0)
+            .coerceIn(0.60, 1.40)
+        val array = JSONArray()
+        effectivePlan.sortedWith(compareBy<RunningWorkout> { it.week }.thenBy { it.dayIndex }).forEach { workout ->
+            val stages = JSONArray()
+            workout.stages.forEach { stage ->
+                stages.put(JSONObject()
+                    .put("title", stage.title)
+                    .put("distanceKm", Mo2PersonalPlanRules.baseRunningDistance(stage.distanceKm, distanceScale))
+                    .put("speedKmh", Mo2PersonalPlanRules.baseRunningSpeed(stage.speedKmh, speedOffset))
+                    .put("note", stage.note))
+            }
+            array.put(JSONObject()
+                .put("id", workout.id)
+                .put("week", workout.week)
+                .put("dayIndex", workout.dayIndex.coerceIn(1, 7))
+                .put("title", workout.title)
+                .put("focus", workout.focus)
+                .put("description", workout.description)
+                .put("stages", stages))
+        }
+        prefs.edit().putString("custom_running_plan", array.toString()).apply()
     }
 
     private fun intervalStages(week: Int): List<RunningStage> {
@@ -8357,8 +11078,10 @@ class MainActivity : Activity() {
         val start = try { parser.parse(startKey)?.time ?: System.currentTimeMillis() } catch (_: Exception) { System.currentTimeMillis() }
         val today = try { parser.parse(dayKey())?.time ?: System.currentTimeMillis() } catch (_: Exception) { System.currentTimeMillis() }
         val days = max(0L, (today - start) / 86400000L)
-        return ((days / 7L) + 1L).toInt().coerceIn(1, 6)
+        return ((days / 7L) + 1L).toInt().coerceIn(1, runningPlanWeekCount())
     }
+
+    private fun runningPlanWeekCount(): Int = runningPlan.maxOfOrNull { it.week }?.coerceAtLeast(1) ?: 1
 
     private fun todayRunningWorkout(): RunningWorkout? {
         runningPlan.firstOrNull { workout ->
@@ -8501,18 +11224,18 @@ class MainActivity : Activity() {
             ExercisePlan("Elevacao lateral", "3 x 12-15", "60s", "Cadencia limpa, sem embalo."),
             ExercisePlan("Triceps corda", "3 x 10-12", "60s", "Trave cotovelos perto do corpo."),
             ExercisePlan("Prancha", "3 x 45s", "45s", "Respiracao constante."),
-        )),
+        ), dayIndex = 2, homeCardKey = Mo2WorkoutHomeCard.Push),
         WorkoutPlan("b", "Treino B", "Quinta - Pernas/Core + corrida curta", listOf(
             ExercisePlan("Leg press", "4 x 10", "120s", "Amplitude segura e constante. Depois faca so 10-15 min leve."),
             ExercisePlan("Agachamento livre", "3 x 8", "120s", "Priorize tecnica e estabilidade antes de carga."),
-            ExercisePlan("Agachamento guiado", "3 x 8-10", "90s", "Ajuste os pes e mantenha o tronco firme no trilho."),
+            ExercisePlan("Agachamento no Smith", "3 x 8-10", "90s", "Ajuste os pes e mantenha o tronco firme no trilho."),
             ExercisePlan("Cadeira extensora", "3 x 12", "75s", "Segure um segundo no topo."),
             ExercisePlan("Mesa flexora", "3 x 10-12", "75s", "Controle total na volta."),
             ExercisePlan("Stiff", "3 x 10", "90s", "Quadril para tras, coluna neutra."),
             ExercisePlan("Panturrilha", "4 x 12-15", "45s", "Pausa no alongamento."),
             ExercisePlan("Abdominal", "3 x 12-15", "45s", "Expire durante a contracao e evite puxar o pescoco."),
             ExercisePlan("Prancha", "3 x 45s", "45s", "Mantenha quadril, tronco e ombros alinhados."),
-        )),
+        ), dayIndex = 4, homeCardKey = Mo2WorkoutHomeCard.Legs),
         WorkoutPlan("c", "Treino C", "Sabado - Costas/Biceps + corrida ritmo", listOf(
             ExercisePlan("Puxada frente", "4 x 8-10", "90s", "Puxe com cotovelos, nao com as maos."),
             ExercisePlan("Remada baixa", "4 x 10", "90s", "Pausa curta na contracao."),
@@ -8520,20 +11243,17 @@ class MainActivity : Activity() {
             ExercisePlan("Face pull", "3 x 12-15", "60s", "Foco em deltoide posterior."),
             ExercisePlan("Rosca direta", "3 x 8-10", "60s", "Controle na descida."),
             ExercisePlan("Rosca martelo", "3 x 10-12", "60s", "Punho neutro."),
-        )),
+        ), dayIndex = 6, homeCardKey = Mo2WorkoutHomeCard.Pull),
     )
 
     private fun todayPlanIndex(): Int {
         val day = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull() ?: 1
-        return when (day) {
-            2 -> 0
-            4 -> 1
-            6 -> 2
-            1 -> 0
-            3 -> 1
-            5 -> 2
-            else -> 0
-        }
+        val exact = plans.indices.firstOrNull { index -> workoutPlanDayIndex(plans[index], index) == day }
+        if (exact != null) return exact
+        return plans.indices.minByOrNull { index ->
+            val scheduled = workoutPlanDayIndex(plans[index], index)
+            (scheduled - day + 7) % 7
+        } ?: 0
     }
 
     private fun estimatedRunTime(distanceRaw: String, speedRaw: String): String {
@@ -8637,10 +11357,11 @@ class MainActivity : Activity() {
 
     private fun playRestCompletionAlert() {
         stopRestCompletionAlert()
-        requestRestAudioFocus()
+        requestCueAudioFocus()
         if (voiceCoachReady) {
             val utteranceId = "mo2log_rest_" + System.currentTimeMillis()
             activeRestUtteranceId = utteranceId
+            duckedUtteranceIds.add(utteranceId)
             val result = voiceCoach?.speak(
                 "Descanso finalizado. Inicie a proxima serie.",
                 TextToSpeech.QUEUE_FLUSH,
@@ -8650,18 +11371,18 @@ class MainActivity : Activity() {
             if (result == TextToSpeech.SUCCESS) {
                 restTimerHandler.postDelayed({
                     if (activeRestUtteranceId == utteranceId) {
-                        activeRestUtteranceId = null
-                        releaseRestAudioFocus()
+                        finishDuckedUtterance(utteranceId)
                     }
                 }, 7000L)
                 return
             }
-            activeRestUtteranceId = null
+            finishDuckedUtterance(utteranceId)
         }
         playRestFallbackTone()
     }
 
-    private fun requestRestAudioFocus() {
+    private fun requestCueAudioFocus() {
+        if (cueAudioFocusRequest != null) return
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -8670,28 +11391,36 @@ class MainActivity : Activity() {
             .setAudioAttributes(attributes)
             .setAcceptsDelayedFocusGain(false)
             .setWillPauseWhenDucked(false)
-            .setOnAudioFocusChangeListener(restAudioFocusListener, restTimerHandler)
+            .setOnAudioFocusChangeListener(cueAudioFocusListener, restTimerHandler)
             .build()
-        restAudioFocusRequest = request
+        cueAudioFocusRequest = request
         audioManager.requestAudioFocus(request)
     }
 
-    private fun releaseRestAudioFocus() {
-        restAudioFocusRequest?.let { request -> audioManager.abandonAudioFocusRequest(request) }
-        restAudioFocusRequest = null
+    private fun releaseCueAudioFocus() {
+        cueAudioFocusRequest?.let { request -> audioManager.abandonAudioFocusRequest(request) }
+        cueAudioFocusRequest = null
+    }
+
+    private fun finishDuckedUtterance(utteranceId: String) {
+        duckedUtteranceIds.remove(utteranceId)
+        if (activeRestUtteranceId == utteranceId) activeRestUtteranceId = null
+        if (duckedUtteranceIds.isEmpty() && restToneGenerator == null) releaseCueAudioFocus()
     }
 
     private fun stopRestCompletionAlert() {
         if (activeRestUtteranceId != null) voiceCoach?.stop()
+        activeRestUtteranceId?.let(duckedUtteranceIds::remove)
         activeRestUtteranceId = null
         restToneGenerator?.stopTone()
         restToneGenerator?.release()
         restToneGenerator = null
-        releaseRestAudioFocus()
+        if (duckedUtteranceIds.isEmpty()) releaseCueAudioFocus()
     }
 
     private fun playRestFallbackTone() {
         try {
+            requestCueAudioFocus()
             restToneGenerator?.release()
             val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
             restToneGenerator = tone
@@ -8702,12 +11431,12 @@ class MainActivity : Activity() {
                     if (restToneGenerator === tone) {
                         tone.release()
                         restToneGenerator = null
-                        releaseRestAudioFocus()
+                        if (duckedUtteranceIds.isEmpty()) releaseCueAudioFocus()
                     }
                 }, 560L)
             }, 300L)
         } catch (_: Exception) {
-            releaseRestAudioFocus()
+            if (duckedUtteranceIds.isEmpty()) releaseCueAudioFocus()
             Toast.makeText(this, "Descanso finalizado.", Toast.LENGTH_SHORT).show()
         }
     }
@@ -8819,6 +11548,30 @@ class MainActivity : Activity() {
 
     private fun statusChip(text: String): TextView {
         return Mo2Components.badge(this, text, true)
+    }
+
+    private fun workoutIconButton(
+        icon: Mo2ActionIcon,
+        tint: Int,
+        backgroundColor: Int,
+        description: String,
+    ): FrameLayout {
+        val button = FrameLayout(this)
+        button.background = rounded(backgroundColor, dp(Mo2Radius.Sm), border)
+        button.foreground = Mo2Drawables.rippleForeground(
+            this,
+            android.graphics.Color.argb(54, 248, 250, 252),
+            Mo2Radius.Sm,
+        )
+        button.isClickable = true
+        button.isFocusable = true
+        button.contentDescription = description
+        button.minimumWidth = dp(40)
+        button.minimumHeight = dp(40)
+        val iconView = Mo2ActionIconView(this, icon, tint)
+        val iconParams = FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER)
+        button.addView(iconView, iconParams)
+        return button
     }
 
     private fun compactMetric(title: String, value: String): View {

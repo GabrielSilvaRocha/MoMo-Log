@@ -136,11 +136,7 @@ object Mo2Components {
             context.mo2Dp(Mo2Spacing.Xs),
             context.mo2Dp(Mo2Spacing.Xs),
         )
-        item.background = Mo2Drawables.rounded(
-            context,
-            if (active) Mo2Colors.SurfaceAlt else Color.TRANSPARENT,
-            Mo2Radius.Md,
-        )
+        item.setBackgroundColor(Color.TRANSPARENT)
         item.foreground = Mo2Drawables.rippleForeground(
             context,
             Color.argb(44, 34, 197, 94),
@@ -159,7 +155,7 @@ object Mo2Components {
             if (active) Mo2Colors.Primary else Color.TRANSPARENT,
             Mo2Radius.Pill,
         )
-        val indicatorParams = LinearLayout.LayoutParams(context.mo2Dp(24), context.mo2Dp(3))
+        val indicatorParams = LinearLayout.LayoutParams(context.mo2Dp(40), context.mo2Dp(3))
         indicatorParams.setMargins(0, 0, 0, context.mo2Dp(Mo2Spacing.Xs))
         item.addView(indicator, indicatorParams)
 
