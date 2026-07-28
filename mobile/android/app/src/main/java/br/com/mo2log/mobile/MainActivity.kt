@@ -4028,6 +4028,8 @@ class MainActivity : Activity() {
         identity.addView(label("EXERCICIO VINCULADO", muted, 11f, true))
         identity.addView(label(exercise.name, white, 18f, true))
         identity.addView(label("Titulo, descricao e GIF vem da aba Exercicios.", muted, 12f, false))
+        val replaceActions = LinearLayout(this)
+        replaceActions.orientation = LinearLayout.HORIZONTAL
         val replace = actionButton("Trocar pelo catalogo", surface3, green)
         replace.setOnClickListener {
             val excluded = plan.exercises.mapNotNull(ExercisePlan::catalogExerciseId).toMutableSet()
@@ -4043,7 +4045,36 @@ class MainActivity : Activity() {
                 render()
             }
         }
-        identity.addView(buttonParams(replace))
+        replaceActions.addView(replace, LinearLayout.LayoutParams(0, dp(52), 1f))
+        val recommended = actionButton("Troca recomendada", surface3, green)
+        recommended.setOnClickListener {
+            val currentCatalogExercise = catalogMatchForWorkoutExercise(exercise)
+            if (currentCatalogExercise == null) {
+                Toast.makeText(this, "Vincule este item ao catalogo primeiro.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val excluded = plan.exercises.mapNotNull(ExercisePlan::catalogExerciseId).toMutableSet()
+            exercise.catalogExerciseId?.let(excluded::remove)
+            showPlanRecommendedExercisePicker(currentCatalogExercise, excluded) { selected ->
+                val exercises = plan.exercises.toMutableList()
+                exercises[exerciseIndex] = exercise.copy(
+                    name = selected.name,
+                    catalogExerciseId = selected.id,
+                )
+                replacePlanExercises(planIndex, exercises)
+                Toast.makeText(this, "Exercicio recomendado aplicado.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+        }
+        replaceActions.addView(recommended, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+            marginStart = dp(Mo2Spacing.Sm)
+        })
+        identity.addView(replaceActions, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Md)
+        })
         box.addView(identity)
         val target = input("Series/reps", exercise.target)
         val rest = input("Descanso", exercise.rest)
@@ -4169,6 +4200,102 @@ class MainActivity : Activity() {
                 .ifBlank { "Mantenha a execucao controlada." },
             catalogExerciseId = exercise.id,
         )
+    }
+
+    private fun showPlanRecommendedExercisePicker(
+        exercise: CatalogExercise,
+        excludedIds: Set<String>,
+        onSelected: (CatalogExercise) -> Unit,
+    ) {
+        val alternatives = alternativesFor(exercise)
+            .filterNot { it.id in excludedIds }
+        val preferredId = preferredAlternativeFor(exercise)?.id
+        val ordered = (
+            alternatives.filter { it.id == preferredId } +
+                alternatives.filterNot { it.id == preferredId }
+            ).distinctBy(CatalogExercise::id)
+        if (ordered.isEmpty()) {
+            Toast.makeText(this, "Nenhuma alternativa recomendada disponivel.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val sheet = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Md))
+            background = rounded(surface, dp(Mo2Radius.Modal), border)
+        }
+        sheet.addView(label("TROCA RECOMENDADA", green, 12f, true))
+        sheet.addView(label(exercise.name, white, 22f, true))
+        sheet.addView(label(
+            "Alternativas definidas na biblioteca de Exercicios.",
+            muted,
+            13f,
+            false,
+        ))
+
+        val options = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        lateinit var dialog: AlertDialog
+        ordered.forEach { alternative ->
+            val isPreferred = alternative.id == preferredId
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+            row.background = rounded(surface2, dp(Mo2Radius.Sm), if (isPreferred) amber else border)
+            row.isClickable = true
+            row.isFocusable = true
+            row.contentDescription = "Trocar por " + alternative.name
+            val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            text.addView(label(alternative.name, white, 16f, true))
+            val compatibility = Mo2ExerciseAlternativeEngine.compatibilityLabel(
+                exercise.toAlternativeProfile(),
+                alternative.toAlternativeProfile(),
+            )
+            text.addView(label(
+                compatibility + " | " +
+                    Mo2ExerciseCatalogUiRules.equipmentLabel(alternative.name, alternative.equipment),
+                if (isPreferred) amber else muted,
+                12f,
+                isPreferred,
+            ))
+            row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            if (isPreferred) row.addView(Mo2ActionIconView(this, Mo2ActionIcon.StarFilled, amber), LinearLayout.LayoutParams(dp(22), dp(22)))
+            row.addView(Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted), LinearLayout.LayoutParams(dp(22), dp(22)).apply {
+                marginStart = dp(Mo2Spacing.Sm)
+            })
+            row.setOnClickListener {
+                dialog.dismiss()
+                onSelected(alternative)
+            }
+            options.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(Mo2Spacing.Sm)
+            })
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(options)
+        }
+        sheet.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Sm)
+        })
+        val cancel = actionButton("Cancelar", surface2, muted)
+        cancel.setOnClickListener { dialog.dismiss() }
+        sheet.addView(cancel, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(50),
+        ).apply {
+            topMargin = dp(Mo2Spacing.Md)
+        })
+
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.78f)
     }
 
     private fun runningPlanEditor(): View {

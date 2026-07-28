@@ -330,3 +330,11 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Variacoes inclinada e reta com halteres passam a ser tratadas como exercicios distintos.
 - Planos legados continuam usando a resolucao por nome quando ainda nao possuem ID de catalogo.
 - Android usa versionCode 1251 e versionName 12.5.1.
+
+## v12.5.2
+
+- O editor do Plano permite escolher entre todo o catalogo ou apenas as alternativas recomendadas.
+- O pop-up recomendado segue as regras automáticas e personalizadas da biblioteca de Exercicios.
+- A alternativa preferida aparece primeiro e exercicios duplicados no mesmo treino sao removidos da lista.
+- A troca altera somente a identidade do exercicio e mantem sua prescricao atual.
+- Android usa versionCode 1252 e versionName 12.5.2.
