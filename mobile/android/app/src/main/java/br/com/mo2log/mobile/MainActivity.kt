@@ -9571,12 +9571,15 @@ class MainActivity : Activity() {
     private fun requestWorkoutSwapOptions(reason: String) {
         val planIndex = selectedPlanIndex.coerceIn(plans.indices)
         val exerciseIndex = selectedExerciseIndex.coerceIn(plans[planIndex].exercises.indices)
-        val exerciseName = plans[planIndex].exercises[exerciseIndex].name
+        val selectedExercise = plans[planIndex].exercises[exerciseIndex]
+        val exerciseName = selectedExercise.name
         val request = Mo2WorkoutSwapRequest(
             currentAliases = workoutCatalogAliases(exerciseName),
             plannedAliasGroups = exerciseNamesPlannedForSelectedWorkoutDay()
                 .map(::workoutCatalogAliases),
             reason = reason,
+            currentExerciseId = selectedExercise.catalogExerciseId,
+            plannedExerciseIds = catalogIdsPlannedForSelectedWorkoutDay(),
             hiddenIds = hiddenCatalogIds(),
             unavailableEquipmentKeys = unavailableEquipmentKeysSnapshot(),
             manualAlternativesByExerciseId = catalogAlternativeOverridesSnapshot(),

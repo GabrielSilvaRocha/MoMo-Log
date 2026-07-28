@@ -4,14 +4,14 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v12.5.0.
+- Android nativo pessoal: v12.5.1.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
 
 ## Proximas entregas
 
-- v12.5.1 - Descoberta BLE ampliada e integracao segura do Soundcore Sport X20.
+- v12.5.2 - Descoberta BLE ampliada e integracao segura do Soundcore Sport X20.
 - v12.6.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
 - v12.7.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
 - v12.8.0 - Comparacoes mensais e metas pessoais de longo prazo.
@@ -685,3 +685,10 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Planos existentes sao migrados pelo ID ou nome normalizado sem apagar exercicios pessoais nao reconhecidos.
 - Adicao, troca pelo catalogo e substituicao recomendada preservam o vinculo entre as tres abas.
 - Android usa versionCode 1250 e versionName 12.5.0.
+
+## v12.5.1 - Trocas do treino por identidade
+
+- A troca recomendada usa os IDs do catalogo gravados no Plano para identificar o exercicio atual e os ja programados.
+- Supino inclinado com halteres deixa de bloquear incorretamente o Supino reto com halteres como alternativa ao supino com barra.
+- Comparacao por nomes e aliases permanece apenas como compatibilidade para planos legados ainda nao vinculados.
+- Android usa versionCode 1251 e versionName 12.5.1.

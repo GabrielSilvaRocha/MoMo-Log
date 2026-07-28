@@ -323,3 +323,10 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Series, repeticoes, descanso e notas continuam especificos de cada plano.
 - Planos legados sao vinculados automaticamente; itens desconhecidos permanecem preservados para selecao manual.
 - Android usa versionCode 1250 e versionName 12.5.0.
+
+## v12.5.1
+
+- A troca de exercicios na aba Treino usa IDs estaveis do Plano em vez de reconstruir duplicatas somente por aliases.
+- Variacoes inclinada e reta com halteres passam a ser tratadas como exercicios distintos.
+- Planos legados continuam usando a resolucao por nome quando ainda nao possuem ID de catalogo.
+- Android usa versionCode 1251 e versionName 12.5.1.

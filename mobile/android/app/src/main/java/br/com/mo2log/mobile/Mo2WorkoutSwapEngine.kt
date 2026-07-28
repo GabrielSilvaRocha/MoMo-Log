@@ -8,6 +8,8 @@ data class Mo2WorkoutSwapRequest(
     val currentAliases: List<String>,
     val plannedAliasGroups: List<List<String>>,
     val reason: String,
+    val currentExerciseId: String? = null,
+    val plannedExerciseIds: Set<String> = emptySet(),
     val hiddenIds: Set<String> = emptySet(),
     val unavailableEquipmentKeys: Set<String> = emptySet(),
     val manualAlternativesByExerciseId: Map<String, List<String>> = emptyMap(),
@@ -44,17 +46,25 @@ object Mo2WorkoutSwapEngine {
             .toList()
         if (visible.isEmpty()) return null
 
-        val current = bestMatch(request.currentAliases, visible) ?: return null
-        val plannedIds = request.plannedAliasGroups
-            .mapNotNull { aliases -> bestMatch(aliases, visible)?.id }
-            .toSet()
+        val visibleById = visible.associateBy { indexed -> indexed.exercise.id }
+        val current = request.currentExerciseId
+            ?.let(visibleById::get)
+            ?.exercise
+            ?: bestMatch(request.currentAliases, visible)
+            ?: return null
+        val stablePlannedIds = request.plannedExerciseIds.filterTo(mutableSetOf()) { it in visibleById }
+        val plannedIds = stablePlannedIds.ifEmpty {
+            request.plannedAliasGroups
+                .mapNotNull { aliases -> bestMatch(aliases, visible)?.id }
+                .toSet()
+        }
         val plannedNames = request.plannedAliasGroups
             .asSequence()
             .flatten()
             .map(::normalize)
             .filter(String::isNotBlank)
             .toSet()
-        val byId = visible.associate { indexed -> indexed.exercise.id to indexed.exercise }
+        val byId = visibleById.mapValues { (_, indexed) -> indexed.exercise }
         val manualIds = request.manualAlternativesByExerciseId[current.id]
         val ranked = if (manualIds != null) {
             manualIds.mapNotNull(byId::get)

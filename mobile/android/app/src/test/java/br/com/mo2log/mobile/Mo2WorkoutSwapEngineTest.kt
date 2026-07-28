@@ -77,6 +77,29 @@ class Mo2WorkoutSwapEngineTest {
     }
 
     @Test
+    fun stablePlanIdsDoNotConfuseInclinedAndFlatDumbbellBench() {
+        val barbellFlat = exercise(
+            id = "EX0222",
+            name = "Supino reto com barra",
+            alternatives = "supino com halteres; chest press",
+        )
+        val dumbbellFlat = exercise(id = "EX0223", name = "Supino reto com halteres")
+        val dumbbellIncline = exercise(id = "EX0233", name = "Supino inclinado com halteres")
+
+        val result = Mo2WorkoutSwapEngine.resolve(
+            catalog = listOf(barbellFlat, dumbbellFlat, dumbbellIncline),
+            request = request(
+                currentAliases = listOf(barbellFlat.name),
+                plannedAliasGroups = listOf(listOf("Supino com halteres")),
+                currentExerciseId = barbellFlat.id,
+                plannedExerciseIds = setOf(barbellFlat.id, dumbbellIncline.id),
+            ),
+        )
+
+        assertEquals(listOf(dumbbellFlat.id), result?.baseOptions?.map(CatalogExercise::id))
+    }
+
+    @Test
     fun changingReasonReusesBaseOptionsAndKeepsPreferredFirst() {
         val current = exercise(
             id = "bench-bar",
@@ -156,12 +179,16 @@ class Mo2WorkoutSwapEngineTest {
         unavailableEquipmentKeys: Set<String> = emptySet(),
         manualAlternativesByExerciseId: Map<String, List<String>> = emptyMap(),
         preferredAlternativeByExerciseId: Map<String, String> = emptyMap(),
+        currentExerciseId: String? = null,
+        plannedExerciseIds: Set<String> = emptySet(),
         limit: Int = 8,
     ): Mo2WorkoutSwapRequest {
         return Mo2WorkoutSwapRequest(
             currentAliases = currentAliases,
             plannedAliasGroups = plannedAliasGroups,
             reason = "occupied",
+            currentExerciseId = currentExerciseId,
+            plannedExerciseIds = plannedExerciseIds,
             hiddenIds = hiddenIds,
             unavailableEquipmentKeys = unavailableEquipmentKeys,
             manualAlternativesByExerciseId = manualAlternativesByExerciseId,
