@@ -54,6 +54,8 @@ import android.widget.GridLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ArrayAdapter
+import android.widget.ListView
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -112,6 +114,7 @@ data class ExercisePlan(
     val target: String,
     val rest: String,
     val notes: String,
+    val catalogExerciseId: String? = null,
 )
 
 data class WorkoutPlan(
@@ -435,7 +438,7 @@ class MainActivity : Activity() {
 
     private val prefs by lazy { getSharedPreferences("mo2log_native", Context.MODE_PRIVATE) }
     private val plans: List<WorkoutPlan>
-        get() = buildWorkoutPlans()
+        get() = resolveWorkoutPlanCatalogLinks(buildWorkoutPlans())
     @Volatile
     private var catalogCache: List<CatalogExercise>? = null
     @Volatile
@@ -565,6 +568,7 @@ class MainActivity : Activity() {
             },
         ).also { monitor -> sportX20BatteryState = monitor.currentState() }
         syncTrainingPlanVersion()
+        migrateWorkoutPlanCatalogLinks()
         ensureWorkoutHomeCards()
         restorePersistedState(intent.getStringExtra("tab"))
         requestedSection = intent.getStringExtra("section").orEmpty()
@@ -792,7 +796,9 @@ class MainActivity : Activity() {
     }
 
     private fun splitCombinedExercise(exercise: ExercisePlan): List<ExercisePlan> {
-        return splitCombinedExerciseNames(exercise.name).map { name -> exercise.copy(name = name) }
+        return splitCombinedExerciseNames(exercise.name).map { name ->
+            exercise.copy(name = name, catalogExerciseId = null)
+        }
     }
 
     private fun splitCombinedExerciseNames(name: String): List<String> {
@@ -2111,7 +2117,7 @@ class MainActivity : Activity() {
 
     private fun gymModePanel(): View {
         val exercise = currentExercise()
-        val matched = catalogMatchForWorkoutExercise(exercise.name)
+        val matched = catalogMatchForWorkoutExercise(exercise)
         val sets = plannedSetsForCurrentExercise()
         val doneCount = countDonePlannedSets(sets)
         val pendingLine = nextPendingSetLine(sets)
@@ -3876,20 +3882,22 @@ class MainActivity : Activity() {
 
         val add = actionButton("Adicionar treino", surface2, green)
         add.setOnClickListener {
-            val updated = plans.toMutableList()
-            val todayIndex = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull()?.coerceIn(1, 7) ?: 1
-            updated.add(WorkoutPlan(
-                id = "custom-" + System.currentTimeMillis(),
-                title = "Novo treino",
-                focus = "Foco do treino",
-                exercises = listOf(ExercisePlan("Novo exercicio", "3 x 10", "60s", "Edite este exercicio antes de usar.")),
-                dayIndex = todayIndex,
-                homeCardKey = Mo2WorkoutHomeCard.defaultForPlanIndex(updated.size),
-            ))
-            saveWorkoutPlans(updated)
-            prefs.edit().putInt("editor_plan", updated.lastIndex).putInt("editor_exercise", 0).apply()
-            Toast.makeText(this, "Treino adicionado.", Toast.LENGTH_SHORT).show()
-            render()
+            showCatalogExercisePicker("Primeiro exercicio do treino", emptySet()) { selectedExercise ->
+                val updated = plans.toMutableList()
+                val todayIndex = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull()?.coerceIn(1, 7) ?: 1
+                updated.add(WorkoutPlan(
+                    id = "custom-" + System.currentTimeMillis(),
+                    title = "Novo treino",
+                    focus = "Foco do treino",
+                    exercises = listOf(planExerciseFromCatalog(selectedExercise)),
+                    dayIndex = todayIndex,
+                    homeCardKey = Mo2WorkoutHomeCard.defaultForPlanIndex(updated.size),
+                ))
+                saveWorkoutPlans(updated)
+                prefs.edit().putInt("editor_plan", updated.lastIndex).putInt("editor_exercise", 0).apply()
+                Toast.makeText(this, "Treino adicionado.", Toast.LENGTH_SHORT).show()
+                render()
+            }
         }
         box.addView(buttonParams(add))
         return box
@@ -4015,18 +4023,38 @@ class MainActivity : Activity() {
             box.addView(row)
         }
 
-        val name = input("Exercicio", exercise.name)
+        val identity = card(surface2)
+        identity.orientation = LinearLayout.VERTICAL
+        identity.addView(label("EXERCICIO VINCULADO", muted, 11f, true))
+        identity.addView(label(exercise.name, white, 18f, true))
+        identity.addView(label("Titulo, descricao e GIF vem da aba Exercicios.", muted, 12f, false))
+        val replace = actionButton("Trocar pelo catalogo", surface3, green)
+        replace.setOnClickListener {
+            val excluded = plan.exercises.mapNotNull(ExercisePlan::catalogExerciseId).toMutableSet()
+            exercise.catalogExerciseId?.let(excluded::remove)
+            showCatalogExercisePicker("Trocar exercicio", excluded) { selected ->
+                val exercises = plan.exercises.toMutableList()
+                exercises[exerciseIndex] = exercise.copy(
+                    name = selected.name,
+                    catalogExerciseId = selected.id,
+                )
+                replacePlanExercises(planIndex, exercises)
+                Toast.makeText(this, "Exercicio vinculado ao catalogo.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+        }
+        identity.addView(buttonParams(replace))
+        box.addView(identity)
         val target = input("Series/reps", exercise.target)
         val rest = input("Descanso", exercise.rest)
         val notes = input("Notas", exercise.notes)
-        box.addView(name)
         box.addView(target)
         box.addView(rest)
         box.addView(notes)
 
         val save = actionButton("Salvar exercicio", green, bg)
         save.setOnClickListener {
-            saveExerciseDetails(planIndex, exerciseIndex, name.textValue(), target.textValue(), rest.textValue(), notes.textValue())
+            saveExerciseDetails(planIndex, exerciseIndex, target.textValue(), rest.textValue(), notes.textValue())
         }
         box.addView(buttonParams(save))
 
@@ -4034,12 +4062,14 @@ class MainActivity : Activity() {
         row.orientation = LinearLayout.HORIZONTAL
         val add = actionButton("Adicionar", surface2, green)
         add.setOnClickListener {
-            val exercises = plan.exercises.toMutableList()
-            exercises.add(ExercisePlan("Novo exercicio", "3 x 10", "60s", "Edite antes de usar no treino."))
-            replacePlanExercises(planIndex, exercises)
-            prefs.edit().putInt("editor_exercise", exercises.lastIndex).apply()
-            Toast.makeText(this, "Exercicio adicionado.", Toast.LENGTH_SHORT).show()
-            render()
+            val excluded = plan.exercises.mapNotNull(ExercisePlan::catalogExerciseId).toSet()
+            showCatalogExercisePicker("Adicionar ao treino", excluded) { selected ->
+                val exercises = plan.exercises + planExerciseFromCatalog(selected)
+                replacePlanExercises(planIndex, exercises)
+                prefs.edit().putInt("editor_exercise", exercises.lastIndex).apply()
+                Toast.makeText(this, "Exercicio adicionado.", Toast.LENGTH_SHORT).show()
+                render()
+            }
         }
         row.addView(add, LinearLayout.LayoutParams(0, dp(50), 1f))
         val remove = actionButton("Remover", surface2, danger)
@@ -4058,6 +4088,87 @@ class MainActivity : Activity() {
         row.addView(remove, LinearLayout.LayoutParams(0, dp(50), 1f))
         box.addView(spacedRow(row))
         return box
+    }
+
+    private fun showCatalogExercisePicker(
+        title: String,
+        excludedIds: Set<String>,
+        onSelected: (CatalogExercise) -> Unit,
+    ) {
+        val available = catalog
+            .filterNot { it.id in hiddenCatalogIds() || it.id in excludedIds }
+            .sortedWith(compareBy<CatalogExercise> { it.muscle }.thenBy { it.name })
+        if (available.isEmpty()) {
+            Toast.makeText(this, "Nao ha outro exercicio disponivel no catalogo.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(Mo2Spacing.Lg), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Lg), 0)
+        }
+        val search = EditText(this).apply {
+            hint = "Buscar exercicio ou grupo muscular"
+            setTextColor(white)
+            setHintTextColor(muted)
+            setSingleLine(true)
+            background = rounded(surface2, dp(Mo2Radius.Sm), border)
+            setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md), 0)
+        }
+        val list = ListView(this).apply {
+            divider = null
+            dividerHeight = dp(Mo2Spacing.Xs)
+        }
+        var filtered = available
+        var adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_list_item_1,
+            filtered.map { it.name + "  |  " + it.muscle },
+        )
+        list.adapter = adapter
+        content.addView(search, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)))
+        content.addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(420)))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(content)
+            .setNegativeButton("Cancelar", null)
+            .create()
+        list.setOnItemClickListener { _, _, position, _ ->
+            filtered.getOrNull(position)?.let(onSelected)
+            dialog.dismiss()
+        }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {
+                val query = text?.toString().orEmpty()
+                filtered = available.filter { matchesCatalogQuery(it, query) }
+                adapter = ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_list_item_1,
+                    filtered.map { it.name + "  |  " + it.muscle },
+                )
+                list.adapter = adapter
+            }
+            override fun afterTextChanged(text: Editable?) = Unit
+        })
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun planExerciseFromCatalog(exercise: CatalogExercise): ExercisePlan {
+        return ExercisePlan(
+            name = exercise.name,
+            target = "3 x 10",
+            rest = "60s",
+            notes = exercise.technicalCare
+                .ifBlank { exercise.description }
+                .ifBlank { "Mantenha a execucao controlada." },
+            catalogExerciseId = exercise.id,
+        )
     }
 
     private fun runningPlanEditor(): View {
@@ -7215,7 +7326,9 @@ class MainActivity : Activity() {
             .setTitle("Adicionar ao treino")
             .setItems(labels.toTypedArray()) { _, index ->
                 val plan = availablePlans[index]
-                if (plan.exercises.any { normalized(it.name) == normalized(exercise.name) }) {
+                if (plan.exercises.any {
+                    it.catalogExerciseId == exercise.id || normalized(it.name) == normalized(exercise.name)
+                }) {
                     Toast.makeText(this, "Este exercicio ja esta em " + plan.title + ".", Toast.LENGTH_SHORT).show()
                     return@setItems
                 }
@@ -7229,6 +7342,7 @@ class MainActivity : Activity() {
                         target = "3 x 10",
                         rest = "60s",
                         notes = notes,
+                        catalogExerciseId = exercise.id,
                     ),
                 )
                 Toast.makeText(this, exercise.name + " adicionado a " + plan.title + ".", Toast.LENGTH_LONG).show()
@@ -7715,6 +7829,13 @@ class MainActivity : Activity() {
             ).joinToString(" "))
         }
         return tokens.all { haystack.contains(it) }
+    }
+
+    private fun catalogMatchForWorkoutExercise(exercise: ExercisePlan): CatalogExercise? {
+        exercise.catalogExerciseId?.let { id ->
+            catalog.firstOrNull { it.id == id }?.let { return it }
+        }
+        return catalogMatchForWorkoutExercise(exercise.name)
     }
 
     private fun catalogMatchForWorkoutExercise(name: String): CatalogExercise? {
@@ -8380,7 +8501,7 @@ class MainActivity : Activity() {
 
     private fun registerPanel(): View {
         val exercise = currentExercise()
-        val matched = catalogMatchForWorkoutExercise(exercise.name)
+        val matched = catalogMatchForWorkoutExercise(exercise)
         val sets = plannedSetsForCurrentExercise()
         val doneCount = countDonePlannedSets(sets)
         val box = card(surface)
@@ -9342,13 +9463,19 @@ class MainActivity : Activity() {
         return if (parsed == 0.0) "" else value
     }
 
-    private fun exerciseWeightKey(exercise: ExercisePlan): String = normalized(exercise.name)
+    private fun exerciseWeightKey(exercise: ExercisePlan): String =
+        exercise.catalogExerciseId?.let { "catalog:$it" } ?: normalized(exercise.name)
 
     private fun customAvailableWeightsFor(exercise: ExercisePlan): List<Double>? {
         val map = safeObject("exercise_available_weights")
         val key = exerciseWeightKey(exercise)
-        if (key.isBlank() || !map.has(key)) return null
-        val values = map.optJSONArray(key) ?: return emptyList()
+        val legacyKey = normalized(exercise.name)
+        val storedKey = when {
+            key.isNotBlank() && map.has(key) -> key
+            legacyKey.isNotBlank() && map.has(legacyKey) -> legacyKey
+            else -> return null
+        }
+        val values = map.optJSONArray(storedKey) ?: return emptyList()
         val result = mutableListOf<Double>()
         for (index in 0 until values.length()) {
             values.optDouble(index, Double.NaN).takeIf { value -> value.isFinite() }?.let { value -> result.add(value) }
@@ -9417,7 +9544,11 @@ class MainActivity : Activity() {
     }
 
     private fun catalogIdsPlannedForSelectedWorkoutDay(): Set<String> {
-        return exerciseNamesPlannedForSelectedWorkoutDay()
+        val planIndex = selectedPlanIndex.coerceIn(plans.indices)
+        val selectedDay = workoutPlanDayIndex(plans[planIndex], planIndex)
+        return plans.mapIndexed { index, plan -> index to plan }
+            .filter { (index, plan) -> workoutPlanDayIndex(plan, index) == selectedDay }
+            .flatMap { (_, plan) -> plan.exercises }
             .mapNotNull(::catalogMatchForWorkoutExercise)
             .map(CatalogExercise::id)
             .toSet()
@@ -9982,6 +10113,7 @@ class MainActivity : Activity() {
         exercises[persistedIndex] = current.copy(
             name = recommended.name,
             notes = "Substituido por recomendado para " + recommended.muscle + ". " + current.notes,
+            catalogExerciseId = recommended.id,
         )
         replacePlanExercises(planIndex, exercises)
         prefs.edit().remove(plannedSetKey()).apply()
@@ -11495,10 +11627,9 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    private fun saveExerciseDetails(planIndex: Int, exerciseIndex: Int, nameRaw: String, targetRaw: String, restRaw: String, notesRaw: String) {
+    private fun saveExerciseDetails(planIndex: Int, exerciseIndex: Int, targetRaw: String, restRaw: String, notesRaw: String) {
         val exercises = plans[planIndex].exercises.toMutableList()
-        exercises[exerciseIndex] = ExercisePlan(
-            name = nameRaw.ifBlank { "Exercicio" },
+        exercises[exerciseIndex] = exercises[exerciseIndex].copy(
             target = targetRaw.ifBlank { "3 x 10" },
             rest = restRaw.ifBlank { "60s" },
             notes = notesRaw.ifBlank { "Sem notas." },
@@ -11534,7 +11665,8 @@ class MainActivity : Activity() {
                     .put("name", exercise.name)
                     .put("target", exercise.target)
                     .put("rest", exercise.rest)
-                    .put("notes", exercise.notes))
+                    .put("notes", exercise.notes)
+                    .put("catalogExerciseId", exercise.catalogExerciseId))
             }
             array.put(JSONObject()
                 .put("id", plan.id)
@@ -11563,6 +11695,8 @@ class MainActivity : Activity() {
                         target = exercise.optString("target").ifBlank { "3 x 10" },
                         rest = exercise.optString("rest").ifBlank { "60s" },
                         notes = exercise.optString("notes").ifBlank { "Sem notas." },
+                        catalogExerciseId = exercise.optString("catalogExerciseId")
+                            .takeIf { it.isNotBlank() && it != "null" },
                     ))
                 }
                 result.add(WorkoutPlan(
@@ -12112,15 +12246,65 @@ class MainActivity : Activity() {
     private fun persistedExerciseIndex(effectivePlan: WorkoutPlan, effectiveIndex: Int): Int {
         val safeIndex = effectiveIndex.coerceIn(effectivePlan.exercises.indices)
         val exerciseName = effectivePlan.exercises[safeIndex].name
+        val exerciseId = effectivePlan.exercises[safeIndex].catalogExerciseId
         val basePlan = plans.firstOrNull { it.id == effectivePlan.id } ?: return safeIndex
         return basePlan.exercises.indexOfFirst { exercise ->
-            normalized(exercise.name) == normalized(exerciseName)
+            (exerciseId != null && exercise.catalogExerciseId == exerciseId) ||
+                normalized(exercise.name) == normalized(exerciseName)
         }.takeIf { it >= 0 } ?: safeIndex
     }
 
     private fun currentExercise() = currentPlan().exercises[selectedExerciseIndex.coerceIn(currentPlan().exercises.indices)]
 
     private fun buildWorkoutPlans(): List<WorkoutPlan> = customWorkoutPlans() ?: defaultWorkoutPlans()
+
+    private fun resolveWorkoutPlanCatalogLinks(source: List<WorkoutPlan>): List<WorkoutPlan> {
+        val identities = catalog.map { Mo2CatalogExerciseIdentity(it.id, it.name) }
+        return source.map { plan ->
+            plan.copy(exercises = plan.exercises.map { exercise ->
+                val linkedIdentity = Mo2ExercisePlanLinker.resolve(
+                    exercise.catalogExerciseId,
+                    exercise.name,
+                    identities,
+                )
+                val matched = linkedIdentity
+                    ?.let { identity -> catalog.firstOrNull { candidate -> candidate.id == identity.id } }
+                    ?: catalogMatchForWorkoutExercise(exercise.name)
+                if (matched == null) exercise else exercise.copy(
+                    name = matched.name,
+                    catalogExerciseId = matched.id,
+                )
+            })
+        }
+    }
+
+    private fun migrateWorkoutPlanCatalogLinks() {
+        val stored = customWorkoutPlans()
+        val source = stored ?: defaultWorkoutPlans()
+        val linked = resolveWorkoutPlanCatalogLinks(source)
+        migrateExerciseAvailableWeightKeys(source, linked)
+        if (stored == null || linked != stored) saveWorkoutPlans(linked)
+    }
+
+    private fun migrateExerciseAvailableWeightKeys(
+        source: List<WorkoutPlan>,
+        linked: List<WorkoutPlan>,
+    ) {
+        val weights = safeObject("exercise_available_weights")
+        var changed = false
+        source.zip(linked).forEach { (oldPlan, linkedPlan) ->
+            oldPlan.exercises.zip(linkedPlan.exercises).forEach exerciseLoop@ { (oldExercise, linkedExercise) ->
+                val id = linkedExercise.catalogExerciseId ?: return@exerciseLoop
+                val oldKey = normalized(oldExercise.name)
+                val newKey = "catalog:$id"
+                if (!weights.has(newKey) && weights.has(oldKey)) {
+                    weights.optJSONArray(oldKey)?.let { values -> weights.put(newKey, values) }
+                    changed = true
+                }
+            }
+        }
+        if (changed) prefs.edit().putString("exercise_available_weights", weights.toString()).apply()
+    }
 
     private fun defaultWorkoutPlans(): List<WorkoutPlan> = Mo2FiveKmPlan.strengthPlans()
 
@@ -12379,7 +12563,7 @@ class MainActivity : Activity() {
             var downloaded = 0
             var available = 0
             exercises.forEach { exercise ->
-                val match = catalogMatchForWorkoutExercise(exercise.name) ?: return@forEach
+                val match = catalogMatchForWorkoutExercise(exercise) ?: return@forEach
                 match.links.forEach { link ->
                     val file = File(mediaCacheDir(), Integer.toHexString(link.hashCode()) + ".img")
                     if (file.exists() && file.length() > 0L) {

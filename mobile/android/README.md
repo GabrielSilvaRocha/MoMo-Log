@@ -314,3 +314,12 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Aplicar o preset exige confirmacao quando ha plano personalizado e nao remove registros pessoais.
 - A importacao aceita backups v1, v2 e legados, tolera registros incompletos e permite desfazer com restauracao integral.
 - Android usa versionCode 1248 e versionName 12.4.8.
+
+## v12.5.0
+
+- Exercicios, Plano e Treino compartilham a mesma identidade de exercicio por ID do catalogo.
+- Edicoes de titulo, descricao e GIF feitas na biblioteca passam a ser refletidas no plano e na sessao.
+- O editor do plano escolhe e troca exercicios diretamente no catalogo, com busca e bloqueio de duplicatas.
+- Series, repeticoes, descanso e notas continuam especificos de cada plano.
+- Planos legados sao vinculados automaticamente; itens desconhecidos permanecem preservados para selecao manual.
+- Android usa versionCode 1250 e versionName 12.5.0.
