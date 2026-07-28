@@ -1204,32 +1204,44 @@ class MainActivity : Activity() {
         val goalSeconds = prefs.getLong("running_goal_5k_seconds", Mo2FiveKmPlan.TargetSeconds)
             .coerceIn(900L, 7200L)
         val goalPace = formatPaceSeconds((goalSeconds.toDouble() / 5.0).roundToInt().toLong())
-        val box = card(surface3)
+        val cycleTotalDays = daysBetween(Mo2FiveKmPlan.StartDay, Mo2FiveKmPlan.RaceDay)?.coerceAtLeast(1) ?: 1
+        val elapsedDays = when {
+            completed -> cycleTotalDays
+            days == null -> 0
+            else -> (cycleTotalDays - days.toInt()).coerceIn(0, cycleTotalDays)
+        }
+        val cycleProgress = ((elapsedDays.toDouble() / cycleTotalDays.toDouble()) * 100.0).roundToInt()
+        val box = card(surface)
         box.orientation = LinearLayout.VERTICAL
+        box.background = rounded(surface, dp(Mo2Radius.Lg), border)
         box.setOnClickListener { switchTab("running") }
 
         val header = LinearLayout(this)
         header.orientation = LinearLayout.HORIZONTAL
         header.gravity = Gravity.CENTER_VERTICAL
         val icon = FrameLayout(this)
-        icon.background = rounded(surface, dp(Mo2Radius.Md), border)
+        icon.background = rounded(surface2, dp(Mo2Radius.Md), null)
         icon.addView(
             br.com.mo2log.mobile.ui.Mo2NavIconView(this, Mo2NavIcon.Running, Mo2Colors.Running),
-            FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER),
+            FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER),
         )
-        header.addView(icon, LinearLayout.LayoutParams(dp(46), dp(46)))
+        header.addView(icon, LinearLayout.LayoutParams(dp(44), dp(44)))
         val title = LinearLayout(this)
         title.orientation = LinearLayout.VERTICAL
         title.setPadding(dp(Mo2Spacing.Md), 0, 0, 0)
-        title.addView(label(if (completed) "CICLO CONCLUIDO" else "PROXIMA PROVA", Mo2Colors.Running, 12f, true))
-        title.addView(label("5 km | 16 de agosto", white, 20f, true))
-        title.addView(label(if (completed) "Prova e planejamento encerrados" else "Prova de rua | meta pessoal", muted, 12f, false))
+        title.addView(label(if (completed) "CICLO CONCLUIDO" else "PROXIMA PROVA", green, 11f, true))
+        title.addView(label(if (completed) "5 km finalizados" else "Sua meta de 5 km", white, 19f, true))
         header.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, Mo2Colors.Running), LinearLayout.LayoutParams(dp(24), dp(24)))
+        val date = label(if (completed) "ENCERRADA" else "16 AGO", Mo2Colors.Running, 12f, true)
+        date.gravity = Gravity.CENTER
+        date.background = rounded(surface2, dp(Mo2Radius.Pill), null)
+        date.setPadding(dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Md), 0)
+        header.addView(date, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(32)))
+        header.addView(Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted), LinearLayout.LayoutParams(dp(22), dp(22)).apply {
+            marginStart = dp(Mo2Spacing.Sm)
+        })
         box.addView(header)
 
-        val metrics = LinearLayout(this)
-        metrics.orientation = LinearLayout.HORIZONTAL
         val countdown = when {
             days == null -> "16 AGO"
             days < 0L -> "Finalizada"
@@ -1237,20 +1249,85 @@ class MainActivity : Activity() {
             days == 1L -> "1 dia"
             else -> "$days dias"
         }
-        metrics.addView(compactMetric(if (completed) "Status" else "Faltam", countdown), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        metrics.addView(compactMetric("Meta", formatDuration(goalSeconds)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        metrics.addView(compactMetric("Pace", goalPace), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        box.addView(spacedRow(metrics))
+        val hero = LinearLayout(this)
+        hero.orientation = LinearLayout.HORIZONTAL
+        hero.gravity = Gravity.BOTTOM
+        val countdownBox = LinearLayout(this)
+        countdownBox.orientation = LinearLayout.VERTICAL
+        countdownBox.addView(label(if (completed) "STATUS" else "ATE A LARGADA", muted, 10f, true))
+        countdownBox.addView(label(countdown, white, if (completed) 25f else 30f, true))
+        hero.addView(countdownBox, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        hero.addView(homeRaceMetric("META", formatDuration(goalSeconds)), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Lg)
+        })
+        hero.addView(homeRaceMetric("PACE", goalPace), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Lg)
+        })
+        box.addView(hero, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Lg)
+        })
+
+        val progressHeader = LinearLayout(this)
+        progressHeader.orientation = LinearLayout.HORIZONTAL
+        progressHeader.gravity = Gravity.CENTER_VERTICAL
+        progressHeader.addView(label("CICLO 27 JUL", muted, 10f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        progressHeader.addView(label(cycleProgress.toString() + "%", green, 10f, true))
+        progressHeader.addView(label("16 AGO", muted, 10f, true).apply {
+            setPadding(dp(Mo2Spacing.Sm), 0, 0, 0)
+        })
+        box.addView(progressHeader, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Lg)
+        })
+        box.addView(Mo2Components.progressBar(this, cycleProgress, green), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(6),
+        ).apply {
+            topMargin = dp(Mo2Spacing.Xs)
+        })
 
         val nextLine = when {
             completed -> "Toque para revisar o ciclo no historico."
-            next != null -> "Proximo treino  |  " + formatDayForDisplay(scheduledDayFor(next)) + " | " + next.title
+            next != null -> formatDayForDisplay(scheduledDayFor(next)) + "  |  " + next.title
             else -> "Todos os treinos anteriores a prova foram concluidos."
         }
+        val nextRow = LinearLayout(this)
+        nextRow.orientation = LinearLayout.HORIZONTAL
+        nextRow.gravity = Gravity.CENTER_VERTICAL
+        nextRow.addView(label(if (completed) "RESUMO" else "PROXIMO", if (completed) muted else green, 10f, true))
         val nextView = label(nextLine, if (completed) muted else white, 12f, !completed)
-        nextView.setPadding(0, dp(Mo2Spacing.Md), 0, 0)
-        box.addView(nextView)
+        nextView.maxLines = 2
+        nextView.ellipsize = TextUtils.TruncateAt.END
+        nextRow.addView(nextView, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        box.addView(nextRow, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Md)
+        })
         return box
+    }
+
+    private fun homeRaceMetric(title: String, value: String): View {
+        val metric = LinearLayout(this)
+        metric.orientation = LinearLayout.VERTICAL
+        metric.gravity = Gravity.END
+        metric.addView(label(title, muted, 10f, true).apply { gravity = Gravity.END })
+        metric.addView(label(value, white, 16f, true).apply { gravity = Gravity.END })
+        return metric
     }
 
     private fun quickActionsPanel(): View {

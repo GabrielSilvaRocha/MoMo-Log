@@ -338,3 +338,11 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - A alternativa preferida aparece primeiro e exercicios duplicados no mesmo treino sao removidos da lista.
 - A troca altera somente a identidade do exercicio e mantem sua prescricao atual.
 - Android usa versionCode 1252 e versionName 12.5.2.
+
+## v12.5.3
+
+- O card Proxima prova passa a seguir a superficie, borda, espacamentos e acento verde da Home.
+- Data e icone mantem o azul da corrida como detalhe de categoria.
+- Contagem, meta e pace deixam de ficar em cards internos e ganham leitura direta.
+- O progresso do ciclo e o proximo treino ficam integrados ao mesmo fluxo visual.
+- Android usa versionCode 1253 e versionName 12.5.3.
