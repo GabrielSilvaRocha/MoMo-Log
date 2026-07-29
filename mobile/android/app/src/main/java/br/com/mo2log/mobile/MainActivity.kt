@@ -159,6 +159,13 @@ data class NavItem(
     val title: String,
 )
 
+data class MoreMenuItem(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val icon: Mo2ActionIcon,
+)
+
 data class CatalogExercise(
     val id: String,
     val name: String,
@@ -465,10 +472,10 @@ class MainActivity : Activity() {
         NavItem("plan_editor", "Plano"),
         NavItem("exercises", "Exercicios"),
         NavItem("history", "Historico"),
-        NavItem("stats", "Stats"),
+        NavItem("stats", "Evolucao"),
         NavItem("goals", "Metas"),
         NavItem("coach", "Coach"),
-        NavItem("profile", "Perfil"),
+        NavItem("profile", "Perfil e dados"),
     )
     private val navItems = primaryNavItems + secondaryNavItems
 
@@ -898,11 +905,9 @@ class MainActivity : Activity() {
                 prefs.getBoolean("running_settings_open", false))
         val focusedStrengthSession = currentTab == "workout"
         val customPageChrome = currentTab == "exercises"
+        val moreSubpage = secondaryNavItems.any { it.id == currentTab }
         if (!focusedRunningSession && !focusedRunningSubpage && !focusedStrengthSession && !customPageChrome) {
-            if (currentTab !in setOf("home", "running", "more")) {
-                root.addView(header())
-            }
-            root.addView(pageIntro())
+            if (moreSubpage) root.addView(moreSubpageHeader()) else root.addView(pageIntro())
         }
 
         when (currentTab) {
@@ -1051,6 +1056,35 @@ class MainActivity : Activity() {
         return wrap
     }
 
+    private fun moreSubpageHeader(): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(0, 0, 0, dp(Mo2Spacing.Lg))
+        val back = exerciseIconButton(
+            Mo2ActionIcon.Back,
+            white,
+            "Voltar para Mais",
+            sizeDp = 44,
+            surfaceColor = surface,
+            strokeColor = border,
+        )
+        back.setOnClickListener { switchTab("more") }
+        row.addView(back, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val title = label(currentSectionTitle(), white, 24f, true)
+        title.includeFontPadding = false
+        title.maxLines = 1
+        title.ellipsize = TextUtils.TruncateAt.END
+        row.addView(title, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        return row
+    }
+
     private fun bottomNav(): View {
         val wrap = LinearLayout(this)
         wrap.orientation = LinearLayout.VERTICAL
@@ -1124,64 +1158,134 @@ class MainActivity : Activity() {
     }
 
     private fun renderMore(root: LinearLayout) {
-        val hub = card(surface3)
-        hub.orientation = LinearLayout.VERTICAL
-        hub.addView(label("CENTRAL DO APP", green, 13f, true))
-        hub.addView(label("Ferramentas extras em um lugar so", white, 25f, true))
-        hub.addView(label("Plano, historico, estatisticas, catalogo, metas, coach e perfil ficam aqui para deixar o uso diario mais direto.", muted, 15f, false))
-        root.addView(hub)
-
-        val shortcuts = buildList {
-            add(Triple("plan_editor", "Plano", "Editar treinos, exercicios e ajustes da corrida."))
-            add(Triple("exercises", "Exercicios", "Catalogo com midia, favoritos e alternativas."))
-            add(Triple("history", "Historico", "Series e corridas registradas no celular."))
-            add(Triple("stats", "Stats", "Volume, cargas, semana e melhores marcas."))
-            add(Triple("goals", "Metas", "Objetivos semanais de treino e corrida."))
-            add(Triple("coach", "Coach", "Insights simples para ajustar a rotina."))
-            add(Triple("profile", "Perfil", "Dados locais, versao e exportacao."))
-            if (shouldShowSoundcoreDiagnostics(BuildConfig.DEBUG)) {
-                add(
-                    Triple(
-                        SOUNDCORE_DIAGNOSTICS_ID,
-                        "Diagnostico Soundcore",
-                        "Inspecao Bluetooth e GATT somente leitura.",
-                    ),
-                )
-            }
+        root.addView(moreMenuSection(
+            "PLANEJAMENTO",
+            listOf(
+                MoreMenuItem("plan_editor", "Plano", "Treinos, corrida e agenda", Mo2ActionIcon.Calendar),
+                MoreMenuItem("goals", "Metas", "Objetivos e progresso semanal", Mo2ActionIcon.Target),
+            ),
+        ))
+        root.addView(moreMenuSection(
+            "ACOMPANHAMENTO",
+            listOf(
+                MoreMenuItem("history", "Historico", "Atividades e registros", Mo2ActionIcon.History),
+                MoreMenuItem("stats", "Evolucao", "Volume, cargas e marcas", Mo2ActionIcon.Chart),
+                MoreMenuItem("coach", "Coach", "Ajustes para a rotina", Mo2ActionIcon.Coach),
+            ),
+        ))
+        root.addView(moreMenuSection(
+            "BIBLIOTECA",
+            listOf(
+                MoreMenuItem("exercises", "Exercicios", "GIFs, tecnica e alternativas", Mo2ActionIcon.Dumbbell),
+            ),
+        ))
+        val accountItems = mutableListOf(
+            MoreMenuItem("profile", "Perfil e dados", "Backup, preferencias e acessibilidade", Mo2ActionIcon.Person),
+        )
+        if (shouldShowSoundcoreDiagnostics(BuildConfig.DEBUG)) {
+            accountItems.add(MoreMenuItem(
+                SOUNDCORE_DIAGNOSTICS_ID,
+                "Diagnostico Soundcore",
+                "Inspecao Bluetooth e GATT somente leitura",
+                Mo2ActionIcon.Diagnostics,
+            ))
         }
-
-        shortcuts.chunked(2).forEach { rowItems ->
-            val row = LinearLayout(this)
-            row.orientation = LinearLayout.HORIZONTAL
-            rowItems.forEachIndexed { index, item ->
-                val shortcut = moreShortcut(item.first, item.second, item.third)
-                val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                params.setMargins(if (index == 0) 0 else dp(8), dp(8), 0, 0)
-                row.addView(shortcut, params)
-            }
-            if (rowItems.size == 1) {
-                val spacer = View(this)
-                row.addView(spacer, LinearLayout.LayoutParams(0, 1, 1f))
-            }
-            root.addView(row)
-        }
-        root.addView(heroCard("Proxima tela", "Treino sempre a um toque", "Use a barra inferior para voltar rapido ao treino ou registrar corrida sem atravessar menus."))
+        root.addView(moreMenuSection("CONTA E APP", accountItems))
     }
 
-    private fun moreShortcut(id: String, title: String, subtitle: String): View {
-        val box = card(surface2)
-        box.orientation = LinearLayout.VERTICAL
-        box.minimumHeight = dp(116)
-        box.setOnClickListener {
-            if (id == SOUNDCORE_DIAGNOSTICS_ID) {
-                openSoundcoreDiagnostics()
-            } else {
-                switchTab(id)
+    private fun moreMenuSection(title: String, items: List<MoreMenuItem>): View {
+        val section = LinearLayout(this)
+        section.orientation = LinearLayout.VERTICAL
+        val heading = label(title, muted, 12f, true)
+        heading.letterSpacing = 0f
+        section.addView(heading, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Xl)
+            bottomMargin = dp(Mo2Spacing.Sm)
+            marginStart = dp(Mo2Spacing.Xs)
+        })
+
+        val group = LinearLayout(this)
+        group.orientation = LinearLayout.VERTICAL
+        group.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs))
+        group.background = rounded(surface, dp(Mo2Radius.Md), border)
+        items.forEachIndexed { index, item ->
+            if (index > 0) {
+                val divider = View(this)
+                divider.setBackgroundColor(border)
+                group.addView(divider, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(1),
+                ).apply {
+                    marginStart = dp(60)
+                    marginEnd = dp(Mo2Spacing.Sm)
+                })
             }
+            group.addView(moreMenuRow(item))
         }
-        box.addView(label(title, white, 18f, true))
-        box.addView(label(subtitle, muted, 13f, false))
-        return box
+        section.addView(group)
+        return section
+    }
+
+    private fun moreMenuRow(item: MoreMenuItem, tint: Int = green): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Sm))
+        row.minimumHeight = dp(72)
+        row.background = Mo2Drawables.pressed(
+            context = this,
+            color = android.graphics.Color.TRANSPARENT,
+            pressedColor = surface2,
+            radiusDp = Mo2Radius.Sm,
+        )
+        row.foreground = Mo2Drawables.rippleForeground(
+            this,
+            android.graphics.Color.argb(44, 248, 250, 252),
+            Mo2Radius.Sm,
+        )
+        row.isClickable = true
+        row.isFocusable = true
+        row.contentDescription = item.title + ". " + item.subtitle
+        row.setOnClickListener {
+            if (item.id == SOUNDCORE_DIAGNOSTICS_ID) openSoundcoreDiagnostics() else switchTab(item.id)
+        }
+
+        val iconBox = FrameLayout(this)
+        iconBox.background = rounded(
+            if (tint == green) Mo2Colors.PrimarySoft else android.graphics.Color.argb(42, android.graphics.Color.red(tint), android.graphics.Color.green(tint), android.graphics.Color.blue(tint)),
+            dp(Mo2Radius.Sm),
+        )
+        iconBox.addView(
+            Mo2ActionIconView(this, item.icon, tint),
+            FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER),
+        )
+        row.addView(iconBox, LinearLayout.LayoutParams(dp(44), dp(44)))
+
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        val title = label(item.title, white, 16f, true)
+        title.maxLines = 1
+        title.ellipsize = TextUtils.TruncateAt.END
+        text.addView(title)
+        val subtitle = label(item.subtitle, muted, 13f, false)
+        subtitle.maxLines = 2
+        text.addView(subtitle)
+        row.addView(text, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Md)
+            marginEnd = dp(Mo2Spacing.Sm)
+        })
+        row.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted),
+            LinearLayout.LayoutParams(dp(20), dp(20)),
+        )
+        return row
     }
 
     private fun openSoundcoreDiagnostics() {
@@ -8235,123 +8339,342 @@ class MainActivity : Activity() {
     }
 
     private fun renderProfile(root: LinearLayout) {
+        val profileName = prefs.getString("profile_name", "Gabriel").orEmpty().ifBlank { "Gabriel" }
         val overview = card(surface3)
-        overview.orientation = LinearLayout.VERTICAL
+        overview.orientation = LinearLayout.HORIZONTAL
+        overview.gravity = Gravity.CENTER_VERTICAL
+        val avatar = label(profileName.take(1).uppercase(Locale("pt", "BR")), bg, 20f, true)
+        avatar.gravity = Gravity.CENTER
+        avatar.background = rounded(green, dp(Mo2Radius.Pill))
+        overview.addView(avatar, LinearLayout.LayoutParams(dp(52), dp(52)))
         val identity = LinearLayout(this)
-        identity.orientation = LinearLayout.HORIZONTAL
-        identity.gravity = Gravity.CENTER_VERTICAL
-        val logo = label("M2", bg, 18f, true)
-        logo.gravity = Gravity.CENTER
-        logo.background = rounded(green, dp(Mo2Radius.Md))
-        identity.addView(logo, LinearLayout.LayoutParams(dp(54), dp(54)))
-        val identityText = LinearLayout(this)
-        identityText.orientation = LinearLayout.VERTICAL
-        identityText.setPadding(dp(14), 0, 0, 0)
-        identityText.addView(label("PERFIL LOCAL", green, 12f, true))
-        identityText.addView(label("Mo2 LOG pessoal", white, 24f, true))
-        identityText.addView(label("Android nativo | v" + versionName, muted, 13f, false))
-        identity.addView(identityText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        identity.addView(statusChip("Local"))
-        overview.addView(identity)
-        overview.addView(label("Seus treinos, corridas e preferencias ficam armazenados neste celular.", muted, 14f, false))
+        identity.orientation = LinearLayout.VERTICAL
+        identity.addView(label(profileName, white, 20f, true))
+        identity.addView(label("Dados neste celular | v" + versionName, muted, 13f, false))
+        overview.addView(identity, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f,
+        ).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        overview.addView(statusChip("Local"))
         root.addView(overview)
 
-        val data = card(surface2)
-        data.orientation = LinearLayout.VERTICAL
-        data.addView(label("SEUS DADOS", green, 13f, true))
-        data.addView(label("Resumo local", white, 22f, true))
-        val dataMetrics = LinearLayout(this)
-        dataMetrics.orientation = LinearLayout.HORIZONTAL
-        dataMetrics.addView(compactMetric("Series", allLogs().length().toString()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        dataMetrics.addView(compactMetric("Corridas", runLogs().length().toString()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        dataMetrics.addView(compactMetric("Favoritos", favoriteCatalogIds().size.toString()), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        data.addView(spacedRow(dataMetrics))
+        val summary = LinearLayout(this)
+        summary.orientation = LinearLayout.VERTICAL
+        summary.addView(profileSectionLabel("RESUMO"))
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.background = rounded(surface, dp(Mo2Radius.Md), border)
+        listOf(
+            "Series" to allLogs().length().toString(),
+            "Corridas" to runLogs().length().toString(),
+            "Favoritos" to favoriteCatalogIds().size.toString(),
+        ).forEachIndexed { index, metric ->
+            if (index > 0) {
+                val divider = View(this)
+                divider.setBackgroundColor(border)
+                metrics.addView(divider, LinearLayout.LayoutParams(dp(1), dp(44)).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                })
+            }
+            val metricView = LinearLayout(this)
+            metricView.orientation = LinearLayout.VERTICAL
+            metricView.gravity = Gravity.CENTER
+            metricView.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Md))
+            metricView.addView(label(metric.second, white, 20f, true).apply { gravity = Gravity.CENTER })
+            metricView.addView(label(metric.first, muted, 12f, false).apply { gravity = Gravity.CENTER })
+            metrics.addView(metricView, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        summary.addView(metrics)
+        root.addView(summary)
+
         val lastBackup = prefs.getString("last_backup_day", "").orEmpty()
-        data.addView(label(
-            mediaCacheFileCount().toString() + " imagens em cache | " +
-                if (lastBackup.isBlank()) "backup ainda nao criado" else "ultimo backup em " + lastBackup,
-            muted,
-            13f,
-            false,
+        root.addView(profileActionSection(
+            "DADOS",
+            listOf(
+                MoreMenuItem("backup", "Criar backup", if (lastBackup.isBlank()) "Ainda nao criado" else "Ultimo em " + lastBackup, Mo2ActionIcon.Backup) to { exportToClipboard() },
+                MoreMenuItem("import", "Importar backup", "Restaurar dados por JSON", Mo2ActionIcon.Import) to { showBackupImportSheet() },
+                MoreMenuItem("media", "Midias offline", mediaCacheFileCount().toString() + " arquivos | " + mediaCacheSizeLabel(), Mo2ActionIcon.Image) to { showMoreDataOptionsSheet() },
+            ),
         ))
-        root.addView(data)
-        root.addView(v12DataHealthPanel())
-        root.addView(v12AccessibilityPanel())
 
-        val planning = card(surface)
-        planning.orientation = LinearLayout.VERTICAL
-        planning.addView(label("PLANEJAMENTO", green, 13f, true))
-        planning.addView(label("Preferencias de treino", white, 22f, true))
-        planning.addView(label(
-            "Plano base " + trainingPlanVersion + " | " +
-                (if (isFiveKmCycleCompleted()) "corrida: ciclo concluido" else
-                    "corrida semana " + currentRunningPlanWeek() + " de " + runningPlanWeekCount()),
-            muted,
-            14f,
-            false,
+        val recordCount = allLogs().length() + strengthSessionLogs().length() + runLogs().length()
+        val health = Mo2ProgressEngine.dataHealth(
+            invalidLocalCollectionCount(),
+            prefs.getString("last_backup_day", "").orEmpty().let { day -> if (isValidDayKey(day)) daysBetween(day, dayKey()) else null },
+            recordCount,
+        )
+        root.addView(profileActionSection(
+            "PREFERENCIAS",
+            listOf(
+                MoreMenuItem("accessibility", "Acessibilidade", accessibilitySummary(), Mo2ActionIcon.Accessibility) to { showAccessibilitySheet() },
+                MoreMenuItem("voice", "Avisos de voz", if (isRunningVoiceEnabled()) "Ativos durante a corrida" else "Desativados", Mo2ActionIcon.Voice) to { showVoiceSettingsSheet() },
+                MoreMenuItem("diagnostics", "Diagnostico", health.status + " | " + recordCount + " registros", Mo2ActionIcon.Diagnostics) to { showDataDiagnosticsDialog() },
+            ),
         ))
-        val readiness = readinessStatus()
-        planning.addView(label(
-            if (readiness.isBlank()) "Check-in de hoje ainda nao preenchido." else "Check-in de hoje: " + readinessTitle(readiness) + ".",
-            muted,
-            13f,
-            false,
-        ))
-        val planningActions = LinearLayout(this)
-        planningActions.orientation = LinearLayout.HORIZONTAL
-        val editPlan = actionButton("Editar plano", surface2, white)
-        editPlan.setOnClickListener { switchTab("plan_editor") }
-        planningActions.addView(editPlan, LinearLayout.LayoutParams(0, dp(48), 1f))
-        val editGoals = actionButton("Metas", surface2, green)
-        editGoals.setOnClickListener { switchTab("goals") }
-        planningActions.addView(editGoals, LinearLayout.LayoutParams(0, dp(48), 1f))
-        planning.addView(spacedRow(planningActions))
-        root.addView(planning)
+    }
 
-        val backup = card(surface2)
-        backup.orientation = LinearLayout.VERTICAL
-        backup.addView(label("BACKUP PESSOAL", green, 13f, true))
-        backup.addView(label("Exportacao e importacao JSON", white, 22f, true))
-        backup.addView(label("Copia todos os dados locais: series, corridas, plano editado, favoritos, ocultos, substitutos, metas e ajustes.", muted, 14f, false))
-
-        val copy = actionButton("Copiar backup JSON", green, bg)
-        copy.setOnClickListener { exportToClipboard() }
-        backup.addView(buttonParams(copy))
-
-        val paste = textArea("Cole aqui um backup JSON para importar", "")
-        backup.addView(paste)
-
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        val importPasted = actionButton("Importar colado", surface2, green)
-        importPasted.setOnClickListener {
-            hideKeyboard()
-            importBackupJson(paste.textValue())
+    private fun profileSectionLabel(text: String): View {
+        return label(text, muted, 12f, true).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = dp(Mo2Spacing.Xl)
+                bottomMargin = dp(Mo2Spacing.Sm)
+                marginStart = dp(Mo2Spacing.Xs)
+            }
         }
-        row.addView(importPasted, LinearLayout.LayoutParams(0, dp(50), 1f))
-        val importClipboard = actionButton("Do clipboard", surface2, white)
-        importClipboard.setOnClickListener {
-            hideKeyboard()
-            importBackupJson(readClipboardText())
+    }
+
+    private fun profileActionSection(
+        title: String,
+        items: List<Pair<MoreMenuItem, () -> Unit>>,
+    ): View {
+        val section = LinearLayout(this)
+        section.orientation = LinearLayout.VERTICAL
+        section.addView(profileSectionLabel(title))
+        val group = LinearLayout(this)
+        group.orientation = LinearLayout.VERTICAL
+        group.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs))
+        group.background = rounded(surface, dp(Mo2Radius.Md), border)
+        items.forEachIndexed { index, item ->
+            if (index > 0) {
+                group.addView(View(this).apply { setBackgroundColor(border) }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(1),
+                ).apply {
+                    marginStart = dp(60)
+                    marginEnd = dp(Mo2Spacing.Sm)
+                })
+            }
+            val row = moreMenuRow(item.first)
+            row.setOnClickListener { item.second() }
+            group.addView(row)
         }
-        row.addView(importClipboard, LinearLayout.LayoutParams(0, dp(50), 1f))
-        backup.addView(spacedRow(row))
+        section.addView(group)
+        return section
+    }
+
+    private fun accessibilitySummary(): String {
+        val enabled = mutableListOf<String>()
+        if (prefs.getBoolean("accessibility_large_text", false)) enabled.add("texto ampliado")
+        if (prefs.getBoolean("accessibility_reduce_motion", false)) enabled.add("movimento reduzido")
+        return if (enabled.isEmpty()) "Padrao" else enabled.joinToString(" e ")
+    }
+
+    private fun showMoreDataOptionsSheet() {
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent(
+            "Opcoes de dados",
+            "Backup, restauracao e armazenamento local",
+        )
+        sheet.addView(sheetActionRow("Criar backup", "Copiar JSON para o clipboard", Mo2ActionIcon.Backup) {
+            dialog.dismiss()
+            exportToClipboard()
+        })
+        sheet.addView(sheetActionRow("Importar backup", "Colar ou ler JSON do clipboard", Mo2ActionIcon.Import) {
+            dialog.dismiss()
+            showBackupImportSheet()
+        })
+        sheet.addView(sheetActionRow("Limpar cache de midia", mediaCacheFileCount().toString() + " arquivos | " + mediaCacheSizeLabel(), Mo2ActionIcon.Image) {
+            dialog.dismiss()
+            clearMediaCache()
+        })
         if (prefs.contains(preImportBackupKey)) {
-            val undoImport = actionButton("Desfazer ultima importacao", surface, amber)
-            undoImport.setOnClickListener { showUndoBackupImportDialog() }
-            backup.addView(buttonParams(undoImport))
-            backup.addView(label("Uma copia automatica dos dados anteriores esta disponivel neste aparelho.", muted, 12f, false))
+            sheet.addView(sheetActionRow("Desfazer ultima importacao", "Restaurar a copia anterior", Mo2ActionIcon.History, amber) {
+                dialog.dismiss()
+                showUndoBackupImportDialog()
+            })
         }
-        root.addView(backup)
+        val divider = View(this)
+        divider.setBackgroundColor(border)
+        sheet.addView(divider, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+            topMargin = dp(Mo2Spacing.Sm)
+            bottomMargin = dp(Mo2Spacing.Sm)
+        })
+        sheet.addView(sheetActionRow("Apagar historico", "Remover series e corridas salvas", Mo2ActionIcon.Trash, danger) {
+            dialog.dismiss()
+            showClearLocalDataDialog()
+        })
+        val cancel = actionButton("Cancelar", surface2, white)
+        cancel.setOnClickListener { dialog.dismiss() }
+        sheet.addView(buttonParams(cancel))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.76f)
+    }
 
-        val dangerBox = card(surface)
-        dangerBox.orientation = LinearLayout.VERTICAL
-        dangerBox.addView(label("DADOS LOCAIS", green, 13f, true))
-        dangerBox.addView(label("Apagar remove historico de series e corridas deste celular.", muted, 14f, false))
-        val clear = actionButton("Apagar dados locais", surface2, danger)
-        clear.setOnClickListener { showClearLocalDataDialog() }
-        dangerBox.addView(buttonParams(clear))
-        root.addView(dangerBox)
+    private fun showBackupImportSheet() {
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent(
+            "Importar backup",
+            "Cole o JSON abaixo ou use o conteudo do clipboard",
+        )
+        val pasted = textArea("Cole aqui o backup JSON", "")
+        pasted.minLines = 4
+        pasted.maxLines = 7
+        sheet.addView(pasted)
+        val fromClipboard = actionButton("Usar clipboard", surface2, white)
+        fromClipboard.setOnClickListener {
+            pasted.setText(readClipboardText())
+            pasted.setSelection(pasted.text.length)
+        }
+        sheet.addView(buttonParams(fromClipboard))
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val cancel = actionButton("Cancelar", surface2, muted)
+        cancel.setOnClickListener { dialog.dismiss() }
+        actions.addView(cancel, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val import = actionButton("Importar", green, bg)
+        import.setOnClickListener {
+            hideKeyboard()
+            val raw = pasted.textValue()
+            if (raw.isBlank()) {
+                Toast.makeText(this, "Cole um backup JSON antes de importar.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            importBackupJson(raw)
+        }
+        actions.addView(import, LinearLayout.LayoutParams(0, dp(50), 1f))
+        sheet.addView(spacedRow(actions))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.72f)
+    }
+
+    private fun showAccessibilitySheet() {
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent(
+            "Acessibilidade",
+            "Preferencias aplicadas em todo o app",
+        )
+        val largeText = runningVoiceCheckBox(
+            "Texto ampliado",
+            prefs.getBoolean("accessibility_large_text", false),
+        ) { checked ->
+            prefs.edit().putBoolean("accessibility_large_text", checked).apply()
+        }
+        val reducedMotion = runningVoiceCheckBox(
+            "Movimento reduzido em pop-ups",
+            prefs.getBoolean("accessibility_reduce_motion", false),
+        ) { checked ->
+            prefs.edit().putBoolean("accessibility_reduce_motion", checked).apply()
+        }
+        sheet.addView(largeText)
+        sheet.addView(reducedMotion)
+        val done = actionButton("Concluir", green, bg)
+        done.setOnClickListener {
+            dialog.dismiss()
+            render()
+        }
+        sheet.addView(buttonParams(done))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.58f)
+    }
+
+    private fun showVoiceSettingsSheet() {
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent(
+            "Avisos de voz",
+            "Orientacoes durante os treinos de corrida",
+        )
+        val tenSeconds = runningVoiceCheckBox(
+            "Aviso adicional aos 10 segundos",
+            prefs.getBoolean("running_voice_10_seconds", true),
+        ) { checked -> prefs.edit().putBoolean("running_voice_10_seconds", checked).apply() }
+        val enabled = runningVoiceCheckBox(
+            "Avisos de voz durante a corrida",
+            isRunningVoiceEnabled(),
+        ) { checked ->
+            prefs.edit().putBoolean("running_voice_enabled", checked).apply()
+            tenSeconds.isEnabled = checked
+            tenSeconds.alpha = if (checked) 1f else 0.45f
+            if (!checked) voiceCoach?.stop()
+        }
+        tenSeconds.isEnabled = enabled.isChecked
+        tenSeconds.alpha = if (enabled.isChecked) 1f else 0.45f
+        sheet.addView(enabled)
+        sheet.addView(tenSeconds)
+        val test = actionButton("Testar voz", surface2, Mo2Colors.Running)
+        test.setOnClickListener {
+            when {
+                !isRunningVoiceEnabled() -> Toast.makeText(this, "Ative os avisos de voz primeiro.", Toast.LENGTH_SHORT).show()
+                !voiceCoachReady -> Toast.makeText(this, "A voz do Android ainda nao esta pronta.", Toast.LENGTH_SHORT).show()
+                else -> speakRunCue("Comandos de voz ativos. Bom treino.", flush = true)
+            }
+        }
+        sheet.addView(buttonParams(test))
+        val done = actionButton("Concluir", green, bg)
+        done.setOnClickListener {
+            dialog.dismiss()
+            render()
+        }
+        sheet.addView(buttonParams(done))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.68f)
+    }
+
+    private fun showDataDiagnosticsDialog() {
+        val recordCount = allLogs().length() + strengthSessionLogs().length() + runLogs().length()
+        val invalidCollections = invalidLocalCollectionCount()
+        val backupDay = prefs.getString("last_backup_day", "").orEmpty()
+        val backupAge = if (isValidDayKey(backupDay)) daysBetween(backupDay, dayKey()) else null
+        val health = Mo2ProgressEngine.dataHealth(invalidCollections, backupAge, recordCount)
+        val detail = if (health.issues.isEmpty()) {
+            "Colecoes locais legiveis e sem inconsistencias detectadas."
+        } else {
+            health.issues.joinToString("\n")
+        }
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.setPadding(dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Sm))
+        content.addView(label("DIAGNOSTICO", green, 12f, true))
+        content.addView(label(health.status, if (health.status == "Integro") green else amber, 24f, true))
+        content.addView(label(detail, muted, 14f, false))
+        content.addView(label(recordCount.toString() + " registros | cache " + mediaCacheSizeLabel(), white, 14f, true))
+        val dialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setNegativeButton("Fechar", null)
+            .setPositiveButton("Criar backup") { _, _ -> exportToClipboard() }
+            .create()
+        dialog.setOnShowListener { styleHistoryDialog(dialog, content) }
+        dialog.show()
+    }
+
+    private fun moreSheetContent(title: String, subtitle: String): LinearLayout {
+        val sheet = LinearLayout(this)
+        sheet.orientation = LinearLayout.VERTICAL
+        sheet.setPadding(dp(Mo2Spacing.Lg), dp(Mo2Spacing.Md), dp(Mo2Spacing.Lg), dp(Mo2Spacing.Lg))
+        sheet.background = rounded(surface, dp(Mo2Radius.Modal), border)
+        val handle = View(this)
+        handle.background = rounded(Mo2Colors.Disabled, dp(Mo2Radius.Pill))
+        sheet.addView(handle, LinearLayout.LayoutParams(dp(42), dp(4)).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(Mo2Spacing.Lg)
+        })
+        sheet.addView(label(title, white, 22f, true))
+        sheet.addView(label(subtitle, muted, 13f, false), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            bottomMargin = dp(Mo2Spacing.Md)
+        })
+        return sheet
+    }
+
+    private fun sheetActionRow(
+        title: String,
+        subtitle: String,
+        icon: Mo2ActionIcon,
+        tint: Int = green,
+        onClick: () -> Unit,
+    ): View {
+        val item = MoreMenuItem("sheet_action", title, subtitle, icon)
+        return moreMenuRow(item, tint).apply {
+            setOnClickListener { onClick() }
+        }
     }
 
     private fun v12DataHealthPanel(): View {
@@ -8455,9 +8778,28 @@ class MainActivity : Activity() {
     }
 
     private fun showClearLocalDataDialog() {
+        val content = LinearLayout(this)
+        content.orientation = LinearLayout.VERTICAL
+        content.gravity = Gravity.CENTER_HORIZONTAL
+        content.setPadding(dp(Mo2Spacing.Xl), dp(Mo2Spacing.Xl), dp(Mo2Spacing.Xl), dp(Mo2Spacing.Sm))
+        val icon = FrameLayout(this)
+        icon.background = rounded(android.graphics.Color.argb(40, 239, 68, 68), dp(Mo2Radius.Pill))
+        icon.addView(
+            Mo2ActionIconView(this, Mo2ActionIcon.Trash, danger),
+            FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER),
+        )
+        content.addView(icon, LinearLayout.LayoutParams(dp(52), dp(52)).apply {
+            bottomMargin = dp(Mo2Spacing.Md)
+        })
+        content.addView(label("Apagar historico?", white, 22f, true).apply { gravity = Gravity.CENTER })
+        content.addView(label(
+            "Series e corridas salvas serao removidas. Plano, metas e favoritos permanecem.",
+            muted,
+            14f,
+            false,
+        ).apply { gravity = Gravity.CENTER })
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Apagar historico local?")
-            .setMessage("Todas as series e corridas salvas neste celular serao removidas. Plano, metas e favoritos serao mantidos.")
+            .setView(content)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Apagar") { _, _ ->
                 prefs.edit().remove("set_logs").remove("run_logs").remove("strength_session_logs").apply()
@@ -8466,7 +8808,7 @@ class MainActivity : Activity() {
             }
             .create()
         dialog.setOnShowListener {
-            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            styleHistoryDialog(dialog, content)
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
         }
@@ -12548,7 +12890,7 @@ class MainActivity : Activity() {
             "home" -> ""
             "workout" -> "Registro guiado com timer, midia de execucao, edicao e desfazer serie."
             "running" -> "Seu proximo treino, progresso e meta para os 5 km."
-            "more" -> "Tudo que nao precisa ficar no menu principal, organizado por ferramenta."
+            "more" -> ""
             "plan_editor" -> "Edite seu plano pessoal de musculacao e corrida direto no celular."
             "exercises" -> "Catalogo completo com busca, midia por link, favoritos e alternativas."
             "history" -> "Calendario, recordes, graficos e edicao completa dos registros locais."

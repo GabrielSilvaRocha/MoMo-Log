@@ -346,3 +346,12 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Contagem, meta e pace deixam de ficar em cards internos e ganham leitura direta.
 - O progresso do ciclo e o proximo treino ficam integrados ao mesmo fluxo visual.
 - Android usa versionCode 1253 e versionName 12.5.3.
+
+## v12.5.4
+
+- Mais passa a usar secoes agrupadas com icones nativos, descricoes curtas e linhas de toque inteiras.
+- Subtelas removem o header legado e usam uma app bar compacta com navegacao de retorno.
+- Perfil e dados organiza resumo, backup, importacao, cache, acessibilidade, voz e integridade local.
+- Folhas inferiores substituem paineis extensos para operacoes de dados e preferencias.
+- Exclusao do historico exige confirmacao destrutiva e mantem planejamento e personalizacoes.
+- Android usa versionCode 1254 e versionName 12.5.4.

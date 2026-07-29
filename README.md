@@ -4,14 +4,14 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v12.5.3.
+- Android nativo pessoal: v12.5.4.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
-- Redesign do Figma consolidado na branch `feature/android-figma-redesign`; `main` permanece sem merge direto.
+- Redesign do Figma consolidado no Android nativo e mantido na branch `main`.
 
 ## Proximas entregas
 
-- v12.5.4 - Descoberta BLE ampliada e integracao segura do Soundcore Sport X20.
+- v12.5.5 - Descoberta BLE ampliada e integracao segura do Soundcore Sport X20.
 - v12.6.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
 - v12.7.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
 - v12.8.0 - Comparacoes mensais e metas pessoais de longo prazo.
@@ -708,3 +708,12 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Contagem regressiva, meta e pace recebem uma hierarquia mais clara e deixam de usar minicards internos.
 - Uma barra mostra o progresso entre o inicio do ciclo e a prova, seguida pelo proximo treino programado.
 - Android usa versionCode 1253 e versionName 12.5.3.
+
+## v12.5.4 - Mais e perfil reorganizados
+
+- A aba Mais troca a grade de cards redundantes por listas agrupadas de planejamento, acompanhamento, biblioteca e conta.
+- Evolucao substitui o rotulo Stats e todas as subtelas recebem uma barra compacta com voltar e titulo.
+- Perfil e dados concentra resumo local, backup, importacao, cache, acessibilidade, voz e diagnostico sem repetir atalhos do menu.
+- Operacoes de dados e preferencias usam folhas inferiores com alvos de toque maiores e movimento reduzido respeitado.
+- A exclusao do historico recebe uma confirmacao destrutiva clara e preserva plano, metas e favoritos.
+- Android usa versionCode 1254 e versionName 12.5.4.
