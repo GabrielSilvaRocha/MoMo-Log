@@ -4,14 +4,14 @@ Mo² LOG é uma aplicação de treino híbrido para musculação e corrida.
 
 ## Estado atual
 
-- Android nativo pessoal: v12.5.4.
+- Android nativo pessoal: v12.5.5.
 - Dados locais preservados em `SharedPreferences`, sem depender do PC ou de um backend.
 - Musculacao, corrida guiada, catalogo, historico editavel, estatisticas, metas, coach e backup JSON ativos.
 - Redesign do Figma consolidado no Android nativo e mantido na branch `main`.
 
 ## Proximas entregas
 
-- v12.5.5 - Descoberta BLE ampliada e integracao segura do Soundcore Sport X20.
+- v12.5.6 - Descoberta BLE ampliada e integracao segura do Soundcore Sport X20.
 - v12.6.0 - Periodizacao pessoal de musculacao por blocos e semanas de deload.
 - v12.7.0 - Modo prova de 5 km, aquecimento guiado e estrategia de ritmo.
 - v12.8.0 - Comparacoes mensais e metas pessoais de longo prazo.
@@ -717,3 +717,13 @@ Use o botão **Entrar como Demo Local**. Não há senha demo versionada no repos
 - Operacoes de dados e preferencias usam folhas inferiores com alvos de toque maiores e movimento reduzido respeitado.
 - A exclusao do historico recebe uma confirmacao destrutiva clara e preserva plano, metas e favoritos.
 - Android usa versionCode 1254 e versionName 12.5.4.
+
+## v12.5.5 - Editor de plano reorganizado
+
+- Plano passa a separar Visao geral, Musculacao e Corrida em modos persistentes e compactos.
+- Visao geral combina progresso do ciclo, agenda da semana e configuracao do preset sem cards redundantes.
+- Musculacao organiza treinos em abas, lista exercicios reordenavel e edicao em folhas inferiores.
+- Corrida organiza semanas, sessoes e etapas reordenaveis com resumos de distancia, tempo e ritmo.
+- Troca recomendada exige selecao e confirmacao antes de alterar o exercicio.
+- Edicao, duplicacao, remocao, catalogo e persistencia existentes permanecem conectados a Treino e Home.
+- Android usa versionCode 1255 e versionName 12.5.5.

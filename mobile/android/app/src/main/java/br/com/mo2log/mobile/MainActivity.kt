@@ -76,6 +76,7 @@ import br.com.mo2log.mobile.ui.Mo2Drawables
 import br.com.mo2log.mobile.ui.Mo2HistoryChartView
 import br.com.mo2log.mobile.ui.Mo2HistoryPoint
 import br.com.mo2log.mobile.ui.Mo2NavIcon
+import br.com.mo2log.mobile.ui.Mo2NavIconView
 import br.com.mo2log.mobile.ui.Mo2Radius
 import br.com.mo2log.mobile.ui.Mo2Spacing
 import br.com.mo2log.mobile.ui.Mo2WeeklyDashboardData
@@ -3924,14 +3925,1113 @@ class MainActivity : Activity() {
     }
 
     private fun renderPlanEditor(root: LinearLayout) {
-        root.addView(heroCard("Editor local", "Plano pessoal", "Ajuste musculacao e corrida direto no celular. Tudo fica salvo localmente."))
-        root.addView(planEditorSummary())
-        root.addView(fiveKmPresetPanel())
-        root.addView(planEditorSelector())
-        root.addView(planDetailsEditor())
-        root.addView(exerciseDetailsEditor())
-        root.addView(runningPlanEditor())
-        root.addView(planEditorResetPanel())
+        root.addView(planEditorModeSelector())
+        when (prefs.getString("plan_editor_mode", "overview")) {
+            "strength" -> renderPlanStrengthRedesign(root)
+            "running" -> renderPlanRunningRedesign(root)
+            else -> renderPlanOverviewRedesign(root)
+        }
+    }
+
+    private fun planEditorModeSelector(): View {
+        val selected = prefs.getString("plan_editor_mode", "overview") ?: "overview"
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.setPadding(dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Xs))
+        row.background = rounded(surface, dp(Mo2Radius.Md), border)
+        listOf(
+            "overview" to "Visao geral",
+            "strength" to "Musculacao",
+            "running" to "Corrida",
+        ).forEachIndexed { index, item ->
+            val active = selected == item.first
+            val tab = label(item.second, if (active) white else muted, 14f, true)
+            tab.gravity = Gravity.CENTER
+            tab.background = rounded(
+                if (active) Mo2Colors.PrimarySoft else android.graphics.Color.TRANSPARENT,
+                dp(Mo2Radius.Sm),
+                if (active) green else null,
+            )
+            tab.isClickable = true
+            tab.isFocusable = true
+            tab.contentDescription = item.second + if (active) ", selecionado" else ""
+            tab.setOnClickListener {
+                if (!active) {
+                    prefs.edit().putString("plan_editor_mode", item.first).apply()
+                    render()
+                }
+            }
+            row.addView(tab, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+                marginStart = if (index == 0) 0 else dp(Mo2Spacing.Xs)
+            })
+        }
+        return row
+    }
+
+    private fun renderPlanOverviewRedesign(root: LinearLayout) {
+        root.addView(planCycleOverviewCard())
+        root.addView(planWeekOverviewCard())
+        root.addView(planPresetCompactCard())
+    }
+
+    private fun planCycleOverviewCard(): View {
+        val activePreset = prefs.getString("active_plan_preset", "") == Mo2FiveKmPlan.PresetId
+        val custom = prefs.contains("custom_workout_plans") || prefs.contains("custom_running_plan")
+        val elapsed = daysBetween(Mo2FiveKmPlan.StartDay, dayKey())?.coerceAtLeast(0) ?: 0
+        val duration = daysBetween(Mo2FiveKmPlan.StartDay, Mo2FiveKmPlan.RaceDay)?.coerceAtLeast(1) ?: 1
+        val progress = ((elapsed.toDouble() / duration.toDouble()) * 100.0).roundToInt().coerceIn(0, 100)
+        val remaining = Mo2FiveKmPlan.daysUntilRace(dayKey())?.coerceAtLeast(0L)
+
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+        val title = LinearLayout(this)
+        title.orientation = LinearLayout.VERTICAL
+        title.addView(label("CICLO ATUAL", Mo2Colors.Running, 12f, true))
+        title.addView(label(
+            if (activePreset) "5 km | 16 de agosto" else if (custom) "Plano personalizado" else "Plano padrao",
+            white,
+            23f,
+            true,
+        ))
+        title.addView(label("Semana " + currentRunningPlanWeek() + " de " + runningPlanWeekCount(), muted, 13f, false))
+        header.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(statusChip(if (custom) "Personalizado" else "Ativo"))
+        box.addView(header)
+
+        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+        progressBar.max = 100
+        progressBar.progress = progress
+        progressBar.progressTintList = ColorStateList.valueOf(green)
+        progressBar.progressBackgroundTintList = ColorStateList.valueOf(border)
+        box.addView(progressBar, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(7),
+        ).apply {
+            topMargin = dp(Mo2Spacing.Lg)
+        })
+        val dates = LinearLayout(this)
+        dates.orientation = LinearLayout.HORIZONTAL
+        dates.addView(label("27 JUL", muted, 10f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val end = label("16 AGO", muted, 10f, true)
+        end.gravity = Gravity.END
+        dates.addView(end, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(dates)
+
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(planOverviewMetric(plans.size.toString(), "Treinos"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(planOverviewMetric(runningPlan.size.toString(), "Corridas"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(planOverviewMetric(remaining?.toString() ?: "-", "Dias"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+        return box
+    }
+
+    private fun planOverviewMetric(value: String, title: String): View {
+        val column = LinearLayout(this)
+        column.orientation = LinearLayout.VERTICAL
+        column.gravity = Gravity.CENTER
+        column.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Md))
+        column.background = rounded(surface, dp(Mo2Radius.Sm), border)
+        column.addView(label(value, white, 20f, true).apply { gravity = Gravity.CENTER })
+        column.addView(label(title, muted, 11f, false).apply { gravity = Gravity.CENTER })
+        return column
+    }
+
+    private fun planWeekOverviewCard(): View {
+        data class PlannedActivity(val day: Int, val title: String, val subtitle: String, val running: Boolean)
+        val week = currentRunningPlanWeek()
+        val activities = mutableListOf<PlannedActivity>()
+        runningPlan.filter { it.week == week }.forEach { workout ->
+            activities.add(PlannedActivity(
+                workout.dayIndex,
+                workout.title,
+                formatKm(totalRunDistance(workout)) + " | " + workout.stages.size + " etapas",
+                true,
+            ))
+        }
+        plans.forEachIndexed { index, plan ->
+            activities.add(PlannedActivity(
+                workoutPlanDayIndex(plan, index),
+                plan.title,
+                workoutFocusText(plan.focus) + " | " + plan.exercises.size + " exercicios",
+                false,
+            ))
+        }
+
+        val section = LinearLayout(this)
+        section.orientation = LinearLayout.VERTICAL
+        val heading = LinearLayout(this)
+        heading.orientation = LinearLayout.HORIZONTAL
+        heading.gravity = Gravity.CENTER_VERTICAL
+        heading.addView(label("Esta semana", white, 19f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val calendar = label("Abrir corrida", Mo2Colors.Running, 13f, true)
+        calendar.gravity = Gravity.CENTER
+        calendar.setPadding(dp(Mo2Spacing.Sm), 0, 0, 0)
+        calendar.isClickable = true
+        calendar.setOnClickListener { switchTab("running") }
+        heading.addView(calendar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)))
+        section.addView(heading, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Xl)
+            bottomMargin = dp(Mo2Spacing.Sm)
+        })
+
+        val group = LinearLayout(this)
+        group.orientation = LinearLayout.VERTICAL
+        group.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs))
+        group.background = rounded(surface, dp(Mo2Radius.Md), border)
+        activities.sortedWith(compareBy<PlannedActivity> { it.day }.thenBy { it.running }).forEachIndexed { index, activity ->
+            if (index > 0) group.addView(View(this).apply { setBackgroundColor(border) }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1),
+            ).apply { marginStart = dp(56) })
+            group.addView(planWeekActivityRow(activity.day, activity.title, activity.subtitle, activity.running))
+        }
+        section.addView(group)
+        return section
+    }
+
+    private fun planWeekActivityRow(day: Int, title: String, subtitle: String, running: Boolean): View {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(0, dp(Mo2Spacing.Sm), 0, dp(Mo2Spacing.Sm))
+        row.minimumHeight = dp(62)
+        val dayLabel = label(weekdayShortNames()[day.coerceIn(1, 7) - 1], if (running) Mo2Colors.Running else green, 11f, true)
+        dayLabel.gravity = Gravity.CENTER
+        dayLabel.background = rounded(if (running) android.graphics.Color.rgb(17, 47, 67) else Mo2Colors.PrimarySoft, dp(Mo2Radius.Sm))
+        row.addView(dayLabel, LinearLayout.LayoutParams(dp(44), dp(42)))
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.addView(label(title, white, 15f, true).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        })
+        text.addView(label(subtitle, muted, 12f, false).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        })
+        row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        row.addView(Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted), LinearLayout.LayoutParams(dp(20), dp(20)))
+        row.setOnClickListener {
+            prefs.edit().putString("plan_editor_mode", if (running) "running" else "strength").apply()
+            render()
+        }
+        return row
+    }
+
+    private fun planPresetCompactCard(): View {
+        val active = prefs.getString("active_plan_preset", "") == Mo2FiveKmPlan.PresetId
+        val section = LinearLayout(this)
+        section.orientation = LinearLayout.VERTICAL
+        val heading = label("Configuracao", white, 19f, true)
+        section.addView(heading, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Xl)
+            bottomMargin = dp(Mo2Spacing.Sm)
+        })
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+        row.background = rounded(surface, dp(Mo2Radius.Md), border)
+        row.addView(statusChip(if (active) "Ativo" else "Disponivel"))
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.addView(label("Plano 5 km | 16/08/2026", white, 15f, true))
+        text.addView(label(if (active) "Toque para reaplicar ou restaurar" else "Toque para aplicar o ciclo", muted, 12f, false))
+        row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        row.addView(Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted), LinearLayout.LayoutParams(dp(20), dp(20)))
+        row.setOnClickListener { showPlanPresetOptionsSheet() }
+        section.addView(row)
+        return section
+    }
+
+    private fun showPlanPresetOptionsSheet() {
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent("Plano para a prova", "Ciclo de 27/07 a 16/08/2026")
+        sheet.addView(label("Musculacao ter/qua/sex | corrida seg/ter/qui/sex | prova no domingo.", muted, 14f, false))
+        val apply = actionButton("Aplicar plano de 5 km", green, bg)
+        apply.setOnClickListener {
+            dialog.dismiss()
+            showApplyFiveKmPlanConfirmation()
+        }
+        sheet.addView(buttonParams(apply))
+        val restore = actionButton("Restaurar plano padrao", surface2, danger)
+        restore.setOnClickListener {
+            dialog.dismiss()
+            showResetPlanConfirmation()
+        }
+        sheet.addView(buttonParams(restore))
+        val cancel = actionButton("Cancelar", surface2, white)
+        cancel.setOnClickListener { dialog.dismiss() }
+        sheet.addView(buttonParams(cancel))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.62f)
+    }
+
+    private fun showResetPlanConfirmation() {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Restaurar plano padrao?")
+            .setMessage("O plano editado sera substituido. Seu historico, favoritos e registros serao mantidos.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Restaurar") { _, _ -> resetPlanEditorToDefault() }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun resetPlanEditorToDefault() {
+        val editor = prefs.edit()
+            .remove("custom_workout_plans")
+            .remove("custom_running_plan")
+            .remove("running_schedule_overrides")
+            .remove("editor_running_workout_id")
+            .remove("editor_running_week")
+            .remove("editor_running_stage")
+            .putString("active_plan_preset", Mo2FiveKmPlan.PresetId)
+            .putString("running_plan_start_day", Mo2FiveKmPlan.StartDay)
+            .putString("running_plan_race_day", Mo2FiveKmPlan.RaceDay)
+            .putString("running_plan_cycle_id", Mo2FiveKmPlan.CycleId)
+            .putString("running_plan_cycle_name", Mo2FiveKmPlan.CycleName)
+            .putString("running_plan_target_distance_km", Mo2FiveKmPlan.TargetDistanceKm.toString())
+            .putLong("running_goal_5k_seconds", Mo2FiveKmPlan.TargetSeconds)
+            .putString("running_speed_offset", "0.0")
+            .putString("running_distance_scale", "1.0")
+            .putInt("editor_plan", 0)
+            .putInt("editor_exercise", 0)
+            .putInt("selected_plan", 0)
+            .putInt("selected_exercise", 0)
+            .putString("selected_run_id", Mo2FiveKmPlan.runningWorkouts().first().id)
+        clearActiveRunState(editor)
+        editor.apply()
+        Toast.makeText(this, "Plano padrao restaurado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun renderPlanStrengthRedesign(root: LinearLayout) {
+        root.addView(planStrengthTabs())
+        val planIndex = editorPlanIndex()
+        val plan = plans[planIndex]
+        root.addView(planStrengthHeader(planIndex, plan))
+        root.addView(planStrengthExerciseList(planIndex, plan))
+        val add = actionButton("Adicionar exercicio", surface2, green)
+        add.setOnClickListener {
+            val excluded = plan.exercises.mapNotNull(ExercisePlan::catalogExerciseId).toSet()
+            showCatalogExercisePicker("Adicionar ao treino", excluded) { selected ->
+                val exercises = plan.exercises + planExerciseFromCatalog(selected)
+                replacePlanExercises(planIndex, exercises)
+                prefs.edit().putInt("editor_exercise", exercises.lastIndex).apply()
+                Toast.makeText(this, "Exercicio adicionado.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+        }
+        root.addView(buttonParams(add))
+
+        val summary = card(surface)
+        summary.orientation = LinearLayout.HORIZONTAL
+        summary.gravity = Gravity.CENTER_VERTICAL
+        val totalSets = plan.exercises.sumOf { exercise ->
+            exercise.target.substringBefore("x", "3").trim().toIntOrNull() ?: 3
+        }
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.addView(label("Resumo do treino", white, 16f, true))
+        text.addView(label(totalSets.toString() + " series | " + plan.exercises.size + " exercicios", muted, 12f, false))
+        summary.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val cardOption = workoutHomeCardOption(plan.homeCardKey, planIndex)
+        val homeCard = label(cardOption.title, green, 12f, true)
+        homeCard.gravity = Gravity.CENTER
+        homeCard.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Md), dp(Mo2Spacing.Sm))
+        homeCard.background = rounded(Mo2Colors.PrimarySoft, dp(Mo2Radius.Sm))
+        homeCard.setOnClickListener { showWorkoutHomeCardDialog(planIndex) }
+        summary.addView(homeCard)
+        root.addView(summary)
+    }
+
+    private fun planStrengthTabs(): View {
+        val selected = editorPlanIndex()
+        val scroll = HorizontalScrollView(this)
+        scroll.isHorizontalScrollBarEnabled = false
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        plans.forEachIndexed { index, plan ->
+            val active = index == selected
+            val title = plan.title.removePrefix("Treino ").ifBlank { (index + 1).toString() }
+            val tab = label(title, if (active) green else white, 14f, true)
+            tab.gravity = Gravity.CENTER
+            tab.setPadding(dp(Mo2Spacing.Lg), 0, dp(Mo2Spacing.Lg), 0)
+            tab.background = rounded(if (active) Mo2Colors.PrimarySoft else surface, dp(Mo2Radius.Sm), if (active) green else border)
+            tab.isClickable = true
+            tab.setOnClickListener {
+                prefs.edit().putInt("editor_plan", index).putInt("editor_exercise", 0).apply()
+                render()
+            }
+            row.addView(tab, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)).apply {
+                marginEnd = dp(Mo2Spacing.Sm)
+            })
+        }
+        val add = exerciseIconButton(Mo2ActionIcon.Plus, green, "Adicionar treino", sizeDp = 44, surfaceColor = surface, strokeColor = border)
+        add.setOnClickListener { addPlanStrengthWorkout() }
+        row.addView(add, LinearLayout.LayoutParams(dp(44), dp(44)))
+        scroll.addView(row)
+        return scroll.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(Mo2Spacing.Lg) }
+        }
+    }
+
+    private fun addPlanStrengthWorkout() {
+        showCatalogExercisePicker("Primeiro exercicio do treino", emptySet()) { selectedExercise ->
+            val updated = plans.toMutableList()
+            val todayIndex = SimpleDateFormat("u", Locale.US).format(Date()).toIntOrNull()?.coerceIn(1, 7) ?: 1
+            updated.add(WorkoutPlan(
+                id = "custom-" + System.currentTimeMillis(),
+                title = "Novo treino",
+                focus = "Foco do treino",
+                exercises = listOf(planExerciseFromCatalog(selectedExercise)),
+                dayIndex = todayIndex,
+                homeCardKey = Mo2WorkoutHomeCard.defaultForPlanIndex(updated.size),
+            ))
+            saveWorkoutPlans(updated)
+            prefs.edit().putInt("editor_plan", updated.lastIndex).putInt("editor_exercise", 0).apply()
+            Toast.makeText(this, "Treino adicionado.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+    }
+
+    private fun planStrengthHeader(planIndex: Int, plan: WorkoutPlan): View {
+        val box = card(surface3)
+        box.orientation = LinearLayout.HORIZONTAL
+        box.gravity = Gravity.CENTER_VERTICAL
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.addView(label(plan.title, white, 23f, true))
+        text.addView(label(
+            weekdayNames()[workoutPlanDayIndex(plan, planIndex) - 1] + " | " + plan.exercises.size + " exercicios",
+            muted,
+            13f,
+            false,
+        ))
+        val focus = label(workoutFocusText(plan.focus), muted, 12f, false)
+        focus.maxLines = 2
+        focus.ellipsize = TextUtils.TruncateAt.END
+        text.addView(focus)
+        box.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val edit = exerciseIconButton(Mo2ActionIcon.Edit, green, "Editar treino", sizeDp = 44, surfaceColor = surface2, strokeColor = border)
+        edit.setOnClickListener { showPlanWorkoutEditorSheet(planIndex) }
+        box.addView(edit, LinearLayout.LayoutParams(dp(44), dp(44)))
+        return box
+    }
+
+    private fun planStrengthExerciseList(planIndex: Int, plan: WorkoutPlan): View {
+        val selected = editorExerciseIndex(plan)
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs))
+        box.background = rounded(surface, dp(Mo2Radius.Md), border)
+        plan.exercises.forEachIndexed { index, exercise ->
+            if (index > 0) box.addView(View(this).apply { setBackgroundColor(border) }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1),
+            ).apply { marginStart = dp(56) })
+            val active = index == selected
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm))
+            row.minimumHeight = dp(68)
+            row.background = rounded(android.graphics.Color.TRANSPARENT, dp(Mo2Radius.Sm), if (active) green else null)
+            row.addView(Mo2DragHandleView(this), LinearLayout.LayoutParams(dp(32), dp(42)))
+            val number = label((index + 1).toString(), if (active) white else muted, 12f, true)
+            number.gravity = Gravity.CENTER
+            number.background = rounded(if (active) Mo2Colors.PrimarySoft else surface2, dp(Mo2Radius.Sm))
+            row.addView(number, LinearLayout.LayoutParams(dp(34), dp(34)))
+            val text = LinearLayout(this)
+            text.orientation = LinearLayout.VERTICAL
+            text.addView(label(exercise.name, if (active) green else white, 15f, true).apply {
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+            })
+            text.addView(label(exercise.target + " | descanso " + exercise.rest, muted, 12f, false))
+            row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(Mo2Spacing.Md)
+            })
+            row.addView(Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted), LinearLayout.LayoutParams(dp(20), dp(20)))
+            row.setOnClickListener {
+                prefs.edit().putInt("editor_exercise", index).apply()
+                showPlanExerciseEditorSheet(planIndex, index)
+            }
+            row.setOnLongClickListener {
+                val started = row.startDragAndDrop(
+                    ClipData.newPlainText("plan_exercise_index", index.toString()),
+                    View.DragShadowBuilder(row),
+                    index,
+                    0,
+                )
+                if (started) row.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                started
+            }
+            row.setOnDragListener { view, event ->
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> event.localState is Int
+                    DragEvent.ACTION_DRAG_ENTERED -> {
+                        view.background = rounded(surface2, dp(Mo2Radius.Sm), green)
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_EXITED -> {
+                        view.background = rounded(android.graphics.Color.TRANSPARENT, dp(Mo2Radius.Sm), if (active) green else null)
+                        true
+                    }
+                    DragEvent.ACTION_DROP -> {
+                        val from = event.localState as? Int ?: return@setOnDragListener false
+                        reorderPlanEditorExercise(planIndex, from, index)
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_ENDED -> {
+                        view.background = rounded(android.graphics.Color.TRANSPARENT, dp(Mo2Radius.Sm), if (active) green else null)
+                        true
+                    }
+                    else -> true
+                }
+            }
+            box.addView(row)
+        }
+        return box
+    }
+
+    private fun reorderPlanEditorExercise(planIndex: Int, from: Int, to: Int) {
+        val exercises = plans[planIndex].exercises.toMutableList()
+        if (from !in exercises.indices || to !in exercises.indices || from == to) return
+        val moved = exercises.removeAt(from)
+        exercises.add(to, moved)
+        replacePlanExercises(planIndex, exercises)
+        prefs.edit().putInt("editor_exercise", to).apply()
+        render()
+    }
+
+    private fun showPlanWorkoutEditorSheet(planIndex: Int) {
+        val plan = plans[planIndex.coerceIn(plans.indices)]
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent("Editar treino", plan.title)
+        val title = input("Nome do treino", plan.title)
+        val focus = textArea("Foco e observacoes", workoutFocusText(plan.focus))
+        var selectedDay = workoutPlanDayIndex(plan, planIndex)
+        sheet.addView(title)
+        sheet.addView(focus)
+        sheet.addView(label("DIA DA SEMANA", muted, 12f, true).apply {
+            setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm))
+        })
+        sheet.addView(weekdaySelector(selectedDay) { day -> selectedDay = day })
+
+        val currentCard = workoutHomeCardOption(plan.homeCardKey, planIndex)
+        val cardRow = sheetActionRow("Imagem da Home", currentCard.title, Mo2ActionIcon.Image) {
+            dialog.dismiss()
+            showWorkoutHomeCardDialog(planIndex)
+        }
+        sheet.addView(cardRow)
+        val save = actionButton("Salvar treino", green, bg)
+        save.setOnClickListener {
+            dialog.dismiss()
+            saveWorkoutPlanDetails(planIndex, title.textValue(), focus.textValue(), selectedDay)
+        }
+        sheet.addView(buttonParams(save))
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val duplicate = actionButton("Duplicar", surface2, white)
+        duplicate.setOnClickListener {
+            dialog.dismiss()
+            duplicatePlanStrengthWorkout(planIndex)
+        }
+        actions.addView(duplicate, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val remove = actionButton("Remover", surface2, danger)
+        remove.setOnClickListener {
+            dialog.dismiss()
+            showRemovePlanStrengthWorkoutConfirmation(planIndex)
+        }
+        actions.addView(remove, LinearLayout.LayoutParams(0, dp(48), 1f))
+        sheet.addView(spacedRow(actions))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.90f)
+    }
+
+    private fun duplicatePlanStrengthWorkout(planIndex: Int) {
+        val updated = plans.toMutableList()
+        val plan = updated[planIndex.coerceIn(updated.indices)]
+        updated.add(plan.copy(id = "custom-" + System.currentTimeMillis(), title = plan.title + " copia"))
+        saveWorkoutPlans(updated)
+        prefs.edit().putInt("editor_plan", updated.lastIndex).putInt("editor_exercise", 0).apply()
+        Toast.makeText(this, "Treino duplicado.", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun showRemovePlanStrengthWorkoutConfirmation(planIndex: Int) {
+        if (plans.size <= 1) {
+            Toast.makeText(this, "Mantenha pelo menos um treino.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val plan = plans[planIndex.coerceIn(plans.indices)]
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Remover " + plan.title + "?")
+            .setMessage("O treino sai do planejamento. Seu historico permanece salvo.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Remover") { _, _ ->
+                val updated = plans.toMutableList()
+                updated.removeAt(planIndex)
+                saveWorkoutPlans(updated)
+                prefs.edit().putInt("editor_plan", 0).putInt("editor_exercise", 0).putInt("selected_plan", 0).apply()
+                Toast.makeText(this, "Treino removido.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun showPlanExerciseEditorSheet(planIndex: Int, exerciseIndex: Int) {
+        val plan = plans[planIndex.coerceIn(plans.indices)]
+        val exercise = plan.exercises[exerciseIndex.coerceIn(plan.exercises.indices)]
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent("Editar exercicio", exercise.name)
+        sheet.addView(label("Titulo, descricao e GIF sao sincronizados com a biblioteca de Exercicios.", muted, 13f, false))
+        val target = input("Series e repeticoes", exercise.target)
+        val rest = input("Descanso", exercise.rest)
+        val notes = textArea("Orientacoes do treino", exercise.notes)
+        sheet.addView(target)
+        sheet.addView(rest)
+        sheet.addView(notes)
+
+        val swapActions = LinearLayout(this)
+        swapActions.orientation = LinearLayout.HORIZONTAL
+        val catalogButton = actionButton("Catalogo", surface2, green)
+        catalogButton.setOnClickListener {
+            dialog.dismiss()
+            val excluded = plan.exercises.mapNotNull(ExercisePlan::catalogExerciseId).toMutableSet()
+            exercise.catalogExerciseId?.let(excluded::remove)
+            showCatalogExercisePicker("Trocar exercicio", excluded) { selected ->
+                replacePlanExerciseIdentity(planIndex, exerciseIndex, selected, "Exercicio vinculado ao catalogo.")
+            }
+        }
+        swapActions.addView(catalogButton, LinearLayout.LayoutParams(0, dp(50), 1f))
+        val recommended = actionButton("Recomendados", surface2, green)
+        recommended.setOnClickListener {
+            val current = catalogMatchForWorkoutExercise(exercise)
+            if (current == null) {
+                Toast.makeText(this, "Vincule este item ao catalogo primeiro.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            val excluded = plan.exercises.mapNotNull(ExercisePlan::catalogExerciseId).toMutableSet()
+            exercise.catalogExerciseId?.let(excluded::remove)
+            showPlanRecommendedExercisePicker(current, excluded) { selected ->
+                replacePlanExerciseIdentity(planIndex, exerciseIndex, selected, "Exercicio recomendado aplicado.")
+            }
+        }
+        swapActions.addView(recommended, LinearLayout.LayoutParams(0, dp(50), 1f))
+        sheet.addView(spacedRow(swapActions))
+
+        val save = actionButton("Salvar exercicio", green, bg)
+        save.setOnClickListener {
+            dialog.dismiss()
+            saveExerciseDetails(planIndex, exerciseIndex, target.textValue(), rest.textValue(), notes.textValue())
+        }
+        sheet.addView(buttonParams(save))
+        val remove = actionButton("Remover do treino", surface2, danger)
+        remove.setOnClickListener {
+            if (plan.exercises.size <= 1) {
+                Toast.makeText(this, "Mantenha pelo menos um exercicio.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            showRemovePlanExerciseConfirmation(planIndex, exerciseIndex)
+        }
+        sheet.addView(buttonParams(remove))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.90f)
+    }
+
+    private fun replacePlanExerciseIdentity(
+        planIndex: Int,
+        exerciseIndex: Int,
+        selected: CatalogExercise,
+        message: String,
+    ) {
+        val exercises = plans[planIndex].exercises.toMutableList()
+        val current = exercises[exerciseIndex]
+        exercises[exerciseIndex] = current.copy(name = selected.name, catalogExerciseId = selected.id)
+        replacePlanExercises(planIndex, exercises)
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun showRemovePlanExerciseConfirmation(planIndex: Int, exerciseIndex: Int) {
+        val exercise = plans[planIndex].exercises[exerciseIndex]
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Remover exercicio?")
+            .setMessage(exercise.name + " sera removido deste treino.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Remover") { _, _ ->
+                val exercises = plans[planIndex].exercises.toMutableList()
+                exercises.removeAt(exerciseIndex)
+                replacePlanExercises(planIndex, exercises)
+                prefs.edit().putInt("editor_exercise", exerciseIndex.coerceAtMost(exercises.lastIndex)).apply()
+                Toast.makeText(this, "Exercicio removido.", Toast.LENGTH_SHORT).show()
+                render()
+            }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun renderPlanRunningRedesign(root: LinearLayout) {
+        root.addView(planRunningGlobalAdjustmentRow())
+        val availableWeeks = runningPlan.map { it.week }.distinct().sorted().ifEmpty { listOf(1) }
+        val requestedWeek = prefs.getInt("editor_running_week", currentRunningPlanWeek())
+        val selectedWeek = availableWeeks.minByOrNull { week -> kotlin.math.abs(week - requestedWeek) } ?: 1
+        root.addView(planRunningWeekTabs(availableWeeks, selectedWeek))
+
+        val weekWorkouts = runningPlan.filter { it.week == selectedWeek }
+        val savedId = prefs.getString("editor_running_workout_id", null)
+        val selectedWorkout = weekWorkouts.firstOrNull { it.id == savedId } ?: weekWorkouts.firstOrNull()
+        root.addView(planRunningSessionList(selectedWeek, weekWorkouts, selectedWorkout))
+        if (selectedWorkout != null) {
+            root.addView(planRunningSelectedSummary(selectedWorkout))
+            root.addView(planRunningStageList(selectedWorkout))
+            val addStage = actionButton("Adicionar etapa", surface2, Mo2Colors.Running)
+            addStage.setOnClickListener {
+                val selectedStage = prefs.getInt("editor_running_stage", 0).coerceIn(selectedWorkout.stages.indices)
+                addRunningPlanStage(selectedWorkout, selectedStage)
+            }
+            root.addView(buttonParams(addStage))
+        }
+    }
+
+    private fun planRunningGlobalAdjustmentRow(): View {
+        val speed = prefs.getString("running_speed_offset", "0.0") ?: "0.0"
+        val distance = ((prefs.getString("running_distance_scale", "1.0")?.toDoubleOrNull() ?: 1.0) * 100.0).roundToInt()
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+        row.background = rounded(surface, dp(Mo2Radius.Md), border)
+        val icon = FrameLayout(this)
+        icon.background = rounded(android.graphics.Color.rgb(17, 47, 67), dp(Mo2Radius.Sm))
+        icon.addView(Mo2NavIconView(this, Mo2NavIcon.Running, Mo2Colors.Running), FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+        row.addView(icon, LinearLayout.LayoutParams(dp(44), dp(44)))
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.addView(label("Ajuste global", white, 15f, true))
+        text.addView(label("Velocidade " + speed + " km/h | distancia " + distance + "%", muted, 12f, false))
+        row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dp(Mo2Spacing.Md)
+        })
+        row.addView(Mo2ActionIconView(this, Mo2ActionIcon.ChevronRight, muted), LinearLayout.LayoutParams(dp(20), dp(20)))
+        row.setOnClickListener { showPlanRunningGlobalAdjustmentSheet() }
+        return row.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(Mo2Spacing.Lg) }
+        }
+    }
+
+    private fun planRunningWeekTabs(weeks: List<Int>, selectedWeek: Int): View {
+        val scroll = HorizontalScrollView(this)
+        scroll.isHorizontalScrollBarEnabled = false
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        weeks.forEach { week ->
+            val active = week == selectedWeek
+            val tab = label("Semana " + week, if (active) Mo2Colors.Running else white, 13f, true)
+            tab.gravity = Gravity.CENTER
+            tab.setPadding(dp(Mo2Spacing.Lg), 0, dp(Mo2Spacing.Lg), 0)
+            tab.background = rounded(
+                if (active) android.graphics.Color.rgb(17, 47, 67) else surface,
+                dp(Mo2Radius.Sm),
+                if (active) Mo2Colors.Running else border,
+            )
+            tab.setOnClickListener {
+                prefs.edit().putInt("editor_running_week", week).remove("editor_running_workout_id").putInt("editor_running_stage", 0).apply()
+                render()
+            }
+            row.addView(tab, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)).apply {
+                marginEnd = dp(Mo2Spacing.Sm)
+            })
+        }
+        scroll.addView(row)
+        return scroll.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(Mo2Spacing.Lg) }
+        }
+    }
+
+    private fun planRunningSessionList(
+        selectedWeek: Int,
+        workouts: List<RunningWorkout>,
+        selectedWorkout: RunningWorkout?,
+    ): View {
+        val section = LinearLayout(this)
+        section.orientation = LinearLayout.VERTICAL
+        val heading = LinearLayout(this)
+        heading.orientation = LinearLayout.HORIZONTAL
+        heading.gravity = Gravity.CENTER_VERTICAL
+        heading.addView(label("Sessoes", white, 19f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val add = LinearLayout(this)
+        add.orientation = LinearLayout.HORIZONTAL
+        add.gravity = Gravity.CENTER
+        add.addView(Mo2ActionIconView(this, Mo2ActionIcon.Plus, green), LinearLayout.LayoutParams(dp(18), dp(18)))
+        add.addView(label("Adicionar", green, 13f, true))
+        add.setOnClickListener { addRunningPlanWorkout(selectedWeek) }
+        heading.addView(add, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)))
+        section.addView(heading, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Xl)
+            bottomMargin = dp(Mo2Spacing.Sm)
+        })
+
+        workouts.forEach { workout ->
+            val active = workout.id == selectedWorkout?.id
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.VERTICAL
+            row.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md), dp(Mo2Spacing.Md))
+            row.background = rounded(
+                if (active) android.graphics.Color.rgb(17, 34, 53) else surface,
+                dp(Mo2Radius.Md),
+                if (active) Mo2Colors.Running else border,
+            )
+            val top = LinearLayout(this)
+            top.orientation = LinearLayout.HORIZONTAL
+            top.gravity = Gravity.CENTER_VERTICAL
+            top.addView(label(workout.title, white, 15f, true), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            top.addView(label(weekdayShortNames()[workout.dayIndex - 1] + " | " + formatDayForDisplay(scheduledDayFor(workout)), Mo2Colors.Running, 11f, true))
+            row.addView(top)
+            row.addView(label(
+                workout.stages.size.toString() + " etapas | " + formatKm(totalRunDistance(workout)) + " | " + estimatedWorkoutDurationLabel(workout),
+                muted,
+                12f,
+                false,
+            ))
+            row.setOnClickListener {
+                prefs.edit().putString("editor_running_workout_id", workout.id).putInt("editor_running_stage", 0).apply()
+                render()
+            }
+            section.addView(row, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(Mo2Spacing.Sm) })
+        }
+        return section
+    }
+
+    private fun estimatedWorkoutDurationLabel(workout: RunningWorkout): String {
+        val seconds = estimatedWorkoutSeconds(workout)
+        return (seconds / 60L).coerceAtLeast(1L).toString() + " min"
+    }
+
+    private fun planRunningSelectedSummary(workout: RunningWorkout): View {
+        val box = card(surface3)
+        box.orientation = LinearLayout.VERTICAL
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.HORIZONTAL
+        header.gravity = Gravity.CENTER_VERTICAL
+        val text = LinearLayout(this)
+        text.orientation = LinearLayout.VERTICAL
+        text.addView(label("SESSAO SELECIONADA", Mo2Colors.Running, 12f, true))
+        text.addView(label(workout.title, white, 22f, true))
+        text.addView(label(workout.focus, muted, 12f, false))
+        header.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val edit = exerciseIconButton(Mo2ActionIcon.Edit, Mo2Colors.Running, "Editar sessao", sizeDp = 44, surfaceColor = surface, strokeColor = border)
+        edit.setOnClickListener { showPlanRunningWorkoutEditorSheet(workout) }
+        header.addView(edit, LinearLayout.LayoutParams(dp(44), dp(44)))
+        box.addView(header)
+        val metrics = LinearLayout(this)
+        metrics.orientation = LinearLayout.HORIZONTAL
+        metrics.addView(planOverviewMetric(formatKm(totalRunDistance(workout)), "Distancia"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(planOverviewMetric(estimatedWorkoutDurationLabel(workout), "Tempo"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        metrics.addView(planOverviewMetric(workout.stages.size.toString(), "Etapas"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        box.addView(spacedRow(metrics))
+        return box
+    }
+
+    private fun planRunningStageList(workout: RunningWorkout): View {
+        val selected = prefs.getInt("editor_running_stage", 0).coerceIn(workout.stages.indices)
+        val section = LinearLayout(this)
+        section.orientation = LinearLayout.VERTICAL
+        section.addView(label("Etapas", white, 19f, true), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            topMargin = dp(Mo2Spacing.Xl)
+            bottomMargin = dp(Mo2Spacing.Sm)
+        })
+        val group = LinearLayout(this)
+        group.orientation = LinearLayout.VERTICAL
+        group.setPadding(dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Md), dp(Mo2Spacing.Xs))
+        group.background = rounded(surface, dp(Mo2Radius.Md), border)
+        workout.stages.forEachIndexed { index, stage ->
+            if (index > 0) group.addView(View(this).apply { setBackgroundColor(border) }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1),
+            ).apply { marginStart = dp(56) })
+            val active = index == selected
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = Gravity.CENTER_VERTICAL
+            row.setPadding(dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm))
+            row.minimumHeight = dp(64)
+            row.background = rounded(android.graphics.Color.TRANSPARENT, dp(Mo2Radius.Sm), if (active) Mo2Colors.Running else null)
+            row.addView(Mo2DragHandleView(this), LinearLayout.LayoutParams(dp(32), dp(42)))
+            val number = label((index + 1).toString(), Mo2Colors.Running, 11f, true)
+            number.gravity = Gravity.CENTER
+            number.background = rounded(android.graphics.Color.rgb(17, 47, 67), dp(Mo2Radius.Pill))
+            row.addView(number, LinearLayout.LayoutParams(dp(32), dp(32)))
+            val text = LinearLayout(this)
+            text.orientation = LinearLayout.VERTICAL
+            text.addView(label(stage.title, white, 14f, true))
+            text.addView(label(formatKm(stage.distanceKm) + " | " + formatSpeed(stage.speedKmh), muted, 11f, false))
+            row.addView(text, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(Mo2Spacing.Md)
+            })
+            val pace = label(formatPaceForSpeed(stage.speedKmh), Mo2Colors.Running, 11f, true)
+            pace.gravity = Gravity.CENTER
+            pace.setPadding(dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs), dp(Mo2Spacing.Sm), dp(Mo2Spacing.Xs))
+            pace.background = rounded(android.graphics.Color.rgb(17, 47, 67), dp(Mo2Radius.Sm))
+            row.addView(pace)
+            row.setOnClickListener {
+                prefs.edit().putInt("editor_running_stage", index).apply()
+                showPlanRunningStageEditorSheet(workout, index)
+            }
+            row.setOnLongClickListener {
+                val started = row.startDragAndDrop(
+                    ClipData.newPlainText("running_stage_index", index.toString()),
+                    View.DragShadowBuilder(row),
+                    index,
+                    0,
+                )
+                if (started) row.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                started
+            }
+            row.setOnDragListener { view, event ->
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> event.localState is Int
+                    DragEvent.ACTION_DRAG_ENTERED -> {
+                        view.background = rounded(surface2, dp(Mo2Radius.Sm), Mo2Colors.Running)
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_EXITED -> {
+                        view.background = rounded(android.graphics.Color.TRANSPARENT, dp(Mo2Radius.Sm), if (active) Mo2Colors.Running else null)
+                        true
+                    }
+                    DragEvent.ACTION_DROP -> {
+                        val from = event.localState as? Int ?: return@setOnDragListener false
+                        reorderPlanRunningStage(workout, from, index)
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_ENDED -> {
+                        view.background = rounded(android.graphics.Color.TRANSPARENT, dp(Mo2Radius.Sm), if (active) Mo2Colors.Running else null)
+                        true
+                    }
+                    else -> true
+                }
+            }
+            group.addView(row)
+        }
+        section.addView(group)
+        return section
+    }
+
+    private fun reorderPlanRunningStage(workout: RunningWorkout, from: Int, to: Int) {
+        val stages = workout.stages.toMutableList()
+        if (from !in stages.indices || to !in stages.indices || from == to) return
+        val moved = stages.removeAt(from)
+        stages.add(to, moved)
+        replaceRunningPlanWorkout(workout.copy(stages = stages))
+        prefs.edit().putInt("editor_running_stage", to).apply()
+        render()
+    }
+
+    private fun showPlanRunningGlobalAdjustmentSheet() {
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent("Ajuste global", "Aplicado a todo o ciclo de corrida")
+        val speed = input("Ajuste de velocidade km/h", prefs.getString("running_speed_offset", "0.0") ?: "0.0")
+        val scale = input("Multiplicador de distancia", prefs.getString("running_distance_scale", "1.00") ?: "1.00")
+        val start = input("Inicio do ciclo yyyy-mm-dd", prefs.getString("running_plan_start_day", dayKey()) ?: dayKey())
+        sheet.addView(speed)
+        sheet.addView(scale)
+        sheet.addView(start)
+        sheet.addView(label("Velocidade aceita de -2,0 a +2,0 km/h; distancia de 60% a 140%.", muted, 12f, false))
+        val save = actionButton("Salvar ajustes", green, bg)
+        save.setOnClickListener {
+            val speedValue = speed.textValue().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val scaleValue = (scale.textValue().replace(',', '.').toDoubleOrNull() ?: 1.0).coerceIn(0.60, 1.40)
+            val startDay = start.textValue().trim()
+            if (!isValidDayKey(startDay)) {
+                Toast.makeText(this, "Use uma data valida no formato yyyy-mm-dd.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            prefs.edit()
+                .putString("running_speed_offset", speedValue.coerceIn(-2.0, 2.0).toString())
+                .putString("running_distance_scale", scaleValue.toString())
+                .putString("running_plan_start_day", startDay)
+                .remove("selected_run_id")
+                .apply()
+            clearActiveRun()
+            dialog.dismiss()
+            Toast.makeText(this, "Corrida ajustada.", Toast.LENGTH_SHORT).show()
+            render()
+        }
+        sheet.addView(buttonParams(save))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.72f)
+    }
+
+    private fun showPlanRunningWorkoutEditorSheet(workout: RunningWorkout) {
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent("Editar sessao", workout.title)
+        var selectedDay = workout.dayIndex.coerceIn(1, 7)
+        val title = input("Nome da corrida", workout.title)
+        val focus = input("Objetivo", workout.focus)
+        val description = textArea("Descricao", workout.description)
+        val week = input("Semana do ciclo", workout.week.toString())
+        week.inputType = InputType.TYPE_CLASS_NUMBER
+        sheet.addView(title)
+        sheet.addView(focus)
+        sheet.addView(description)
+        sheet.addView(week)
+        sheet.addView(label("DIA DA SEMANA", muted, 12f, true).apply {
+            setPadding(0, dp(Mo2Spacing.Md), 0, dp(Mo2Spacing.Sm))
+        })
+        sheet.addView(weekdaySelector(selectedDay) { day -> selectedDay = day })
+        val save = actionButton("Salvar sessao", green, bg)
+        save.setOnClickListener {
+            dialog.dismiss()
+            saveRunningWorkoutDetails(workout, week.textValue(), selectedDay, title.textValue(), focus.textValue(), description.textValue())
+        }
+        sheet.addView(buttonParams(save))
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val duplicate = actionButton("Duplicar", surface2, white)
+        duplicate.setOnClickListener {
+            dialog.dismiss()
+            duplicateRunningPlanWorkout(workout)
+        }
+        actions.addView(duplicate, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val remove = actionButton("Remover", surface2, danger)
+        remove.setOnClickListener {
+            dialog.dismiss()
+            showRemovePlanRunningWorkoutConfirmation(workout)
+        }
+        actions.addView(remove, LinearLayout.LayoutParams(0, dp(48), 1f))
+        sheet.addView(spacedRow(actions))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.92f)
+    }
+
+    private fun showRemovePlanRunningWorkoutConfirmation(workout: RunningWorkout) {
+        if (runningPlan.size <= 1) {
+            Toast.makeText(this, "Mantenha pelo menos uma corrida no plano.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Remover sessao?")
+            .setMessage(workout.title + " sai do planejamento. O historico permanece salvo.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Remover") { _, _ -> removeRunningPlanWorkout(workout) }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
+    }
+
+    private fun showPlanRunningStageEditorSheet(workout: RunningWorkout, stageIndex: Int) {
+        val safeIndex = stageIndex.coerceIn(workout.stages.indices)
+        val stage = workout.stages[safeIndex]
+        lateinit var dialog: AlertDialog
+        val sheet = moreSheetContent("Editar etapa", stage.title)
+        val title = input("Nome da etapa", stage.title)
+        val distance = input("Distancia km", stage.distanceKm.toString())
+        val speed = input("Velocidade km/h", stage.speedKmh.toString())
+        val note = textArea("Orientacao da etapa", stage.note)
+        distance.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        speed.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        sheet.addView(title)
+        sheet.addView(distance)
+        sheet.addView(speed)
+        sheet.addView(note)
+        val save = actionButton("Salvar etapa", green, bg)
+        save.setOnClickListener {
+            dialog.dismiss()
+            saveRunningPlanStage(workout, safeIndex, title.textValue(), distance.textValue(), speed.textValue(), note.textValue())
+        }
+        sheet.addView(buttonParams(save))
+        val actions = LinearLayout(this)
+        actions.orientation = LinearLayout.HORIZONTAL
+        val add = actionButton("Duplicar etapa", surface2, Mo2Colors.Running)
+        add.setOnClickListener {
+            dialog.dismiss()
+            addRunningPlanStage(workout, safeIndex)
+        }
+        actions.addView(add, LinearLayout.LayoutParams(0, dp(48), 1f))
+        val remove = actionButton("Remover", surface2, danger)
+        remove.isEnabled = workout.stages.size > 1
+        remove.alpha = if (remove.isEnabled) 1f else 0.45f
+        remove.setOnClickListener {
+            dialog.dismiss()
+            showRemovePlanRunningStageConfirmation(workout, safeIndex)
+        }
+        actions.addView(remove, LinearLayout.LayoutParams(0, dp(48), 1f))
+        sheet.addView(spacedRow(actions))
+        dialog = AlertDialog.Builder(this).setView(sheet).create()
+        showWorkoutBottomSheet(dialog, sheet, 0.84f)
+    }
+
+    private fun showRemovePlanRunningStageConfirmation(workout: RunningWorkout, stageIndex: Int) {
+        if (workout.stages.size <= 1) return
+        val stage = workout.stages[stageIndex]
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Remover etapa?")
+            .setMessage(stage.title + " sera removida desta sessao.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Remover") { _, _ -> removeRunningPlanStage(workout, stageIndex) }
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(Mo2Drawables.rounded(this, surface, Mo2Radius.Modal, border))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(danger)
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(muted)
+        }
+        dialog.show()
     }
 
     private fun planEditorSummary(): View {
@@ -4416,6 +5516,21 @@ class MainActivity : Activity() {
 
         val options = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         lateinit var dialog: AlertDialog
+        var selectedAlternative = ordered.firstOrNull { it.id == preferredId } ?: ordered.first()
+        val optionRows = mutableListOf<Pair<CatalogExercise, LinearLayout>>()
+
+        fun refreshSelection() {
+            optionRows.forEach { (alternative, row) ->
+                val selected = alternative.id == selectedAlternative.id
+                row.background = rounded(
+                    if (selected) android.graphics.Color.rgb(19, 45, 42) else surface2,
+                    dp(Mo2Radius.Sm),
+                    if (selected) green else border,
+                )
+                row.alpha = if (selected) 1f else 0.84f
+            }
+        }
+
         ordered.forEach { alternative ->
             val isPreferred = alternative.id == preferredId
             val row = LinearLayout(this)
@@ -4445,9 +5560,11 @@ class MainActivity : Activity() {
                 marginStart = dp(Mo2Spacing.Sm)
             })
             row.setOnClickListener {
-                dialog.dismiss()
-                onSelected(alternative)
+                selectedAlternative = alternative
+                refreshSelection()
+                row.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             }
+            optionRows += alternative to row
             options.addView(row, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -4466,13 +5583,25 @@ class MainActivity : Activity() {
         ).apply {
             topMargin = dp(Mo2Spacing.Sm)
         })
+        refreshSelection()
+        val apply = actionButton("Aplicar troca", green, bg)
+        apply.setOnClickListener {
+            dialog.dismiss()
+            onSelected(selectedAlternative)
+        }
+        sheet.addView(apply, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(50),
+        ).apply {
+            topMargin = dp(Mo2Spacing.Md)
+        })
         val cancel = actionButton("Cancelar", surface2, muted)
         cancel.setOnClickListener { dialog.dismiss() }
         sheet.addView(cancel, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             dp(50),
         ).apply {
-            topMargin = dp(Mo2Spacing.Md)
+            topMargin = dp(Mo2Spacing.Sm)
         })
 
         dialog = AlertDialog.Builder(this).setView(sheet).create()

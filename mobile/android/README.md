@@ -355,3 +355,12 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Folhas inferiores substituem paineis extensos para operacoes de dados e preferencias.
 - Exclusao do historico exige confirmacao destrutiva e mantem planejamento e personalizacoes.
 - Android usa versionCode 1254 e versionName 12.5.4.
+
+## v12.5.5
+
+- Editor de Plano usa modos separados para visao geral, musculacao e corrida.
+- O resumo semanal combina os dois tipos de atividade e preserva o preset pessoal.
+- Treinos, exercicios, sessoes e etapas ganharam listas compactas, reordenacao e folhas inferiores de edicao.
+- Trocas recomendadas agora sao confirmadas antes de modificar o plano.
+- Todas as alteracoes continuam usando os mesmos dados consumidos por Treino e Home.
+- Android usa versionCode 1255 e versionName 12.5.5.
