@@ -364,3 +364,11 @@ O roteiro de emulador, aparelho fisico, logcat e smoke test fica em [`docs/produ
 - Trocas recomendadas agora sao confirmadas antes de modificar o plano.
 - Todas as alteracoes continuam usando os mesmos dados consumidos por Treino e Home.
 - Android usa versionCode 1255 e versionName 12.5.5.
+
+## v12.5.6
+
+- Metas passa a concentrar data da prova, distancia objetivo e tempo alvo.
+- Home e Corrida usam a mesma fonte de preferencias para contagem regressiva, distancia e pace.
+- A troca da data desloca o ciclo de corrida e preserva historico, registros e sessoes concluidas.
+- Metas de treino permanecem acessiveis como apoio de musculacao e volume semanal.
+- Android usa versionCode 1256 e versionName 12.5.6.
